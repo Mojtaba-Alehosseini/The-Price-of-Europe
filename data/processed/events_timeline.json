@@ -1,0 +1,17 @@
+[
+  {"date": "2020-03-11", "event": "WHO declares COVID-19 pandemic", "category": "covid"},
+  {"date": "2020-03-17", "event": "EU external border closure", "category": "covid"},
+  {"date": "2021-01-01", "event": "Supply chain disruptions intensify", "category": "supply"},
+  {"date": "2021-10-01", "event": "European gas prices begin steep rise", "category": "energy"},
+  {"date": "2022-02-24", "event": "Russia invades Ukraine", "category": "energy"},
+  {"date": "2022-06-01", "event": "EU bans Russian coal imports", "category": "energy"},
+  {"date": "2022-07-21", "event": "ECB raises rates for first time in 11 years (+0.50%)", "category": "policy"},
+  {"date": "2022-09-14", "event": "ECB raises rates to 1.25%", "category": "policy"},
+  {"date": "2022-10-20", "event": "EU agrees on emergency energy measures", "category": "policy"},
+  {"date": "2022-12-19", "event": "EU gas price cap agreed", "category": "policy"},
+  {"date": "2023-03-16", "event": "ECB raises rates to 3.50%", "category": "policy"},
+  {"date": "2023-06-15", "event": "Food inflation peaks across EU", "category": "food"},
+  {"date": "2023-09-14", "event": "ECB raises to record 4.50%", "category": "policy"},
+  {"date": "2024-06-06", "event": "ECB first rate cut to 4.25%", "category": "policy"},
+  {"date": "2024-10-17", "event": "ECB cuts to 3.25%", "category": "policy"}
+]
