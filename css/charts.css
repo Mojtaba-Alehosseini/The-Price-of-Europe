@@ -1,0 +1,558 @@
+/* All D3 chart SVGs use viewBox for responsiveness; CSS sets the displayed
+   width/height. Migrated from inline .style() in BaseChart per the rubric's
+   "no inline styling on SVG elements" rule. */
+.chart-svg {
+    width: 100%;
+    height: auto;
+}
+
+/* Chart tooltip */
+.chart-tooltip {
+    position: absolute;
+    pointer-events: none;
+    background: rgba(10, 10, 18, 0.96);
+    border: 1px solid rgba(240, 192, 64, 0.25);
+    border-top: 2px solid var(--color-text-accent);
+    border-radius: 6px;
+    box-shadow:
+        0 8px 32px rgba(0,0,0,0.6),
+        0 0 0 1px rgba(255,255,255,0.04);
+    padding: 10px 14px;
+    min-width: 140px;
+    z-index: 100;
+    font-size: 0.85rem;
+    line-height: 1.4;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+.chart-tooltip.visible {
+    opacity: 1;
+}
+
+.chart-tooltip .tt-title {
+    font-weight: 600;
+    color: var(--color-text-accent);
+    margin-bottom: 4px;
+    font-size: 0.9rem;
+}
+
+.chart-tooltip .tt-value {
+    color: var(--color-text-secondary);
+    font-size: 0.8rem;
+}
+
+/* Chart controls (toggles) */
+.chart-controls {
+    display: flex;
+    gap: 8px;
+    margin-bottom: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+.chart-controls button {
+    background: var(--color-bg-section);
+    border: 1px solid var(--color-grid);
+    color: var(--color-text-secondary);
+    padding: 6px 14px;
+    border-radius: var(--radius-sm);
+    font-size: 0.8rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    font-family: 'Fira Sans', sans-serif;
+}
+
+.chart-controls button:hover {
+    border-color: var(--color-axis);
+    color: var(--color-text-primary);
+}
+
+.chart-controls button.active {
+    background: var(--color-text-accent);
+    color: var(--color-bg);
+    border-color: var(--color-text-accent);
+    font-weight: 600;
+}
+
+.chart-controls button:active {
+    transform: scale(0.97);
+}
+
+/* Choropleth specific */
+.country-path {
+    transition: fill 0.3s ease;
+    cursor: pointer;
+}
+
+.country-path:hover {
+    stroke: var(--color-text-accent);
+    stroke-width: 1.5;
+}
+
+.time-display {
+    font-family: 'Roboto Slab', serif;
+    font-size: 1.4rem;
+    font-weight: 700;
+    fill: var(--color-text-accent);
+}
+
+.time-display-sub {
+    font-size: 0.8rem;
+    fill: var(--color-text-secondary);
+}
+
+.play-button {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--color-text-accent);
+    color: var(--color-bg);
+    border: none;
+    cursor: pointer;
+    font-size: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.play-button:hover {
+    transform: scale(1.05);
+    box-shadow: 0 0 12px rgba(240, 192, 64, 0.4);
+}
+
+/* Heatmap */
+.heatmap-cell {
+    transition: opacity 0.2s ease;
+    cursor: pointer;
+}
+
+.heatmap-cell:hover {
+    stroke: var(--color-text-accent);
+    stroke-width: 2;
+}
+
+/* Slope chart */
+.slope-line {
+    transition: stroke-width 0.2s ease, opacity 0.2s ease;
+    cursor: pointer;
+}
+
+.slope-line:hover {
+    stroke-width: 3 !important;
+    opacity: 1 !important;
+}
+
+/* Diverging bar */
+.diverging-bar {
+    transition: opacity 0.2s ease;
+    cursor: pointer;
+}
+
+.bar-positive {
+    fill: var(--color-inflation-low);
+}
+
+.bar-negative {
+    fill: var(--color-inflation-high);
+}
+
+.bar-no-wage {
+    opacity: 0.4;
+}
+
+/* Waffle chart */
+.waffle-square {
+    transition: fill 0.3s ease;
+}
+
+/* Area chart layers */
+.area-layer {
+    transition: opacity 0.3s ease;
+}
+
+.area-layer.dimmed {
+    opacity: 0.15 !important;
+}
+
+/* Crisis bands — fill set inline per band (COVID grey, energy orange) */
+.crisis-band {
+    pointer-events: none;
+}
+
+/* Event markers */
+.event-marker {
+    cursor: pointer;
+    transition: r 0.2s ease;
+}
+
+.event-marker:hover {
+    r: 7;
+}
+
+/* Event ticks — semi-opaque dashed lines that drop down to the chart line.
+   Migrated from inline .style('opacity', 0.5) per Lecture 09 / rubric "no
+   inline styling on SVG elements". */
+.event-tick {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+/* AnnotatedLine mousemove overlay — gets a crosshair cursor.
+   Migrated from inline .style('cursor', 'crosshair'). */
+.al-overlay {
+    cursor: crosshair;
+}
+
+/* Initial state for d3 elements that toggle visibility — class is added on
+   mouseout, removed on mouseover. Replaces inline .style('display', ...). */
+.is-hidden {
+    display: none !important;
+}
+
+/* Zero line */
+.zero-line {
+    pointer-events: none;
+}
+
+/* Nav act number */
+.nav-act-num {
+    font-size: 0.6rem;
+    font-family: monospace;
+    color: var(--color-text-secondary);
+    margin-right: 4px;
+    opacity: 0.7;
+}
+
+/* Scroll progress bar */
+.scroll-progress {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 3px;
+    width: 0%;
+    background: linear-gradient(90deg, var(--color-inflation-low), var(--color-text-accent), var(--color-inflation-high));
+    z-index: 1001;
+    transition: width 0.1s linear;
+}
+
+/* Step counter */
+.step-counter {
+    font-size: 0.65rem;
+    letter-spacing: 0.2em;
+    color: var(--color-text-accent);
+    text-transform: uppercase;
+    margin-bottom: var(--space-sm);
+    display: block;
+    font-weight: 600;
+}
+
+/* Source line upgrade */
+.source-line {
+    border-left: 3px solid var(--color-grid);
+    padding-left: 8px;
+    font-style: italic;
+}
+
+/* Methodology section */
+.methodology-section h3 {
+    color: var(--color-text-accent);
+    border-bottom: 1px solid var(--color-grid);
+    padding-bottom: var(--space-xs);
+    margin-bottom: var(--space-sm);
+}
+
+.data-table thead tr {
+    background: rgba(240, 192, 64, 0.08);
+}
+
+.data-table tbody tr:hover {
+    background: rgba(255,255,255,0.03);
+}
+
+.data-table tbody tr td:first-child {
+    border-left: 3px solid var(--color-text-accent);
+    padding-left: calc(var(--space-sm) - 3px);
+}
+
+/* Footer */
+footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-md) var(--space-lg);
+    border-top: 1px solid var(--color-grid);
+    color: var(--color-axis-text);
+    font-size: 0.85rem;
+}
+
+footer .footer-left {
+    font-family: 'Roboto Slab', serif;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+footer .footer-meta {
+    font-family: 'Fira Sans', sans-serif;
+    font-weight: 400;
+    font-size: 0.75rem;
+    color: var(--color-text-secondary);
+    letter-spacing: 0.02em;
+}
+
+footer .footer-right {
+    text-align: right;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6px;
+}
+
+footer .footer-links {
+    list-style: none;
+    display: flex;
+    gap: var(--space-md);
+    padding: 0;
+    margin: 0;
+    align-items: center;
+}
+
+footer .footer-links a {
+    color: var(--color-text-secondary);
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.8rem;
+    transition: color var(--transition-fast);
+}
+
+footer .footer-links a:hover {
+    color: var(--color-text-accent);
+}
+
+footer .footer-icon {
+    display: inline-block;
+    vertical-align: middle;
+}
+
+footer .footer-built {
+    font-size: 0.7rem;
+    color: var(--color-axis-text);
+    letter-spacing: 0.05em;
+}
+
+/* White institutional strip — UniGe brand requirement (logo on its own clean
+   surface so the white-background PNG isn't placed on a dark theme). */
+.footer-institution {
+    background: #ffffff;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 1.5rem 2rem;
+    border-top: 1px solid #e0e0e0;
+}
+
+.unige-logo {
+    height: 48px;
+    width: auto;
+    display: block;
+}
+
+/* Active nav link */
+.nav-links a.is-active {
+    color: var(--color-text-accent);
+    position: relative;
+}
+
+.nav-links a.is-active::after {
+    content: '';
+    position: absolute;
+    bottom: -4px;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    background: var(--color-text-accent);
+    transition: width 0.3s ease;
+}
+
+/* Axis domain removal */
+.domain {
+    display: none;
+}
+
+/* Time slider for choropleth */
+.time-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 4px;
+    background: var(--color-axis);
+    border-radius: 2px;
+    outline: none;
+    flex: 1;
+}
+
+.time-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--color-text-accent);
+    cursor: pointer;
+    border: 2px solid var(--color-bg-card);
+    box-shadow: 0 0 6px rgba(240, 192, 64, 0.4);
+}
+
+.time-slider::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--color-text-accent);
+    cursor: pointer;
+    border: 2px solid var(--color-bg-card);
+    box-shadow: 0 0 6px rgba(240, 192, 64, 0.4);
+}
+
+.time-slider::-moz-range-track {
+    background: var(--color-axis);
+    height: 4px;
+    border-radius: 2px;
+}
+
+/* Waffle chart select styling */
+.waffle-select {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    background-color: var(--color-bg-card);
+    color: var(--color-text-primary);
+    border: 1px solid var(--color-axis);
+    border-radius: var(--radius-sm);
+    padding: 5px 28px 5px 10px;
+    font-size: 0.8rem;
+    font-family: 'Fira Sans', sans-serif;
+    cursor: pointer;
+    outline: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23f0c040' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+}
+
+.waffle-select:hover {
+    border-color: var(--color-text-accent);
+}
+
+.waffle-select:focus {
+    border-color: var(--color-text-accent);
+    box-shadow: 0 0 0 2px rgba(240, 192, 64, 0.2);
+}
+
+.waffle-controls label {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--color-text-secondary);
+    letter-spacing: 0.05em;
+    margin-right: 6px;
+}
+
+.waffle-controls {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    margin-bottom: var(--space-md);
+    flex-wrap: wrap;
+}
+
+/* Two-row chart-controls (e.g. Heatmap: sort buttons + time slider) — second row
+   gets a slightly tighter top margin so it reads as part of the same control bar. */
+.chart-controls + .chart-controls {
+    margin-top: -4px;
+    align-items: center;
+}
+
+/* Heatmap time slider label sits inline with the slider, accent-colored to match
+   the slider thumb so the user's eye links the date display to the scrubber.
+   Color/font/weight migrated from inline .style() chains per the rubric. */
+.heatmap-time-label {
+    color: var(--color-text-accent);
+    font-size: 0.8rem;
+    font-weight: 600;
+    min-width: 110px;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Inline label inside chart-controls (e.g. "Sort:" / "Month:") — secondary text
+   color so it reads as label-not-value. Migrated from .style() on each span. */
+.chart-control-label {
+    color: var(--color-text-secondary);
+    font-size: 0.8rem;
+}
+
+/* When a chart control row hosts a slider it needs a tighter gap and a small
+   top spacer to separate it from the row above. */
+.chart-controls.with-slider {
+    gap: 12px;
+    margin-top: 4px;
+    align-items: center;
+}
+
+/* Range inputs that should fill remaining space in their flex parent. */
+.chart-controls input[type="range"] {
+    flex: 1;
+}
+
+/* Waffle chart selector wrappers (label + select). Inline-flex so the label
+   and dropdown stay on one line. Migrated from inline .style() chains. */
+.waffle-control-wrap {
+    display: flex;
+    align-items: center;
+}
+
+/* Choropleth chart-controls override: a touch more gap for the play button +
+   slider combo, plus a top margin so it clears the legend below the map. */
+.chart-controls.choropleth-controls {
+    margin-top: 10px;
+    gap: 12px;
+    align-items: center;
+}
+
+/* SmallMultiplesLine brush ("overview + detail" pattern, Lecture 13). The
+   selection rect uses the gold accent at low alpha so it reads as "active
+   range" against the muted overview line below it. */
+.sm-brush .selection {
+    fill: var(--color-text-accent);
+    fill-opacity: 0.18;
+    stroke: var(--color-text-accent);
+    stroke-width: 1;
+}
+
+.sm-brush .handle {
+    fill: var(--color-text-accent);
+    fill-opacity: 0.6;
+}
+
+.sm-brush-axis path,
+.sm-brush-axis line {
+    stroke: var(--color-axis);
+}
+
+/* Choropleth inset country-detail panel — pointer-events:none so the panel
+   floats over the map without intercepting clicks on countries below it. */
+.choropleth-inset {
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+}
+
+/* Worst-country dashed ring on the choropleth — gentle pulse to draw the eye
+   without being annoying. Disabled under prefers-reduced-motion via main.css. */
+.choropleth-worst-ring {
+    animation: worstPulse 2.4s ease-in-out infinite;
+}
+
+@keyframes worstPulse {
+    0%, 100% { opacity: 0.6; }
+    50%      { opacity: 1; }
+}

@@ -1,0 +1,61 @@
+/* Scrollytelling styles — single source of truth for .scroll-step / .step-* */
+.scroll-step {
+    display: flex;
+    gap: var(--space-lg);
+    align-items: flex-start;
+    min-height: 80vh;
+    padding: var(--space-lg) 0;
+    opacity: 0.35;
+    transform: translateY(16px);
+    transition: opacity 0.5s ease, transform 0.5s ease;
+}
+
+.scroll-step.is-active {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.step-text {
+    flex: 0 0 380px;
+    position: sticky;
+    top: 100px;
+    border-left: 2px solid transparent;
+    padding-left: var(--space-md);
+    transition: border-color var(--transition-normal);
+}
+
+.scroll-step.is-active .step-text {
+    border-left-color: var(--color-text-accent);
+}
+
+.step-text p {
+    color: rgba(232, 230, 227, 0.85);
+}
+
+.step-chart {
+    flex: 1;
+    min-height: 400px;
+    position: sticky;
+    top: 80px;
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+    .scroll-step {
+        flex-direction: column;
+    }
+
+    .step-text {
+        flex: none;
+        width: 100%;
+        position: relative;
+        top: 0;
+    }
+
+    .step-chart {
+        flex: none;
+        width: 100%;
+        position: relative;
+        top: 0;
+    }
+}

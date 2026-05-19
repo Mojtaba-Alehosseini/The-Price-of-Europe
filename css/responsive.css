@@ -1,0 +1,261 @@
+/* Tablet: max-width 1024px */
+@media (max-width: 1024px) {
+    .scroll-step {
+        flex-direction: column;
+        gap: var(--space-md);
+    }
+
+    .step-text {
+        flex: none;
+        position: relative;
+        top: auto;
+        width: 100%;
+        max-width: 100%;
+        padding-right: 0;
+        padding-left: var(--space-sm);
+    }
+
+    .step-chart {
+        width: 100%;
+        min-height: 350px;
+        position: relative;
+        top: auto;
+    }
+
+    .hero-section h1 {
+        font-size: 3rem;
+    }
+
+    .hero-stats {
+        gap: var(--space-sm);
+    }
+
+    .hero-stat {
+        padding: 0 var(--space-sm);
+    }
+
+    h2 {
+        font-size: 1.953rem;
+    }
+
+    .nav-links {
+        gap: var(--space-sm);
+    }
+
+    .nav-links a {
+        font-size: 0.8rem;
+    }
+
+    .act-title {
+        padding-left: var(--space-sm);
+    }
+
+    .act-number {
+        font-size: 5rem;
+    }
+}
+
+/* Mobile: max-width 768px */
+@media (max-width: 768px) {
+    body {
+        font-size: 16px;
+    }
+
+    #main-nav {
+        padding: var(--space-xs) var(--space-sm);
+    }
+
+    .nav-logo {
+        font-size: 1rem;
+    }
+
+    .nav-links {
+        display: none;
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        background: rgba(15, 15, 20, 0.98);
+        flex-direction: column;
+        padding: var(--space-sm);
+        gap: var(--space-xs);
+        border-top: 1px solid var(--color-grid);
+    }
+
+    .nav-links.is-open {
+        display: flex;
+    }
+
+    .nav-links a {
+        padding: var(--space-xs) 0;
+        font-size: 0.9rem;
+    }
+
+    .nav-toggle {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 4px;
+    }
+
+    .nav-toggle span {
+        display: block;
+        width: 22px;
+        height: 2px;
+        background: var(--color-text-primary);
+        transition: 0.2s;
+    }
+
+    .hero-section {
+        min-height: 100vh;
+        padding: var(--space-lg) var(--space-sm);
+    }
+
+    .hero-section h1 {
+        font-size: 2.2rem;
+    }
+
+    .hero-subtitle {
+        font-size: 1rem;
+        letter-spacing: 0.04em;
+    }
+
+    .hero-stats {
+        flex-direction: column;
+        gap: var(--space-sm);
+        margin-bottom: var(--space-lg);
+    }
+
+    .hero-stat {
+        border-right: none;
+        border-bottom: 1px solid var(--color-axis);
+        padding: var(--space-sm) 0;
+    }
+
+    .hero-stat:last-child {
+        border-bottom: none;
+    }
+
+    .hero-stat-number {
+        font-size: 2rem;
+    }
+
+    h2 {
+        font-size: 1.5rem;
+    }
+
+    h3 {
+        font-size: 1.25rem;
+    }
+
+    .story-act {
+        padding: var(--space-lg) var(--space-sm);
+    }
+
+    .act-title {
+        margin-bottom: var(--space-lg);
+    }
+
+    .act-number {
+        font-size: 4rem;
+    }
+
+    .scroll-step {
+        min-height: auto;
+        padding: var(--space-md) 0;
+    }
+
+    .step-chart {
+        min-height: 280px;
+        padding: var(--space-sm);
+    }
+    /* No SVG max-height: charts use viewBox + height:auto, so the displayed
+       height comes from container width × intrinsic aspect ratio. Capping
+       the SVG height squished labels on narrow screens. */
+
+    .chart-controls {
+        gap: var(--space-xs);
+        flex-wrap: wrap;
+    }
+
+    .chart-controls button {
+        padding: 4px 10px;
+        font-size: 0.75rem;
+    }
+
+    .step-text h3 {
+        font-size: 1.25rem;
+    }
+
+    .step-text p {
+        font-size: 0.95rem;
+    }
+
+    .data-table {
+        font-size: 0.75rem;
+    }
+
+    .data-table th,
+    .data-table td {
+        padding: 4px 6px;
+    }
+
+    footer {
+        flex-direction: column;
+        gap: var(--space-xs);
+        text-align: center;
+        padding: var(--space-sm);
+    }
+
+    footer .footer-left,
+    footer .footer-right {
+        text-align: center;
+    }
+
+    .narrative-text {
+        max-width: 100%;
+    }
+}
+
+/* Small mobile: max-width 480px */
+@media (max-width: 480px) {
+    .hero-section h1 {
+        font-size: 1.8rem;
+    }
+
+    .hero-tagline::before,
+    .hero-tagline::after {
+        width: 20px;
+    }
+
+    .act-kicker {
+        font-size: 0.65rem;
+    }
+
+    .act-title h2 {
+        font-size: 1.35rem;
+        padding-left: 1rem;
+    }
+
+    .act-subtitle {
+        padding-left: 1rem;
+        font-size: 0.95rem;
+    }
+
+    .scroll-indicator {
+        bottom: var(--space-sm);
+    }
+
+    .waffle-controls {
+        flex-direction: column;
+        align-items: stretch;
+        gap: var(--space-sm);
+    }
+
+    .waffle-select {
+        width: 100%;
+    }
+}
