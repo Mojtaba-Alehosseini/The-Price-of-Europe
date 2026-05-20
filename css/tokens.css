@@ -1,0 +1,191 @@
+/* ============================================================
+   tokens.css — design tokens (light + dark) for "The Price of Europe"
+   Pudding-style modern editorial. Light is default.
+   Theme switch happens via [data-theme="dark"] on <html>.
+   ============================================================ */
+
+:root {
+  /* Surface — light theme (default) */
+  --bg              : #f5f1e8;   /* cream paper */
+  --bg-elev         : #fbf7ee;   /* sticky chart panel, card */
+  --bg-sunken       : #ece6d6;   /* sidebar, code */
+  --bg-veil         : rgba(245,241,232,0.86);  /* fixed-header backdrop */
+  --bg-overlay      : rgba(245,241,232,0.96);
+
+  /* Ink */
+  --ink             : #18181e;
+  --ink-soft        : #4a4a52;
+  --ink-faint       : #8a8682;
+  --ink-fainter     : #b5ad9d;
+  --ink-invert      : #f0ece4;
+
+  /* Lines / borders */
+  --rule            : #d8d1c2;
+  --rule-soft       : #e7e1d0;
+  --rule-bold       : #7a7268;
+
+  /* Editorial accent */
+  --accent          : #c8553d;     /* terracotta */
+  --accent-bright   : #e0664a;
+  --accent-soft     : #e6a597;
+  --accent-veil     : rgba(200,85,61,.08);
+  --link            : #2b6cb0;
+  --link-hover      : #1a4480;
+
+  /* Sequential inflation ramp (deflation → extreme) */
+  --seq-1 : #5b8a72;   /* sage    — < 0  to ECB target */
+  --seq-2 : #a9b88a;   /* moss    — near target */
+  --seq-3 : #d4a548;   /* gold    — elevated 3–5 % */
+  --seq-4 : #c8553d;   /* terra   — high 5–10 % */
+  --seq-5 : #7a1f2b;   /* wine    — extreme >10 % */
+  --seq-target : #2b6cb0;  /* ECB 2 % reference */
+
+  /* Categorical palette (independent series) */
+  --cat-overall   : #1a1a1f;
+  --cat-energy    : #c8553d;
+  --cat-food      : #5b8a72;
+  --cat-housing   : #4a6c8a;
+  --cat-services  : #6b5b95;
+  --cat-wages     : #d4a548;
+  --cat-transport : #b07a3a;
+  --cat-other     : #998877;
+
+  /* Event ribbon tints */
+  --event-covid   : rgba(120,120,135,.16);
+  --event-energy  : rgba(200,85,61,.14);
+  --event-policy  : rgba(212,165,72,.16);
+  --event-food    : rgba(91,138,114,.14);
+
+  /* Typography stack */
+  --font-display  : "Fraunces", "Playfair Display", "Georgia", serif;
+  --font-body     : "Inter", "Source Sans 3", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono     : "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* Type scale (modular 1.250) */
+  --fs-100 : 0.750rem;
+  --fs-200 : 0.875rem;
+  --fs-300 : 1.000rem;
+  --fs-400 : 1.125rem;
+  --fs-500 : 1.250rem;
+  --fs-600 : 1.563rem;
+  --fs-700 : 1.953rem;
+  --fs-800 : 2.441rem;
+  --fs-900 : 3.052rem;
+  --fs-max : 3.815rem;
+
+  /* Line heights */
+  --lh-tight    : 1.10;
+  --lh-snug     : 1.25;
+  --lh-normal   : 1.55;
+  --lh-relaxed  : 1.70;
+
+  /* Spacing (4 px base) */
+  --space-1  : 0.25rem;
+  --space-2  : 0.50rem;
+  --space-3  : 0.75rem;
+  --space-4  : 1.00rem;
+  --space-5  : 1.25rem;
+  --space-6  : 1.50rem;
+  --space-7  : 2.00rem;
+  --space-8  : 2.50rem;
+  --space-9  : 3.50rem;
+  --space-10 : 5.00rem;
+  --space-11 : 7.00rem;
+  --space-12 : 10.0rem;
+
+  /* Radii */
+  --radius-1 : 2px;
+  --radius-2 : 6px;
+  --radius-3 : 12px;
+  --radius-4 : 24px;
+
+  /* Shadows (light-friendly, paper feel) */
+  --shadow-1 : 0 1px 0 rgba(26,26,31,.04), 0 0 1px rgba(26,26,31,.08);
+  --shadow-2 : 0 4px 14px rgba(26,26,31,.06), 0 1px 2px rgba(26,26,31,.05);
+  --shadow-3 : 0 18px 40px rgba(26,26,31,.10), 0 6px 12px rgba(26,26,31,.06);
+
+  /* Motion */
+  --ease-out      : cubic-bezier(.2,.7,.2,1);
+  --ease-in-out   : cubic-bezier(.65,0,.35,1);
+  --ease-spring   : cubic-bezier(.3,1.4,.4,1);
+  --dur-1 : 120ms;
+  --dur-2 : 180ms;
+  --dur-3 : 280ms;
+  --dur-4 : 420ms;
+  --dur-5 : 640ms;
+  --dur-6 : 900ms;
+
+  /* Layout widths */
+  --w-prose    : 38rem;
+  --w-content  : 64rem;
+  --w-wide     : 78rem;
+  --w-full     : 96rem;
+
+  /* Header */
+  --header-h   : 56px;
+
+  /* Z-index */
+  --z-header   : 50;
+  --z-tooltip  : 90;
+  --z-modal    : 100;
+}
+
+/* ============================================================
+   Dark theme — applied via [data-theme="dark"] on <html>
+   Warm dark inspired by Pudding "Banknotes" — no pure black.
+   ============================================================ */
+
+[data-theme="dark"] {
+  --bg              : #131218;
+  --bg-elev         : #1d1c24;
+  --bg-sunken       : #0e0d12;
+  --bg-veil         : rgba(19,18,24,0.92);
+
+  --ink             : #f0ece4;
+  --ink-soft        : #c2bdb4;
+  --ink-faint       : #8a857c;
+  --ink-invert      : #1a1a1f;
+
+  --rule            : #2a2832;
+  --rule-soft       : #21202a;
+  --rule-bold       : #4a4854;
+
+  --accent          : #e87a5b;
+  --accent-soft     : #b06148;
+  --accent-veil     : rgba(232,122,91,.10);
+  --link            : #7fb8ff;
+  --link-hover      : #b3d4ff;
+
+  /* Slightly desaturated sequential for dark background */
+  --seq-1 : #6ea688;
+  --seq-2 : #b3c39a;
+  --seq-3 : #e0b85a;
+  --seq-4 : #e87a5b;
+  --seq-5 : #c84257;
+  --seq-target : #7fb8ff;
+
+  --cat-overall   : #f0ece4;
+  --cat-energy    : #e87a5b;
+  --cat-food      : #6ea688;
+  --cat-housing   : #6a91b8;
+  --cat-services  : #8d7fb8;
+  --cat-wages     : #e0b85a;
+  --cat-transport : #c89762;
+  --cat-other     : #b3a698;
+
+  --event-covid   : rgba(170,170,180,.18);
+  --event-energy  : rgba(232,122,91,.18);
+  --event-policy  : rgba(224,184,90,.18);
+  --event-food    : rgba(110,166,136,.18);
+
+  --shadow-1 : 0 1px 0 rgba(0,0,0,.3),  0 0 1px rgba(0,0,0,.4);
+  --shadow-2 : 0 4px 16px rgba(0,0,0,.5), 0 1px 2px rgba(0,0,0,.4);
+  --shadow-3 : 0 20px 48px rgba(0,0,0,.6), 0 6px 14px rgba(0,0,0,.4);
+}
+
+/* Respect OS preference if user hasn't picked manually */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+  }
+}

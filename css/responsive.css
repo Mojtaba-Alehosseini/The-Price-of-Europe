@@ -1,261 +1,113 @@
-/* Tablet: max-width 1024px */
+/* ============================================================
+   responsive.css — breakpoint overrides
+   Mobile-first refinements layered on the desktop defaults.
+   ============================================================ */
+
+/* ---------- Tablet (≤ 1024 px) ---------- */
 @media (max-width: 1024px) {
-    .scroll-step {
-        flex-direction: column;
-        gap: var(--space-md);
-    }
-
-    .step-text {
-        flex: none;
-        position: relative;
-        top: auto;
-        width: 100%;
-        max-width: 100%;
-        padding-right: 0;
-        padding-left: var(--space-sm);
-    }
-
-    .step-chart {
-        width: 100%;
-        min-height: 350px;
-        position: relative;
-        top: auto;
-    }
-
-    .hero-section h1 {
-        font-size: 3rem;
-    }
-
-    .hero-stats {
-        gap: var(--space-sm);
-    }
-
-    .hero-stat {
-        padding: 0 var(--space-sm);
-    }
-
-    h2 {
-        font-size: 1.953rem;
-    }
-
-    .nav-links {
-        gap: var(--space-sm);
-    }
-
-    .nav-links a {
-        font-size: 0.8rem;
-    }
-
-    .act-title {
-        padding-left: var(--space-sm);
-    }
-
-    .act-number {
-        font-size: 5rem;
-    }
+  .hero h1 { font-size: clamp(var(--fs-700), 8vw, var(--fs-900)); }
+  .hero-sub { font-size: var(--fs-400); }
+  .scroller { grid-template-columns: 1fr; }
+  .scroller__chart {
+    position: sticky;
+    inset-block-start: calc(var(--header-h) + var(--space-3));
+    block-size: 70dvh;
+  }
+  .scroller__text { gap: 60dvh; padding-block: 12dvh; }
+  .site-footer .footer-grid { grid-template-columns: 1fr 1fr; }
 }
 
-/* Mobile: max-width 768px */
+/* ---------- Tablet portrait (≤ 768 px) ---------- */
 @media (max-width: 768px) {
-    body {
-        font-size: 16px;
-    }
+  .hero { min-block-size: 80dvh; padding-block: var(--space-9); }
+  .hero h1 { font-size: clamp(var(--fs-700), 10vw, var(--fs-800)); }
+  .hero-sub { font-size: var(--fs-400); max-inline-size: 90vw; }
+  .hero-meta { gap: var(--space-3); font-size: var(--fs-100); }
 
-    #main-nav {
-        padding: var(--space-xs) var(--space-sm);
-    }
+  .nav-pills a:not(.brand) { display: none; }   /* collapse nav links; keep brand + theme */
 
-    .nav-logo {
-        font-size: 1rem;
-    }
+  .scroller__text { gap: 55dvh; padding-block: 8dvh; }
+  .scroller__step {
+    max-inline-size: 100%;
+    padding: var(--space-4) var(--space-5);
+  }
+  .scroller__chart {
+    block-size: 60dvh;
+    padding: var(--space-4);
+    border-radius: var(--radius-2);
+  }
+  .scroller__chart h3 { font-size: var(--fs-400); }
+  .scroller__chart .chart-controls { font-size: var(--fs-100); }
 
-    .nav-links {
-        display: none;
-        position: absolute;
-        top: 100%;
-        left: 0;
-        right: 0;
-        background: rgba(15, 15, 20, 0.98);
-        flex-direction: column;
-        padding: var(--space-sm);
-        gap: var(--space-xs);
-        border-top: 1px solid var(--color-grid);
-    }
+  .chart .axis text { font-size: 0.72rem; }
+  .chart .end-label { font-size: 0.72rem; }
 
-    .nav-links.is-open {
-        display: flex;
-    }
+  .act-intro { padding-block: var(--space-9); }
+  .act-title { font-size: clamp(var(--fs-700), 9vw, var(--fs-800)); }
+  .act-lede { font-size: var(--fs-400); }
 
-    .nav-links a {
-        padding: var(--space-xs) 0;
-        font-size: 0.9rem;
-    }
-
-    .nav-toggle {
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-        background: none;
-        border: none;
-        cursor: pointer;
-        padding: 4px;
-    }
-
-    .nav-toggle span {
-        display: block;
-        width: 22px;
-        height: 2px;
-        background: var(--color-text-primary);
-        transition: 0.2s;
-    }
-
-    .hero-section {
-        min-height: 100vh;
-        padding: var(--space-lg) var(--space-sm);
-    }
-
-    .hero-section h1 {
-        font-size: 2.2rem;
-    }
-
-    .hero-subtitle {
-        font-size: 1rem;
-        letter-spacing: 0.04em;
-    }
-
-    .hero-stats {
-        flex-direction: column;
-        gap: var(--space-sm);
-        margin-bottom: var(--space-lg);
-    }
-
-    .hero-stat {
-        border-right: none;
-        border-bottom: 1px solid var(--color-axis);
-        padding: var(--space-sm) 0;
-    }
-
-    .hero-stat:last-child {
-        border-bottom: none;
-    }
-
-    .hero-stat-number {
-        font-size: 2rem;
-    }
-
-    h2 {
-        font-size: 1.5rem;
-    }
-
-    h3 {
-        font-size: 1.25rem;
-    }
-
-    .story-act {
-        padding: var(--space-lg) var(--space-sm);
-    }
-
-    .act-title {
-        margin-bottom: var(--space-lg);
-    }
-
-    .act-number {
-        font-size: 4rem;
-    }
-
-    .scroll-step {
-        min-height: auto;
-        padding: var(--space-md) 0;
-    }
-
-    .step-chart {
-        min-height: 280px;
-        padding: var(--space-sm);
-    }
-    /* No SVG max-height: charts use viewBox + height:auto, so the displayed
-       height comes from container width × intrinsic aspect ratio. Capping
-       the SVG height squished labels on narrow screens. */
-
-    .chart-controls {
-        gap: var(--space-xs);
-        flex-wrap: wrap;
-    }
-
-    .chart-controls button {
-        padding: 4px 10px;
-        font-size: 0.75rem;
-    }
-
-    .step-text h3 {
-        font-size: 1.25rem;
-    }
-
-    .step-text p {
-        font-size: 0.95rem;
-    }
-
-    .data-table {
-        font-size: 0.75rem;
-    }
-
-    .data-table th,
-    .data-table td {
-        padding: 4px 6px;
-    }
-
-    footer {
-        flex-direction: column;
-        gap: var(--space-xs);
-        text-align: center;
-        padding: var(--space-sm);
-    }
-
-    footer .footer-left,
-    footer .footer-right {
-        text-align: center;
-    }
-
-    .narrative-text {
-        max-width: 100%;
-    }
+  .site-footer .footer-grid { grid-template-columns: 1fr; gap: var(--space-5); }
+  .pull-quote q { font-size: clamp(var(--fs-500), 6vw, var(--fs-700)); }
 }
 
-/* Small mobile: max-width 480px */
+/* ---------- Phone (≤ 480 px) ---------- */
 @media (max-width: 480px) {
-    .hero-section h1 {
-        font-size: 1.8rem;
-    }
+  :root { --header-h: 48px; }
 
-    .hero-tagline::before,
-    .hero-tagline::after {
-        width: 20px;
-    }
+  .container { padding-inline: var(--space-4); }
+  .hero { padding-block: var(--space-8) var(--space-9); }
+  .hero-kicker { font-size: 0.68rem; }
+  .hero h1 { font-size: clamp(var(--fs-600), 12vw, var(--fs-800)); }
+  .hero-sub { font-size: var(--fs-300); }
+  .hero-meta { display: none; }
 
-    .act-kicker {
-        font-size: 0.65rem;
-    }
+  .scroller { gap: var(--space-5); padding-inline: var(--space-4); }
+  .scroller__text { gap: 65dvh; }
+  .scroller__chart {
+    block-size: 55dvh;
+    padding: var(--space-3);
+  }
 
-    .act-title h2 {
-        font-size: 1.35rem;
-        padding-left: 1rem;
-    }
+  /* Reduce chart label density on tiny screens */
+  .chart .axis text { font-size: 0.68rem; }
+  .chart .bump-label, .chart .ridge-label { font-size: 0.68rem; }
+  .chart .end-label { display: none; }   /* hide redundant end labels on phone */
 
-    .act-subtitle {
-        padding-left: 1rem;
-        font-size: 0.95rem;
-    }
+  .chart-figure { padding: var(--space-4); }
+  .theme-toggle { padding: 2px; }
+  .theme-toggle button { inline-size: 24px; block-size: 24px; }
 
-    .scroll-indicator {
-        bottom: var(--space-sm);
-    }
+  .site-footer { padding-block: var(--space-7) var(--space-5); }
+  .site-footer .legal { flex-direction: column; gap: var(--space-2); font-size: 0.7rem; }
+}
 
-    .waffle-controls {
-        flex-direction: column;
-        align-items: stretch;
-        gap: var(--space-sm);
-    }
+/* ---------- Act-divider responsive ---------- */
+@media (max-width: 768px) {
+  .act-divider { block-size: clamp(28dvh, 50vw, 50dvh); }
+  .act-divider figcaption {
+    inset-block-end: var(--space-3);
+    inset-inline-start: var(--space-3);
+    font-size: 0.62rem;
+  }
+  .act-divider--placeholder p {
+    font-size: var(--fs-200);
+    padding: var(--space-3) var(--space-4);
+  }
+}
+@media (max-width: 480px) {
+  .act-divider { block-size: clamp(24dvh, 60vw, 40dvh); }
+}
 
-    .waffle-select {
-        width: 100%;
-    }
+/* ---------- Prefer reduced data (slow networks) ---------- */
+@media (prefers-reduced-data: reduce) {
+  .hero canvas#hero-sequence { display: none; }
+  .hero img#hero-image { display: none; }
+  .act-divider picture { display: none; }
+  .act-divider { background: var(--bg-sunken); display: none; }
+}
+
+/* ---------- Wide screens ---------- */
+@media (min-width: 1400px) {
+  .scroller { gap: var(--space-9); }
+  .scroller__step { max-inline-size: 42ch; }
 }

@@ -1,558 +1,636 @@
-/* All D3 chart SVGs use viewBox for responsiveness; CSS sets the displayed
-   width/height. Migrated from inline .style() in BaseChart per the rubric's
-   "no inline styling on SVG elements" rule. */
-.chart-svg {
-    width: 100%;
-    height: auto;
+/* ============================================================
+   charts.css — shared SVG / D3 chart styling
+   ============================================================ */
+
+.chart {
+  inline-size: 100%;
+  block-size: auto;
+  display: block;
+  overflow: visible;
+  font-family: var(--font-body);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.chart svg { inline-size: 100%; block-size: auto; overflow: visible; }
+
+/* Axes */
+.chart .axis path,
+.chart .axis line {
+  stroke: var(--rule);
+  shape-rendering: crispEdges;
+}
+.chart .axis text {
+  font-size: 0.78rem;
+  fill: var(--ink-faint);
+  letter-spacing: 0.02em;
+}
+.chart .axis--y .domain { stroke: transparent; }
+.chart .axis--x .domain { stroke: var(--ink-faint); }
+
+/* Gridlines (use .tick line in y-axis with tickSize:-width) */
+.chart .grid line {
+  stroke: var(--rule-soft);
+  stroke-dasharray: 2 4;
+  shape-rendering: crispEdges;
+}
+.chart .grid .domain { display: none; }
+
+/* Series / categorical color helpers */
+.chart .series--overall   { stroke: var(--cat-overall);   fill: var(--cat-overall);   }
+.chart .series--energy    { stroke: var(--cat-energy);    fill: var(--cat-energy);    }
+.chart .series--food      { stroke: var(--cat-food);      fill: var(--cat-food);      }
+.chart .series--housing   { stroke: var(--cat-housing);   fill: var(--cat-housing);   }
+.chart .series--services  { stroke: var(--cat-services);  fill: var(--cat-services);  }
+.chart .series--wages     { stroke: var(--cat-wages);     fill: var(--cat-wages);     }
+.chart .series--transport { stroke: var(--cat-transport); fill: var(--cat-transport); }
+.chart .series--other     { stroke: var(--cat-other);     fill: var(--cat-other);     }
+
+/* Sequential helpers (used in choropleth/heatmap) */
+.chart .seq-1 { fill: var(--seq-1); }
+.chart .seq-2 { fill: var(--seq-2); }
+.chart .seq-3 { fill: var(--seq-3); }
+.chart .seq-4 { fill: var(--seq-4); }
+.chart .seq-5 { fill: var(--seq-5); }
+
+/* Lines */
+.chart .line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: opacity var(--dur-2) var(--ease-out), stroke-width var(--dur-2) var(--ease-out);
+}
+.chart .line--context {
+  stroke: var(--ink-faint);
+  stroke-opacity: .3;
+  stroke-width: 1;
+}
+.chart .line--focus { stroke-width: 2.5; }
+
+/* Areas (used in StackedArea + AnnotatedLine fill) */
+.chart .area { fill-opacity: 0.85; }
+
+/* Reference / zero line */
+.chart .ref-line {
+  stroke: var(--rule-bold);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+}
+.chart .zero-line {
+  stroke: var(--ink);
+  stroke-width: 1;
+  stroke-opacity: 0.55;
 }
 
-/* Chart tooltip */
-.chart-tooltip {
-    position: absolute;
-    pointer-events: none;
-    background: rgba(10, 10, 18, 0.96);
-    border: 1px solid rgba(240, 192, 64, 0.25);
-    border-top: 2px solid var(--color-text-accent);
-    border-radius: 6px;
-    box-shadow:
-        0 8px 32px rgba(0,0,0,0.6),
-        0 0 0 1px rgba(255,255,255,0.04);
-    padding: 10px 14px;
-    min-width: 140px;
-    z-index: 100;
-    font-size: 0.85rem;
-    line-height: 1.4;
-    opacity: 0;
-    transition: opacity 0.15s ease;
+/* Annotation (from d3-annotation) */
+.chart .annotation path { stroke: var(--accent); stroke-width: 1; }
+.chart .annotation text { fill: var(--ink); font-size: 0.78rem; }
+.chart .annotation-note-title { font-weight: 600; }
+
+/* Event bands behind line charts */
+.chart .event-band--covid  { fill: var(--event-covid);  }
+.chart .event-band--energy { fill: var(--event-energy); }
+.chart .event-band--policy { fill: var(--event-policy); }
+.chart .event-band--food   { fill: var(--event-food);   }
+
+/* Markers, dots, end-of-line labels */
+.chart .marker {
+  fill: var(--bg-elev);
+  stroke-width: 2;
+  transition: r var(--dur-2) var(--ease-out);
+}
+.chart .end-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  alignment-baseline: middle;
+  paint-order: stroke;
+  stroke: var(--bg-elev);
+  stroke-width: 4;
 }
 
-.chart-tooltip.visible {
-    opacity: 1;
+/* Choropleth */
+.chart .country {
+  stroke: var(--bg);
+  stroke-width: 0.5;
+  cursor: pointer;
+  transition: filter var(--dur-2) var(--ease-out);
 }
-
-.chart-tooltip .tt-title {
-    font-weight: 600;
-    color: var(--color-text-accent);
-    margin-bottom: 4px;
-    font-size: 0.9rem;
-}
-
-.chart-tooltip .tt-value {
-    color: var(--color-text-secondary);
-    font-size: 0.8rem;
-}
-
-/* Chart controls (toggles) */
-.chart-controls {
-    display: flex;
-    gap: 8px;
-    margin-bottom: var(--space-sm);
-    flex-wrap: wrap;
-}
-
-.chart-controls button {
-    background: var(--color-bg-section);
-    border: 1px solid var(--color-grid);
-    color: var(--color-text-secondary);
-    padding: 6px 14px;
-    border-radius: var(--radius-sm);
-    font-size: 0.8rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all var(--transition-fast);
-    font-family: 'Fira Sans', sans-serif;
-}
-
-.chart-controls button:hover {
-    border-color: var(--color-axis);
-    color: var(--color-text-primary);
-}
-
-.chart-controls button.active {
-    background: var(--color-text-accent);
-    color: var(--color-bg);
-    border-color: var(--color-text-accent);
-    font-weight: 600;
-}
-
-.chart-controls button:active {
-    transform: scale(0.97);
-}
-
-/* Choropleth specific */
-.country-path {
-    transition: fill 0.3s ease;
-    cursor: pointer;
-}
-
-.country-path:hover {
-    stroke: var(--color-text-accent);
-    stroke-width: 1.5;
-}
-
-.time-display {
-    font-family: 'Roboto Slab', serif;
-    font-size: 1.4rem;
-    font-weight: 700;
-    fill: var(--color-text-accent);
-}
-
-.time-display-sub {
-    font-size: 0.8rem;
-    fill: var(--color-text-secondary);
-}
-
-.play-button {
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    background: var(--color-text-accent);
-    color: var(--color-bg);
-    border: none;
-    cursor: pointer;
-    font-size: 1rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: transform 0.15s ease, box-shadow 0.15s ease;
-}
-
-.play-button:hover {
-    transform: scale(1.05);
-    box-shadow: 0 0 12px rgba(240, 192, 64, 0.4);
-}
+.chart .country:hover { filter: brightness(1.08) saturate(1.1); }
+.chart .country--no-data { fill: var(--rule-soft); }
+.chart .country--non-eu  { fill: var(--bg-sunken); }
+.chart .country--selected { stroke: var(--ink); stroke-width: 1.5; }
 
 /* Heatmap */
-.heatmap-cell {
-    transition: opacity 0.2s ease;
-    cursor: pointer;
+.chart .cell {
+  stroke: var(--bg);
+  stroke-width: 1;
+  transition: stroke var(--dur-2) var(--ease-out);
+}
+.chart .cell:hover, .chart .cell--focus {
+  stroke: var(--ink);
+  stroke-width: 1.5;
 }
 
-.heatmap-cell:hover {
-    stroke: var(--color-text-accent);
-    stroke-width: 2;
+/* Bars */
+.chart .bar {
+  transition: fill var(--dur-2) var(--ease-out), opacity var(--dur-2) var(--ease-out);
 }
+.chart .bar--pos { fill: var(--seq-1); }
+.chart .bar--neg { fill: var(--seq-4); }
+
+/* Waffle */
+.chart .waffle-cell {
+  stroke: var(--bg);
+  stroke-width: 1.5;
+  transition: opacity var(--dur-2) var(--ease-out);
+}
+
+/* Bump chart */
+.chart .bump-line {
+  fill: none;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.chart .bump-node circle { stroke: var(--bg-elev); stroke-width: 2; }
+.chart .bump-label { font-size: 0.78rem; fill: var(--ink); }
 
 /* Slope chart */
-.slope-line {
-    transition: stroke-width 0.2s ease, opacity 0.2s ease;
-    cursor: pointer;
+.chart .slope-line { stroke-width: 1.4; stroke: var(--ink-faint); fill: none; }
+.chart .slope-line--up   { stroke: var(--seq-4); }
+.chart .slope-line--down { stroke: var(--seq-1); }
+.chart .slope-end-label  { font-size: 0.78rem; font-weight: 600; }
+
+/* Ridgeline */
+.chart .ridge-area { fill-opacity: 0.65; stroke: var(--bg); stroke-width: 0.5; }
+.chart .ridge-baseline { stroke: var(--rule); stroke-width: 0.5; }
+.chart .ridge-label { font-size: 0.78rem; fill: var(--ink-soft); }
+
+/* Box plot */
+.chart .box-rect { fill: var(--bg-elev); stroke: var(--ink); stroke-width: 1; }
+.chart .box-median { stroke: var(--accent); stroke-width: 2; }
+.chart .box-whisker { stroke: var(--ink-soft); stroke-width: 1; }
+.chart .box-outlier { fill: var(--accent); fill-opacity: 0.55; }
+
+/* Connected scatter */
+.chart .cs-path { fill: none; stroke-width: 1.6; stroke-linecap: round; }
+.chart .cs-node { stroke: var(--bg-elev); stroke-width: 1.5; }
+.chart .cs-node--start { fill: var(--bg-elev); stroke: var(--ink); }
+.chart .cs-node--end   { fill: var(--accent); }
+
+/* Legend */
+.chart-legend {
+  display: flex; flex-wrap: wrap; gap: var(--space-3) var(--space-5);
+  margin-block-end: var(--space-5);
+  font-size: var(--fs-100);
+  color: var(--ink-soft);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.chart-legend .swatch {
+  display: inline-block;
+  inline-size: 12px; block-size: 12px;
+  border-radius: 2px;
+  margin-inline-end: 6px;
+  vertical-align: -2px;
+}
+.chart-legend button {
+  display: inline-flex; align-items: center;
+  font-size: inherit; color: inherit; letter-spacing: inherit; text-transform: inherit;
+  padding: 0;
+}
+.chart-legend button[aria-pressed="false"] { opacity: 0.4; }
+
+/* Chart frame (figure container) */
+.chart-figure {
+  display: flex; flex-direction: column;
+  gap: var(--space-3);
+  background: var(--bg-elev);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-3);
+  padding: var(--space-6);
+  box-shadow: var(--shadow-1);
+}
+.chart-figure header { display: flex; flex-direction: column; gap: 4px; }
+.chart-figure h3 {
+  font-family: var(--font-display);
+  font-size: var(--fs-500);
+  font-weight: 600;
+  margin: 0;
+}
+.chart-figure .chart-subtitle { font-size: var(--fs-200); color: var(--ink-soft); }
+.chart-figure .chart-source {
+  font-size: var(--fs-100);
+  color: var(--ink-faint);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-block-start: var(--space-4);
 }
 
-.slope-line:hover {
-    stroke-width: 3 !important;
-    opacity: 1 !important;
+/* Tooltip */
+.tooltip {
+  position: absolute;
+  z-index: var(--z-tooltip);
+  pointer-events: none;
+  background: var(--bg-elev);
+  color: var(--ink);
+  border: 1px solid var(--rule);
+  box-shadow: var(--shadow-2);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-2);
+  font-size: var(--fs-200);
+  line-height: 1.4;
+  max-inline-size: 260px;
+  opacity: 0;
+  transition: opacity var(--dur-2) var(--ease-out), transform var(--dur-2) var(--ease-out);
+  transform: translateY(4px);
+}
+.tooltip.visible { opacity: 1; transform: translateY(0); }
+.tooltip h5 {
+  font-family: var(--font-display);
+  font-size: var(--fs-300);
+  margin: 0 0 4px;
+  color: var(--ink);
+}
+.tooltip .row { display: flex; justify-content: space-between; gap: var(--space-3); }
+.tooltip .row .key { color: var(--ink-faint); }
+.tooltip .row .val { font-weight: 600; }
+
+/* Crosshair */
+.chart .crosshair {
+  stroke: var(--ink);
+  stroke-opacity: 0.45;
+  stroke-dasharray: 2 3;
+  pointer-events: none;
 }
 
-/* Diverging bar */
-.diverging-bar {
-    transition: opacity 0.2s ease;
-    cursor: pointer;
+/* ============================================================
+   EDITORIAL CHART LANGUAGE (ported from designer reference)
+   ============================================================ */
+.chart-svg { width: 100%; height: 100%; overflow: visible; font-family: var(--font-body); cursor: crosshair; }
+.chart-svg text { fill: var(--ink-soft); font-size: 11.5px; }
+.chart-svg .axis path,
+.chart-svg .axis line { stroke: var(--rule); shape-rendering: crispEdges; }
+.chart-svg .axis text { fill: var(--ink-faint); font-size: 10.5px; }
+.chart-svg .axis-title {
+  fill: var(--ink-soft); font-size: 11px;
+  letter-spacing: 0.08em; text-transform: uppercase;
+}
+.chart-svg .gridline { stroke: var(--rule-soft); stroke-dasharray: 2 3; }
+.chart-svg .zero-line { stroke: var(--rule-bold); stroke-width: 1; }
+.chart-svg .target-line { stroke: var(--seq-target); stroke-width: 1; stroke-dasharray: 3 4; }
+.chart-svg .target-line-label { fill: var(--seq-target); font-size: 10px; font-style: italic; }
+
+.chart-svg .annot { font-size: 11px; fill: var(--ink-soft); }
+.chart-svg .annot-title {
+  font-family: var(--font-display); font-size: 13px; fill: var(--ink); font-style: italic;
+}
+.chart-svg .annot-line { stroke: var(--ink); stroke-width: 0.75; fill: none; }
+.chart-svg .annot-dot { fill: var(--accent); }
+
+.chart-svg .country-label { font-size: 10px; fill: var(--ink-soft); font-weight: 500; }
+.chart-svg .value-label {
+  font-family: var(--font-mono); font-size: 10px; fill: var(--ink);
+  font-variant-numeric: tabular-nums;
 }
 
-.bar-positive {
-    fill: var(--color-inflation-low);
+/* ----- Choropleth editorial layer ----- */
+.chart-svg .country {
+  stroke: var(--bg); stroke-width: 0.6;
+  transition: opacity 500ms var(--ease-out), filter 500ms var(--ease-out),
+              stroke-width 220ms var(--ease-out), stroke 220ms var(--ease-out);
+  cursor: grab;
+}
+.chart-svg.is-panning .country,
+.chart-svg .country:active { cursor: grabbing; }
+.chart-svg .country.is-non-eu { fill: color-mix(in srgb, var(--ink-faint) 14%, transparent); opacity: 0.32; cursor: default; }
+.chart-svg .country.is-hover { stroke: var(--ink); stroke-width: 1.4; }
+.chart-svg .country.is-dim { filter: url(#country-desat); opacity: 0.7; }
+.chart-svg .country.is-focus { stroke: var(--ink); stroke-width: 1.6; filter: url(#country-glow); }
+
+/* ----- Choropleth detail panel (left column, sticky to viewport bottom) ----- */
+.map-detail {
+  position: sticky;
+  bottom: var(--space-5);
+  margin-block-start: var(--space-7);
+  max-inline-size: 38ch;
+  padding: var(--space-5) var(--space-6);
+  background: var(--bg-elev);
+  border-inline-start: 3px solid var(--accent);
+  border-radius: 2px;
+  box-shadow: var(--shadow-2);
+  opacity: 0;
+  transform: translateY(14px);
+  transition:
+    opacity 540ms var(--ease-out),
+    transform 540ms var(--ease-out);
+  pointer-events: none;
+  z-index: 4;
+  align-self: flex-start;
+}
+.map-detail[data-active="true"] {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+.map-detail__eyebrow {
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  font-weight: 500;
+  margin-block-end: 4px;
+}
+.map-detail__num {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 380;
+  font-variation-settings: "opsz" 144, "SOFT" 80;
+  font-size: 64px;
+  line-height: 1;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  margin: 2px 0 0;
+}
+.map-detail__num.is-flip { animation: mapNumFlip 520ms var(--ease-out); }
+@keyframes mapNumFlip {
+  0%   { opacity: 0; transform: translateY(-10px); }
+  60%  { opacity: 1; }
+  100% { opacity: 1; transform: translateY(0); }
+}
+.map-detail__sentence {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 16.5px;
+  color: var(--ink);
+  margin: var(--space-3) 0 var(--space-4);
+  line-height: 1.4;
+}
+.map-detail__sub {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-block-end: 4px;
+}
+.map-detail__spark { width: 100%; height: 44px; display: block; }
+.map-detail__spark .ms-zero { stroke: var(--rule); stroke-width: 0.5; stroke-dasharray: 2 2; }
+.map-detail__spark .ms-line { fill: none; stroke: var(--accent); stroke-width: 1.6; }
+.map-detail__spark .ms-dot  { fill: var(--accent); }
+.map-detail__spark .ms-tick {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  fill: var(--ink-faint);
+  text-anchor: middle;
+}
+@keyframes msTrace { to { stroke-dashoffset: 0; } }
+@keyframes msDot   { to { r: 2.6; } }
+
+.map-detail__close {
+  position: absolute;
+  inset-block-start: 8px;
+  inset-inline-end: 10px;
+  inline-size: 26px;
+  block-size: 26px;
+  border: 0;
+  background: transparent;
+  color: var(--ink-faint);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  transition:
+    background-color 220ms var(--ease-out),
+    color 220ms var(--ease-out),
+    transform 220ms var(--ease-out);
+}
+.map-detail__close:hover {
+  background: var(--bg-sunken);
+  color: var(--ink);
+  transform: rotate(90deg);
+}
+.map-detail__close:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.map-detail { position: relative; }
+
+.chart-svg .year-kicker {
+  font-family: var(--font-display); font-style: italic; font-weight: 200;
+  font-size: 58px;
+  font-variation-settings: "opsz" 144;
+  fill: var(--ink);
+  letter-spacing: -0.024em;
+  transform-origin: left center;
+  line-height: 1;
+}
+.chart-svg .year-kicker-sub {
+  font-family: var(--font-display); font-style: italic;
+  font-size: 13px; fill: var(--ink-soft);
+  font-variation-settings: "opsz" 100;
+  letter-spacing: -0.005em;
+}
+.chart-svg .graticule { pointer-events: none; }
+
+.chart-svg .capital-dot {
+  fill: var(--ink); fill-opacity: 0.42;
+  stroke: var(--bg); stroke-width: 0.5;
+  transform-origin: center;
+  transform-box: fill-box;
+  transition: fill-opacity 280ms var(--ease-out);
+}
+.chart-svg .capital-dot.is-focus {
+  fill: var(--accent); fill-opacity: 1;
+  stroke: var(--bg); stroke-width: 1.2;
+  animation: capPulse 1.8s ease-in-out infinite;
+}
+@keyframes capPulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.35); }
+}
+.chart-svg .pulse-ring { pointer-events: none; }
+
+.chart-svg .top-label-val {
+  font-family: var(--font-display); font-style: italic;
+  font-size: 13px; fill: var(--ink);
+  font-variation-settings: "opsz" 144;
+  paint-order: stroke;
+  stroke: var(--bg); stroke-width: 3.5px; stroke-linejoin: round;
+  text-anchor: middle;
+  pointer-events: none;
+  letter-spacing: -0.01em;
+  font-weight: 380;
 }
 
-.bar-negative {
-    fill: var(--color-inflation-high);
+/* Stamp annotation */
+.chart-svg .stamp-line { stroke-linecap: round; }
+.chart-svg .stamp-plate { fill: var(--bg); opacity: 0.78; }
+.chart-svg .stamp-eyebrow {
+  font-family: var(--font-body); font-size: 10px;
+  fill: var(--ink-faint); letter-spacing: 0.26em; font-weight: 500;
+}
+.chart-svg .stamp-num {
+  font-family: var(--font-display); font-style: italic;
+  font-size: 36px; fill: var(--accent);
+  font-variation-settings: "opsz" 144;
+  font-weight: 380; letter-spacing: -0.028em;
+}
+.chart-svg .stamp-sentence {
+  font-family: var(--font-display); font-style: italic;
+  font-size: 13.5px; fill: var(--ink);
+  font-variation-settings: "opsz" 100;
+  letter-spacing: -0.005em; line-height: 1.3;
 }
 
-.bar-no-wage {
-    opacity: 0.4;
+.chart-svg .legend-title {
+  font-family: var(--font-body); font-size: 9.5px;
+  fill: var(--ink-faint); letter-spacing: 0.26em; font-weight: 500;
+}
+.chart-svg .legend-tick {
+  font-family: var(--font-mono); font-size: 9px;
+  fill: var(--ink-faint); letter-spacing: 0.02em;
+}
+.chart-svg .legend-swatch { stroke: var(--bg); stroke-width: 0.5; }
+
+/* Small multiples */
+.chart-svg .mini-panel { fill: var(--bg-elev); stroke: var(--rule-soft); stroke-width: 1; }
+.chart-svg .mini-line { fill: none; stroke-width: 1.4; }
+.chart-svg .mini-area { opacity: 0.18; }
+.chart-svg .mini-label { font-size: 10px; fill: var(--ink); font-weight: 500; }
+.chart-svg .mini-axis text { font-size: 9px; }
+
+/* SmallMultiplesLine (Chapter 2) — editorial layer */
+.chart-svg .sml-panel { transition: opacity 440ms var(--ease-out); }
+.chart-svg .sml-kicker-text { /* inherits .year-kicker */ }
+.chart-svg .sml-kicker-sub  { /* inherits .year-kicker-sub */ }
+
+.chart-svg .sml-title {
+  font-family: var(--font-display); font-style: italic;
+  font-size: 12.5px; fill: var(--ink);
+  font-variation-settings: "opsz" 100;
+  font-weight: 420; letter-spacing: -0.005em;
+}
+.chart-svg .sml-last-tag {
+  font-family: var(--font-display); font-style: italic;
+  font-size: 13px; fill: var(--accent);
+  font-variation-settings: "opsz" 100;
+  font-weight: 420; letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+.chart-svg .sml-xtick,
+.chart-svg .sml-ytick {
+  font-family: var(--font-mono); font-size: 9.5px;
+  fill: var(--ink-faint); letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.chart-svg .sml-gridline {
+  stroke: var(--rule-soft); stroke-width: 0.5; stroke-dasharray: 2 3; pointer-events: none;
+}
+.chart-svg .sml-zero {
+  stroke: var(--rule-bold); stroke-width: 0.8; opacity: 0.6;
+}
+.chart-svg .sml-ukraine {
+  stroke: var(--accent); stroke-width: 1; stroke-dasharray: 2 3; stroke-opacity: 0.55; pointer-events: none;
+}
+.chart-svg .sml-band.event-band--covid  { fill: var(--event-covid);  pointer-events: none; }
+.chart-svg .sml-band.event-band--energy { fill: var(--event-energy); pointer-events: none; }
+.chart-svg .sml-peak-dot { pointer-events: none; }
+.chart-svg .sml-peak-tag {
+  font-family: var(--font-display); font-style: italic;
+  font-size: 11.5px; fill: var(--ink);
+  font-variation-settings: "opsz" 100;
+  font-weight: 460;
+  paint-order: stroke;
+  stroke: var(--bg); stroke-width: 3px; stroke-linejoin: round;
+  pointer-events: none;
+}
+.chart-svg .sml-line { transition: filter 320ms var(--ease-out); }
+.chart-svg .sml-area { pointer-events: none; }
+.chart-svg .sml-overlay { pointer-events: all; }
+.chart-svg .cursor-line { pointer-events: none; }
+.chart-svg .cursor-dot  { pointer-events: none; }
+
+/* Reveal helpers */
+.chart-svg .reveal { opacity: 0; transition: opacity 700ms var(--ease-out); }
+.chart-svg .reveal.is-in { opacity: 1; }
+
+/* Editorial form controls (player, slider, hint) */
+.scroller__chart .chart-controls {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding-top: 10px;
+  border-top: 1px dotted var(--rule-soft);
+  font-size: var(--fs-200); color: var(--ink-soft);
+}
+.chapter[data-chart="choropleth"] .scroller__chart .chart-controls { display: block; }
+.scroller__chart .chart-controls input[type="range"] {
+  width: 180px; -webkit-appearance: none; appearance: none;
+  background: transparent; height: 18px;
+}
+.scroller__chart .chart-controls input[type="range"]::-webkit-slider-runnable-track {
+  height: 2px; background: var(--rule); border-radius: 1px;
+}
+.scroller__chart .chart-controls input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--accent); margin-top: -6px;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+  cursor: grab;
+  transition: box-shadow var(--dur-2);
+}
+.scroller__chart .chart-controls input[type="range"]:hover::-webkit-slider-thumb {
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.scroller__chart .chart-controls .scrub-display {
+  font-family: var(--font-display); font-size: 1.8rem;
+  font-variation-settings: "opsz" 144; font-style: italic;
+  color: var(--accent); min-width: 70px; line-height: 1;
+  letter-spacing: -0.01em;
+}
+.scroller__chart .chart-controls .play-btn {
+  width: 32px; height: 32px; border-radius: 50%;
+  border: 1px solid var(--rule); background: transparent; color: var(--ink);
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; padding: 0;
+  transition: background var(--dur-2), color var(--dur-2), border-color var(--dur-2);
+}
+.scroller__chart .chart-controls .play-btn:hover { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.scroller__chart .chart-controls .play-btn.is-playing {
+  background: var(--accent); color: #fff; border-color: var(--accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.scroller__chart .chart-controls .ctrl-hint {
+  font-family: var(--font-display); font-style: italic; font-size: 12px;
+  color: var(--ink-faint);
+}
+.scroller__chart .chart-controls .vis-hidden {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
 }
 
-/* Waffle chart */
-.waffle-square {
-    transition: fill 0.3s ease;
+/* Integrated mini-area timeline (Choropleth scrubber) */
+.scroller__chart .map-timeline-wrap { width: 100%; padding: 4px 0 2px; }
+.scroller__chart .map-timeline {
+  display: block; width: 100%; height: 64px; overflow: visible;
+  cursor: pointer; user-select: none;
 }
-
-/* Area chart layers */
-.area-layer {
-    transition: opacity 0.3s ease;
+.scroller__chart .map-timeline:hover .tl-area { fill-opacity: 0.18; }
+.scroller__chart .map-timeline-foot {
+  display: flex; align-items: center; gap: 14px; padding-top: 6px;
 }
-
-.area-layer.dimmed {
-    opacity: 0.15 !important;
+.map-timeline .tl-area { fill: var(--accent); fill-opacity: 0.13; transition: fill-opacity 220ms var(--ease-out); }
+.map-timeline .tl-line { fill: none; stroke: var(--accent); stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+.map-timeline .tl-base { stroke: var(--rule); stroke-width: 0.6; }
+.map-timeline .tl-target { stroke: var(--seq-target); stroke-width: 0.6; stroke-dasharray: 2 3; opacity: 0.5; }
+.map-timeline .tl-tick { font-family: var(--font-mono); font-size: 9px; fill: var(--ink-fainter); letter-spacing: 0.04em; }
+.map-timeline .tl-tick--major { fill: var(--ink-soft); font-weight: 500; }
+.map-timeline .tl-playhead-line { stroke: var(--ink); stroke-width: 1; }
+.map-timeline .tl-playhead-dot { fill: var(--accent); stroke: var(--bg); stroke-width: 1.6; filter: drop-shadow(0 1px 3px rgba(0,0,0,0.15)); }
+.map-timeline .tl-playhead-num {
+  font-family: var(--font-display); font-style: italic;
+  font-size: 12px; fill: var(--ink);
+  font-variation-settings: "opsz" 144;
+  font-weight: 380; letter-spacing: -0.01em;
 }
-
-/* Crisis bands — fill set inline per band (COVID grey, energy orange) */
-.crisis-band {
-    pointer-events: none;
-}
-
-/* Event markers */
-.event-marker {
-    cursor: pointer;
-    transition: r 0.2s ease;
-}
-
-.event-marker:hover {
-    r: 7;
-}
-
-/* Event ticks — semi-opaque dashed lines that drop down to the chart line.
-   Migrated from inline .style('opacity', 0.5) per Lecture 09 / rubric "no
-   inline styling on SVG elements". */
-.event-tick {
-    opacity: 0.5;
-    pointer-events: none;
-}
-
-/* AnnotatedLine mousemove overlay — gets a crosshair cursor.
-   Migrated from inline .style('cursor', 'crosshair'). */
-.al-overlay {
-    cursor: crosshair;
-}
-
-/* Initial state for d3 elements that toggle visibility — class is added on
-   mouseout, removed on mouseover. Replaces inline .style('display', ...). */
-.is-hidden {
-    display: none !important;
-}
-
-/* Zero line */
-.zero-line {
-    pointer-events: none;
-}
-
-/* Nav act number */
-.nav-act-num {
-    font-size: 0.6rem;
-    font-family: monospace;
-    color: var(--color-text-secondary);
-    margin-right: 4px;
-    opacity: 0.7;
-}
-
-/* Scroll progress bar */
-.scroll-progress {
-    position: fixed;
-    top: 0;
-    left: 0;
-    height: 3px;
-    width: 0%;
-    background: linear-gradient(90deg, var(--color-inflation-low), var(--color-text-accent), var(--color-inflation-high));
-    z-index: 1001;
-    transition: width 0.1s linear;
-}
-
-/* Step counter */
-.step-counter {
-    font-size: 0.65rem;
-    letter-spacing: 0.2em;
-    color: var(--color-text-accent);
-    text-transform: uppercase;
-    margin-bottom: var(--space-sm);
-    display: block;
-    font-weight: 600;
-}
-
-/* Source line upgrade */
-.source-line {
-    border-left: 3px solid var(--color-grid);
-    padding-left: 8px;
-    font-style: italic;
-}
-
-/* Methodology section */
-.methodology-section h3 {
-    color: var(--color-text-accent);
-    border-bottom: 1px solid var(--color-grid);
-    padding-bottom: var(--space-xs);
-    margin-bottom: var(--space-sm);
-}
-
-.data-table thead tr {
-    background: rgba(240, 192, 64, 0.08);
-}
-
-.data-table tbody tr:hover {
-    background: rgba(255,255,255,0.03);
-}
-
-.data-table tbody tr td:first-child {
-    border-left: 3px solid var(--color-text-accent);
-    padding-left: calc(var(--space-sm) - 3px);
-}
-
-/* Footer */
-footer {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: var(--space-md) var(--space-lg);
-    border-top: 1px solid var(--color-grid);
-    color: var(--color-axis-text);
-    font-size: 0.85rem;
-}
-
-footer .footer-left {
-    font-family: 'Roboto Slab', serif;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-}
-
-footer .footer-meta {
-    font-family: 'Fira Sans', sans-serif;
-    font-weight: 400;
-    font-size: 0.75rem;
-    color: var(--color-text-secondary);
-    letter-spacing: 0.02em;
-}
-
-footer .footer-right {
-    text-align: right;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 6px;
-}
-
-footer .footer-links {
-    list-style: none;
-    display: flex;
-    gap: var(--space-md);
-    padding: 0;
-    margin: 0;
-    align-items: center;
-}
-
-footer .footer-links a {
-    color: var(--color-text-secondary);
-    text-decoration: none;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 0.8rem;
-    transition: color var(--transition-fast);
-}
-
-footer .footer-links a:hover {
-    color: var(--color-text-accent);
-}
-
-footer .footer-icon {
-    display: inline-block;
-    vertical-align: middle;
-}
-
-footer .footer-built {
-    font-size: 0.7rem;
-    color: var(--color-axis-text);
-    letter-spacing: 0.05em;
-}
-
-/* White institutional strip — UniGe brand requirement (logo on its own clean
-   surface so the white-background PNG isn't placed on a dark theme). */
-.footer-institution {
-    background: #ffffff;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    padding: 1.5rem 2rem;
-    border-top: 1px solid #e0e0e0;
-}
-
-.unige-logo {
-    height: 48px;
-    width: auto;
-    display: block;
-}
-
-/* Active nav link */
-.nav-links a.is-active {
-    color: var(--color-text-accent);
-    position: relative;
-}
-
-.nav-links a.is-active::after {
-    content: '';
-    position: absolute;
-    bottom: -4px;
-    left: 0;
-    width: 100%;
-    height: 2px;
-    background: var(--color-text-accent);
-    transition: width 0.3s ease;
-}
-
-/* Axis domain removal */
-.domain {
-    display: none;
-}
-
-/* Time slider for choropleth */
-.time-slider {
-    -webkit-appearance: none;
-    appearance: none;
-    height: 4px;
-    background: var(--color-axis);
-    border-radius: 2px;
-    outline: none;
-    flex: 1;
-}
-
-.time-slider::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
-    background: var(--color-text-accent);
-    cursor: pointer;
-    border: 2px solid var(--color-bg-card);
-    box-shadow: 0 0 6px rgba(240, 192, 64, 0.4);
-}
-
-.time-slider::-moz-range-thumb {
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
-    background: var(--color-text-accent);
-    cursor: pointer;
-    border: 2px solid var(--color-bg-card);
-    box-shadow: 0 0 6px rgba(240, 192, 64, 0.4);
-}
-
-.time-slider::-moz-range-track {
-    background: var(--color-axis);
-    height: 4px;
-    border-radius: 2px;
-}
-
-/* Waffle chart select styling */
-.waffle-select {
-    -webkit-appearance: none;
-    -moz-appearance: none;
-    appearance: none;
-    background-color: var(--color-bg-card);
-    color: var(--color-text-primary);
-    border: 1px solid var(--color-axis);
-    border-radius: var(--radius-sm);
-    padding: 5px 28px 5px 10px;
-    font-size: 0.8rem;
-    font-family: 'Fira Sans', sans-serif;
-    cursor: pointer;
-    outline: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23f0c040' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 8px center;
-}
-
-.waffle-select:hover {
-    border-color: var(--color-text-accent);
-}
-
-.waffle-select:focus {
-    border-color: var(--color-text-accent);
-    box-shadow: 0 0 0 2px rgba(240, 192, 64, 0.2);
-}
-
-.waffle-controls label {
-    font-size: 0.75rem;
-    font-weight: 500;
-    color: var(--color-text-secondary);
-    letter-spacing: 0.05em;
-    margin-right: 6px;
-}
-
-.waffle-controls {
-    display: flex;
-    align-items: center;
-    gap: var(--space-md);
-    margin-bottom: var(--space-md);
-    flex-wrap: wrap;
-}
-
-/* Two-row chart-controls (e.g. Heatmap: sort buttons + time slider) — second row
-   gets a slightly tighter top margin so it reads as part of the same control bar. */
-.chart-controls + .chart-controls {
-    margin-top: -4px;
-    align-items: center;
-}
-
-/* Heatmap time slider label sits inline with the slider, accent-colored to match
-   the slider thumb so the user's eye links the date display to the scrubber.
-   Color/font/weight migrated from inline .style() chains per the rubric. */
-.heatmap-time-label {
-    color: var(--color-text-accent);
-    font-size: 0.8rem;
-    font-weight: 600;
-    min-width: 110px;
-    font-variant-numeric: tabular-nums;
-}
-
-/* Inline label inside chart-controls (e.g. "Sort:" / "Month:") — secondary text
-   color so it reads as label-not-value. Migrated from .style() on each span. */
-.chart-control-label {
-    color: var(--color-text-secondary);
-    font-size: 0.8rem;
-}
-
-/* When a chart control row hosts a slider it needs a tighter gap and a small
-   top spacer to separate it from the row above. */
-.chart-controls.with-slider {
-    gap: 12px;
-    margin-top: 4px;
-    align-items: center;
-}
-
-/* Range inputs that should fill remaining space in their flex parent. */
-.chart-controls input[type="range"] {
-    flex: 1;
-}
-
-/* Waffle chart selector wrappers (label + select). Inline-flex so the label
-   and dropdown stay on one line. Migrated from inline .style() chains. */
-.waffle-control-wrap {
-    display: flex;
-    align-items: center;
-}
-
-/* Choropleth chart-controls override: a touch more gap for the play button +
-   slider combo, plus a top margin so it clears the legend below the map. */
-.chart-controls.choropleth-controls {
-    margin-top: 10px;
-    gap: 12px;
-    align-items: center;
-}
-
-/* SmallMultiplesLine brush ("overview + detail" pattern, Lecture 13). The
-   selection rect uses the gold accent at low alpha so it reads as "active
-   range" against the muted overview line below it. */
-.sm-brush .selection {
-    fill: var(--color-text-accent);
-    fill-opacity: 0.18;
-    stroke: var(--color-text-accent);
-    stroke-width: 1;
-}
-
-.sm-brush .handle {
-    fill: var(--color-text-accent);
-    fill-opacity: 0.6;
-}
-
-.sm-brush-axis path,
-.sm-brush-axis line {
-    stroke: var(--color-axis);
-}
-
-/* Choropleth inset country-detail panel — pointer-events:none so the panel
-   floats over the map without intercepting clicks on countries below it. */
-.choropleth-inset {
-    pointer-events: none;
-    transition: opacity 0.2s ease;
-}
-
-/* Worst-country dashed ring on the choropleth — gentle pulse to draw the eye
-   without being annoying. Disabled under prefers-reduced-motion via main.css. */
-.choropleth-worst-ring {
-    animation: worstPulse 2.4s ease-in-out infinite;
-}
-
-@keyframes worstPulse {
-    0%, 100% { opacity: 0.6; }
-    50%      { opacity: 1; }
-}
+.map-timeline .tl-playhead-val { font-family: var(--font-mono); font-size: 10px; fill: var(--accent); font-weight: 500; }

@@ -1,61 +1,141 @@
-/* Scrollytelling styles — single source of truth for .scroll-step / .step-* */
-.scroll-step {
-    display: flex;
-    gap: var(--space-lg);
-    align-items: flex-start;
-    min-height: 80vh;
-    padding: var(--space-lg) 0;
-    opacity: 0.35;
-    transform: translateY(16px);
-    transition: opacity 0.5s ease, transform 0.5s ease;
+/* ============================================================
+   scrollytelling.css — scroll-driven section layout
+   ============================================================ */
+
+/* The chapter wraps a sticky chart + scrolling steps. */
+.chapter {
+  position: relative;
+  padding-block-start: var(--space-9);
+  padding-block-end: var(--space-12);
+}
+.chapter + .chapter {
+  border-block-start: 1px solid var(--rule);
 }
 
-.scroll-step.is-active {
-    opacity: 1;
-    transform: translateY(0);
+/* Two-column scroller: text (left, 1fr) + sticky chart (right, 1.4fr) */
+.scroller {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr;
+  gap: clamp(var(--space-6), 4vw, var(--space-9));
+  align-items: start;
+  max-inline-size: var(--w-wide);
+  margin-inline: auto;
+  padding-inline: var(--space-5);
 }
 
-.step-text {
-    flex: 0 0 380px;
-    position: sticky;
-    top: 100px;
-    border-left: 2px solid transparent;
-    padding-left: var(--space-md);
-    transition: border-color var(--transition-normal);
+/* Text column */
+.scroller__text {
+  display: flex; flex-direction: column; gap: 80dvh;  /* one step per viewport */
+  padding-block: 20dvh;
+}
+.scroller__step {
+  max-inline-size: 38ch;
+  padding: var(--space-6) var(--space-6);
+  border-radius: var(--radius-3);
+  background: transparent;
+  opacity: 0.3;
+  transform: translateY(8px);
+  transition:
+    opacity var(--dur-4) var(--ease-out),
+    transform var(--dur-4) var(--ease-out),
+    background-color var(--dur-4) var(--ease-out);
+}
+.scroller__step.is-active {
+  opacity: 1;
+  transform: translateY(0);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-2);
+}
+.scroller__step h3 {
+  font-family: var(--font-display);
+  font-size: var(--fs-500);
+  margin-block-end: var(--space-3);
+  letter-spacing: -0.01em;
+}
+.scroller__step .step-eyebrow {
+  font-size: var(--fs-100);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-block-end: var(--space-2);
+}
+.scroller__step p {
+  font-size: var(--fs-300);
+  line-height: var(--lh-relaxed);
+  color: var(--ink-soft);
+}
+.scroller__step strong { color: var(--ink); }
+
+/* Sticky chart panel — Pudding/Reuters: no frame, just whitespace */
+.scroller__chart {
+  position: sticky;
+  inset-block-start: calc(var(--header-h) + var(--space-3));
+  block-size: calc(100dvh - var(--header-h) - var(--space-4));
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: var(--space-3);
+  padding: var(--space-5) 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  overflow: visible;
+}
+.scroller__chart header {
+  display: flex; flex-direction: column; gap: 4px;
+  max-inline-size: 56ch;
+}
+.scroller__chart h3 {
+  font-family: var(--font-display);
+  font-size: var(--fs-600);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  font-variation-settings: "opsz" 96, "SOFT" 50;
+  color: var(--ink);
+}
+.scroller__chart .chart-subtitle {
+  font-size: var(--fs-300);
+  color: var(--ink-soft);
+  line-height: var(--lh-snug);
+}
+.scroller__chart .chart-body {
+  min-block-size: 0;
+  position: relative;
+  display: flex; align-items: center; justify-content: center;
+}
+.scroller__chart .chart-body svg.chart-svg { max-block-size: 100%; }
+.scroller__chart .chart-controls {
+  display: flex; gap: var(--space-3); flex-wrap: wrap;
+  align-items: center;
+  font-size: var(--fs-100);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.scroller__chart .chart-controls input[type="range"] { accent-color: var(--accent); inline-size: 180px; }
+.scroller__chart .chart-source {
+  font-size: var(--fs-100);
+  color: var(--ink-faint);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
-.scroll-step.is-active .step-text {
-    border-left-color: var(--color-text-accent);
+/* Inline / standalone chart figure (no scrolling steps) — when chart is the whole section */
+.chart-standalone {
+  max-inline-size: var(--w-content);
+  margin-inline: auto;
+  padding-inline: var(--space-5);
+  padding-block: var(--space-9);
 }
 
-.step-text p {
-    color: rgba(232, 230, 227, 0.85);
-}
-
-.step-chart {
-    flex: 1;
-    min-height: 400px;
-    position: sticky;
-    top: 80px;
-}
-
-/* Responsive */
-@media (max-width: 1024px) {
-    .scroll-step {
-        flex-direction: column;
-    }
-
-    .step-text {
-        flex: none;
-        width: 100%;
-        position: relative;
-        top: 0;
-    }
-
-    .step-chart {
-        flex: none;
-        width: 100%;
-        position: relative;
-        top: 0;
-    }
+/* Scroll progress indicator (top of header) */
+.scroll-progress {
+  position: fixed;
+  inset-inline: 0;
+  inset-block-start: var(--header-h);
+  block-size: 2px;
+  background: var(--accent);
+  transform-origin: left;
+  transform: scaleX(var(--scroll, 0));
+  z-index: var(--z-header);
+  pointer-events: none;
 }
