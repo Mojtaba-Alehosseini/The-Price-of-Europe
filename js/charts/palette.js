@@ -1,48 +1,85 @@
-// Centralized color palette for D3 charts.
-// Use CSS variables (var(--color-...)) wherever a string is set as an SVG attribute
-// or CSS property — that path lets the design system change colors in one place.
-// This file holds the literal hex values that *must* be passed to D3 interpolators
-// (d3.interpolateRgbBasis, etc.) since D3 cannot resolve CSS custom properties at
-// build time.
+/* ============================================================
+   palette.js — D3 chart palette helpers
+   Pull live values from CSS custom properties so light/dark
+   themes update interpolators automatically.
+   ============================================================ */
 
-export const PALETTE = {
-    // Choropleth diverging stops: deflation → ECB target → high inflation
-    choroplethStops: ['#2a9d8f', '#8ab17d', '#f9f4e8', '#f4a261', '#e63946'],
-    choroplethBg: '#0d1520',
-    choroplethNoData: '#1a1a28',
-    choroplethNonEu: '#14141f',
-    choroplethStroke: '#0f0f14',
+const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
-    // Per-category accent colors (mirror CSS --color-cp00 etc.)
-    category: {
-        CP00: '#f0c040', CP01: '#8ab17d', CP04: '#457b9d',
-        CP045: '#e76f51', CP07: '#b5838d', CP11: '#dda15e',
-        NRG: '#e63946', FOOD: '#8ab17d', SERV: '#6c63ff',
+export function readPalette() {
+  return {
+    // Sequential (inflation severity)
+    seq: [
+      css("--seq-1"),
+      css("--seq-2"),
+      css("--seq-3"),
+      css("--seq-4"),
+      css("--seq-5"),
+    ],
+
+    // Categorical (independent series)
+    cat: {
+      overall:   css("--cat-overall"),
+      energy:    css("--cat-energy"),
+      food:      css("--cat-food"),
+      housing:   css("--cat-housing"),
+      services:  css("--cat-services"),
+      wages:     css("--cat-wages"),
+      transport: css("--cat-transport"),
+      other:     css("--cat-other")
     },
 
-    // Event timeline category colors
+    // Surface
+    bg:        css("--bg"),
+    bgElev:    css("--bg-elev"),
+    bgSunken:  css("--bg-sunken"),
+    ink:       css("--ink"),
+    inkSoft:   css("--ink-soft"),
+    inkFaint:  css("--ink-faint"),
+    rule:      css("--rule"),
+    ruleSoft:  css("--rule-soft"),
+
+    // Accent
+    accent:    css("--accent"),
+    accentVeil:css("--accent-veil"),
+    link:      css("--link"),
+
+    // Events
     event: {
-        covid:  '#888888',
-        energy: '#e76f51',
-        policy: '#f0c040',
-        food:   '#8ab17d',
-        supply: '#aaaaaa',
-    },
+      covid:  css("--event-covid"),
+      energy: css("--event-energy"),
+      policy: css("--event-policy"),
+      food:   css("--event-food")
+    }
+  };
+}
 
-    // Crisis bands (low-opacity tint over chart area)
-    bands: {
-        covid:  'rgba(136,136,136,0.12)',
-        energy: 'rgba(231,111,81,0.12)',
-    },
-
-    // Faint reference grid/zero/dashes
-    line: {
-        contextDim:  'rgba(255,255,255,0.18)',
-        contextFade: 'rgba(255,255,255,0.08)',
-        zeroLine:    'rgba(255,255,255,0.4)',
-        gridLine:    'rgba(255,255,255,0.05)',
-    },
-
-    // Ukraine annotation (orange-ish, matches energy palette)
-    annotationLine: 'rgba(231, 111, 81, 0.45)',
+/** Map COICOP category codes to our categorical palette tokens. */
+export const CATEGORY_TO_PALETTE = {
+  CP00: "overall",
+  CP01: "food",
+  CP02: "other",
+  CP03: "other",
+  CP04: "housing",
+  CP045:"energy",
+  CP05: "other",
+  CP06: "services",
+  CP07: "transport",
+  CP08: "services",
+  CP09: "services",
+  CP10: "services",
+  CP11: "services",
+  CP12: "services",
+  NRG:  "energy",
+  FOOD: "food",
+  SERV: "services"
 };
+
+/** d3.scaleSequential built from current seq tokens. */
+export function makeInflationScale(domain = [-2, 12]) {
+  const p = readPalette();
+  return d3.scaleLinear()
+    .domain([-2, 0, 2, 5, 10, 15])
+    .range([p.seq[0], p.seq[0], p.seq[1], p.seq[2], p.seq[3], p.seq[4]])
+    .clamp(true);
+}

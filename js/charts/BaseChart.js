@@ -1,68 +1,91 @@
+/* ============================================================
+   BaseChart — common SVG container w/ margin convention
+   ============================================================ */
+
+import { readPalette } from "./palette.js";
+
 export class BaseChart {
-    constructor(selector, data, tooltip, options = {}) {
-        this.container = d3.select(selector);
-        this.data = data;
-        this.tooltip = tooltip;
-        this.margin = options.margin || { top: 30, right: 30, bottom: 50, left: 60 };
-        this.options = options;
+  constructor(selector, data, ctx, opts = {}) {
+    this.selector = selector;
+    this.container = document.querySelector(selector);
+    this.data = data;
+    this.ctx  = ctx;
+    this.opts = Object.assign({
+      margin: { top: 20, right: 24, bottom: 36, left: 44 },
+      aspect: 1.6
+    }, opts);
 
-        this.containerWidth = this.container.node().getBoundingClientRect().width;
-        this.height = options.height || 400;
-        this.width = this.containerWidth - this.margin.left - this.margin.right;
-        this.innerHeight = this.height - this.margin.top - this.margin.bottom;
+    this.rendered = false;
+    this.svg = null;
+    this.g   = null;
 
-        // Clear previous
-        this.container.selectAll('*').remove();
-
-        // Create SVG with viewBox for responsiveness + a11y baseline
-        this.svg = this.container.append('svg')
-            .attr('viewBox', `0 0 ${this.containerWidth} ${this.height}`)
-            .attr('preserveAspectRatio', 'xMidYMid meet')
-            .attr('role', 'img')
-            .attr('aria-label', options.ariaLabel || 'Data visualization')
-            .attr('class', 'chart-svg');
-        // <title> child is the SVG-native accessible name. role+aria-label cover
-        // most assistive tech, but having both is the recommended belt-and-suspenders.
-        this.svg.append('title').text(options.ariaLabel || 'Data visualization');
-
-        this.g = this.svg.append('g')
-            .attr('transform', `translate(${this.margin.left},${this.margin.top})`);
-
-        this.rendered = false;
+    // Re-render on theme change (D3 reads CSS vars at draw time)
+    if (this.ctx?.theme) {
+      this._themeUnsub = this.ctx.theme.onChange(() => {
+        if (this.rendered) this.onThemeChange();
+      });
     }
+  }
 
-    render() {
-        if (this.rendered) return;
-        this.draw();
-        this.rendered = true;
+  // -- size helpers ----------------------------------------------------
+  size() {
+    if (!this.container) return { width: 600, height: 360 };
+    const w = this.container.clientWidth || 600;
+    const h = Math.round(w / this.opts.aspect);
+    return { width: w, height: h };
+  }
+
+  innerSize() {
+    const { width, height } = this.size();
+    const m = this.opts.margin;
+    return { width: width - m.left - m.right, height: height - m.top - m.bottom };
+  }
+
+  // -- svg scaffold ----------------------------------------------------
+  ensureSvg() {
+    const { width, height } = this.size();
+    // If the svg was detached (e.g. parent innerHTML="" wiped it) drop the stale ref.
+    if (this.svg && !this.svg.node()?.isConnected) { this.svg = null; this.g = null; }
+    if (!this.svg) {
+      const titleId = `${this.selector.replace(/[^\w]/g, "")}-title`;
+      this.svg = d3.select(this.container)
+        .append("svg")
+        .attr("class", "chart-svg")
+        .attr("viewBox", `0 0 ${width} ${height}`)
+        .attr("preserveAspectRatio", "xMidYMid meet")
+        .attr("role", "img")
+        .attr("aria-labelledby", titleId);
+      // Look up the chapter title for a meaningful aria label
+      const chapter = this.container.closest(".chapter");
+      const titleText = chapter?.querySelector("h3")?.textContent || "Chart";
+      this.svg.append("title").attr("id", titleId).text(titleText);
+      this.g = this.svg.append("g")
+        .attr("transform", `translate(${this.opts.margin.left},${this.opts.margin.top})`);
+    } else {
+      this.svg.attr("viewBox", `0 0 ${width} ${height}`);
     }
+    return { width, height };
+  }
 
-    draw() {
-        // Override in subclasses
-    }
+  palette() { return readPalette(); }
 
-    // Helper: create responsive resize.
-    // Clears the entire container (SVG, <defs>, controls) and rebuilds — prevents
-    // leaks of <defs>, background rects, and chart-controls divs that live outside `this.g`.
-    resize() {
-        const newWidth = this.container.node().getBoundingClientRect().width;
-        if (Math.abs(newWidth - this.containerWidth) < 5) return;
-        this.containerWidth = newWidth;
-        this.width = this.containerWidth - this.margin.left - this.margin.right;
+  // -- lifecycle hooks (subclasses override) --------------------------
+  render() { /* abstract */ this.rendered = true; }
+  resize() { if (this.rendered) this.render(); }
+  onStep(index, element) { /* default: no-op */ }
+  onThemeChange() { if (this.rendered) this.render(); }
 
-        this.container.selectAll('*').remove();
+  destroy() {
+    this._themeUnsub && this._themeUnsub();
+    if (this.container) this.container.innerHTML = "";
+    this.svg = null;
+    this.g = null;
+    this.rendered = false;
+  }
 
-        this.svg = this.container.append('svg')
-            .attr('viewBox', `0 0 ${this.containerWidth} ${this.height}`)
-            .attr('preserveAspectRatio', 'xMidYMid meet')
-            .attr('role', 'img')
-            .attr('aria-label', this.options.ariaLabel || 'Data visualization')
-            .attr('class', 'chart-svg');
-        this.svg.append('title').text(this.options.ariaLabel || 'Data visualization');
-
-        this.g = this.svg.append('g')
-            .attr('transform', `translate(${this.margin.left},${this.margin.top})`);
-
-        this.draw();
-    }
+  // -- helpers --------------------------------------------------------
+  formatPct(v, d = 1) { return v == null ? "—" : `${v >= 0 ? "+" : ""}${v.toFixed(d)} %`; }
+  formatPctSimple(v, d = 1) { return v == null ? "—" : `${v.toFixed(d)} %`; }
+  formatEur(v, d = 2) { return v == null ? "—" : new Intl.NumberFormat("en-EU", { style: "currency", currency: "EUR", maximumFractionDigits: d }).format(v); }
+  formatNum(v, d = 0) { return v == null ? "—" : v.toLocaleString("en-EU", { maximumFractionDigits: d }); }
 }

@@ -1,267 +1,490 @@
-import { BaseChart } from './BaseChart.js';
-import { PALETTE } from './palette.js';
+/* ============================================================
+   SmallMultiplesLine — 8 panels of euro-area HICP categories.
+   Competition-grade: 2-col x 4-row, shared y-axis, line trace
+   with sequential delay, area fade-in, italic Fraunces kicker +
+   per-panel last-value tag, COVID + Energy bands, scroll-driven
+   focus (dim non-target panels + stamp annotation), cross-panel
+   synchronised cursor.
+   ============================================================ */
+
+import { BaseChart } from "./BaseChart.js";
+import { KEY_CATEGORIES } from "../modules/DataManager.js";
+
+const STEP_CONFIG = [
+  { focus: null,    caption: null },
+  { focus: "CP04",  caption: "Housing, water & electricity peeled off in mid-2021 — six months before the rest." },
+  { focus: "FOOD",  caption: "Food followed energy with a six-month lag, peaking above 15 % in early 2023." },
+  { focus: "SERV",  caption: "Services never spiked but climb steadily — and refuse to come back down." },
+];
+
+const CAT_CLASS = {
+  CP00: "overall", CP01: "food", CP04: "housing", CP045: "energy",
+  CP07: "transport", CP11: "services", NRG: "energy", FOOD: "food", SERV: "services"
+};
+
+const SHORT_LABEL = {
+  CP00:  "Overall",
+  CP01:  "Food & drink",
+  CP04:  "Housing & utilities",
+  CP045: "Electricity, gas, fuels",
+  CP07:  "Transport",
+  CP11:  "Restaurants & hotels",
+  NRG:   "Energy (agg.)",
+  FOOD:  "Food (agg.)",
+  SERV:  "Services (agg.)"
+};
+
+const COVID_BAND  = ["2020-03", "2020-07"];
+const ENERGY_BAND = ["2021-09", "2022-12"];
+const UKRAINE     = "2022-02";
+
+function getCSS(name) {
+  const m = name.match(/var\((--[^)]+)\)/); const n = m ? m[1] : name;
+  return getComputedStyle(document.documentElement).getPropertyValue(n).trim() || "#888";
+}
+
+function sparkPath(data, w, h) {
+  if (!data || !data.length) return { d: "", lastX: 0, lastY: h, zeroY: h - 2, length: 0 };
+  const x = d3.scaleLinear().domain([0, data.length - 1]).range([2, w - 2]);
+  const ext = d3.extent(data, d => d.value);
+  const y = d3.scaleLinear().domain([Math.min(0, ext[0]), Math.max(ext[1], 2)]).range([h - 2, 2]);
+  const line = d3.line().x((_, i) => x(i)).y(d => y(d.value)).curve(d3.curveMonotoneX);
+  const d = line(data);
+  const last = data[data.length - 1];
+  const tmp = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  tmp.setAttribute("d", d);
+  const length = tmp.getTotalLength ? tmp.getTotalLength() : w;
+  return { d, lastX: x(data.length - 1), lastY: y(last.value), zeroY: y(0), length };
+}
 
 export class SmallMultiplesLine extends BaseChart {
-    constructor(selector, data, tooltip, options = {}) {
-        super(selector, data, tooltip, {
-            height: 720,
-            margin: { top: 40, right: 20, bottom: 50, left: 40 },
-            ariaLabel: 'Small multiples line chart of euro-area inflation by category, with overview brush below for shared x-axis zoom',
-            ...options
+  constructor(sel, data, ctx) {
+    super(sel, data, ctx, { margin: { top: 96, right: 22, bottom: 36, left: 56 }, aspect: 1.02 });
+    this.cats = KEY_CATEGORIES;
+    this._focusCat = null;
+    this._stepCaption = null;
+  }
+
+  // Fill the sticky panel: use clientHeight when available so the 8 panels
+  // breathe across the full viewport instead of cramped to aspect.
+  size() {
+    if (!this.container) return { width: 600, height: 600 };
+    const w = this.container.clientWidth || 600;
+    const hAvail = this.container.clientHeight || 0;
+    const hMin = Math.round(w / this.opts.aspect);
+    return { width: w, height: Math.max(420, hAvail || hMin) };
+  }
+
+  render() {
+    super.render();
+    this.container.innerHTML = "";
+    const { width, height } = this.ensureSvg();
+    this.W = width; this.H = height;
+    const m = this.opts.margin;
+    const iw = width - m.left - m.right;
+    const ih = height - m.top - m.bottom;
+
+    // 2 columns x 4 rows
+    const cols = 2, rows = 4;
+    const gapX = 44, gapY = 26;
+    this.cellW = (iw - gapX * (cols - 1)) / cols;
+    this.cellH = (ih - gapY * (rows - 1)) / rows;
+    this.cols = cols; this.rows = rows; this.gapX = gapX; this.gapY = gapY;
+
+    const eu = this.data.euAggregateCode();
+    if (!eu) {
+      this.svg.append("text").attr("x", width/2).attr("y", height/2)
+        .attr("text-anchor", "middle").attr("fill", "var(--ink-faint)")
+        .text("Euro-area aggregate unavailable.");
+      return;
+    }
+    this.eu = eu;
+
+    const months = this.data.monthsCP00().filter(t => t >= "2015-01");
+    const parse = d3.timeParse("%Y-%m");
+    this.parse = parse;
+    this.x = d3.scaleTime().domain(d3.extent(months, t => parse(t))).range([0, this.cellW]);
+
+    // Build per-category series; collect shared y-domain
+    this.seriesMap = new Map();
+    let yMax = 0;
+    this.cats.forEach(cat => {
+      const series = months
+        .map(t => ({ t: parse(t), time: t, v: this.data.hicpMonthly[eu]?.[cat]?.[t] }))
+        .filter(d => Number.isFinite(d.v));
+      this.seriesMap.set(cat, series);
+      yMax = Math.max(yMax, d3.max(series, d => d.v) || 0);
+    });
+    const yMaxR = Math.ceil((yMax * 1.05) / 5) * 5;
+    this.y = d3.scaleLinear().domain([-2, Math.max(12, yMaxR)]).range([this.cellH, 0]);
+
+    // <defs>
+    const defs = this.svg.append("defs");
+    defs.append("clipPath").attr("id", "smlm-clip")
+      .append("rect").attr("x", 0).attr("y", 0).attr("width", this.cellW).attr("height", this.cellH);
+    const glow = defs.append("filter").attr("id", "sml-focus-glow")
+      .attr("x", "-30%").attr("y", "-30%").attr("width", "160%").attr("height", "160%");
+    glow.append("feGaussianBlur").attr("stdDeviation", "1.2").attr("result", "b");
+    const mg = glow.append("feMerge");
+    mg.append("feMergeNode").attr("in", "b");
+    mg.append("feMergeNode").attr("in", "SourceGraphic");
+
+    // Kicker (top-left)
+    this.kickerG = this.svg.append("g").attr("class", "year-kicker-g sml-kicker");
+    this.kickerY  = this.kickerG.append("text").attr("class", "year-kicker sml-kicker-text")
+      .attr("x", m.left).attr("y", 50);
+    this.kickerSub = this.kickerG.append("text").attr("class", "year-kicker-sub sml-kicker-sub")
+      .attr("x", m.left + 3).attr("y", 72);
+    this._setKicker(null);
+
+    // Legend (top-right)
+    const lg = this.svg.append("g").attr("class", "map-legend sml-legend")
+      .attr("transform", `translate(${width - m.right}, 38)`);
+    lg.append("text").attr("class", "legend-title")
+      .attr("x", 0).attr("y", 0).attr("text-anchor", "end").text("MONTHLY YoY %");
+    lg.append("text").attr("class", "legend-tick")
+      .attr("x", 0).attr("y", 16).attr("text-anchor", "end")
+      .text("Euro area · 8 categories · 2015–2025");
+
+    // Inner panel group (margin-translated)
+    this.g.attr("transform", `translate(${m.left},${m.top})`);
+
+    // Draw panels
+    this.panelGs = new Map();
+    this.cats.forEach((cat, i) => {
+      const col = i % cols, row = Math.floor(i / cols);
+      const tx = col * (this.cellW + gapX);
+      const ty = row * (this.cellH + gapY);
+      const cell = this.g.append("g").attr("class", "panel sml-panel").attr("data-cat", cat)
+        .attr("transform", `translate(${tx},${ty})`);
+      this.panelGs.set(cat, cell);
+      this._drawPanel(cell, cat, i);
+    });
+
+    // Y-axis ticks at the chart canvas edge (one shared y-axis)
+    this._drawSharedYAxis();
+
+    // Overlay rect for cross-panel cursor
+    this._buildOverlay();
+
+    // Stamp layer (above everything)
+    this.stampG = this.svg.append("g").attr("class", "stamp-layer").attr("pointer-events", "none");
+
+    // Initial reveal
+    this._initialReveal();
+  }
+
+  _drawPanel(cell, cat, idx) {
+    const cls = CAT_CLASS[cat] || "other";
+    const series = this.seriesMap.get(cat);
+    const parse = this.parse;
+
+    // Event bands behind everything
+    const bands = [
+      { cls: "event-band--covid",  from: parse(COVID_BAND[0]),  to: parse(COVID_BAND[1])  },
+      { cls: "event-band--energy", from: parse(ENERGY_BAND[0]), to: parse(ENERGY_BAND[1]) }
+    ];
+    bands.forEach(b => {
+      cell.append("rect").attr("class", `sml-band ${b.cls}`)
+        .attr("x", this.x(b.from)).attr("y", 0)
+        .attr("width", Math.max(2, this.x(b.to) - this.x(b.from)))
+        .attr("height", this.cellH);
+    });
+
+    // Zero line
+    cell.append("line").attr("class", "zero-line sml-zero")
+      .attr("x1", 0).attr("x2", this.cellW)
+      .attr("y1", this.y(0)).attr("y2", this.y(0));
+
+    // Ukraine dashed marker
+    cell.append("line").attr("class", "sml-ukraine")
+      .attr("x1", this.x(parse(UKRAINE))).attr("x2", this.x(parse(UKRAINE)))
+      .attr("y1", 0).attr("y2", this.cellH);
+
+    // Body group (clipped, holds area + line)
+    const body = cell.append("g").attr("class", "sml-body").attr("clip-path", "url(#smlm-clip)");
+
+    const color = getCSS(`--cat-${cls}`);
+    const area = d3.area().x(d => this.x(d.t)).y0(this.y(0)).y1(d => this.y(d.v)).curve(d3.curveMonotoneX);
+    const line = d3.line().x(d => this.x(d.t)).y(d => this.y(d.v)).curve(d3.curveMonotoneX);
+
+    body.append("path").datum(series)
+      .attr("class", `sml-area series--${cls}`).attr("d", area)
+      .attr("fill", color).attr("opacity", 0);
+
+    const lp = body.append("path").datum(series)
+      .attr("class", `sml-line line series--${cls}`).attr("d", line)
+      .attr("fill", "none").attr("stroke", color).attr("stroke-width", 1.8)
+      .attr("stroke-linejoin", "round").attr("stroke-linecap", "round");
+
+    // Peak dot + tag
+    const peak = d3.greatest(series, d => d.v);
+    if (peak) {
+      cell.append("circle").attr("class", "sml-peak-dot")
+        .attr("cx", this.x(peak.t)).attr("cy", this.y(peak.v))
+        .attr("r", 0).attr("fill", "var(--accent)").attr("stroke", "var(--bg)").attr("stroke-width", 1.6);
+      const isLate = (this.cellW - this.x(peak.t)) < 48;
+      cell.append("text").attr("class", "sml-peak-tag")
+        .attr("x", this.x(peak.t) + (isLate ? -6 : 6))
+        .attr("y", this.y(peak.v) - 7)
+        .attr("text-anchor", isLate ? "end" : "start")
+        .attr("opacity", 0)
+        .text(`${peak.v.toFixed(1)}%`);
+    }
+
+    // Panel title (top-left, just above the panel)
+    cell.append("text").attr("class", "sml-title")
+      .attr("x", 0).attr("y", -10)
+      .text(SHORT_LABEL[cat] || this.data.categoryLabel(cat));
+
+    // Last-value italic Fraunces tag (top-right)
+    const last = series[series.length - 1];
+    cell.append("text").attr("class", "sml-last-tag")
+      .attr("x", this.cellW).attr("y", -10)
+      .attr("text-anchor", "end")
+      .attr("opacity", 0)
+      .text(last ? `${last.v >= 0 ? "+" : ""}${last.v.toFixed(1)}%` : "—");
+
+    // X-axis labels (sparse) — only on bottom row to avoid clutter
+    const isBottomRow = idx >= (this.cats.length - this.cols);
+    if (isBottomRow) {
+      [["2015-01", "2015"], ["2020-01", "2020"], ["2025-01", "2025"]].forEach(([t, label]) => {
+        cell.append("text").attr("class", "sml-xtick")
+          .attr("x", this.x(parse(t))).attr("y", this.cellH + 16)
+          .attr("text-anchor", label === "2015" ? "start" : label === "2025" ? "end" : "middle")
+          .text(label);
+      });
+    }
+
+    cell.datum({ cat, series, lp, body });
+  }
+
+  _drawSharedYAxis() {
+    const ticks = this.y.ticks(5).filter(t => t !== 0);
+    for (let row = 0; row < this.rows; row++) {
+      for (let col = 0; col < this.cols; col++) {
+        const cat = this.cats[row * this.cols + col];
+        if (!cat) continue;
+        const cell = this.panelGs.get(cat);
+        ticks.forEach(t => {
+          const yy = this.y(t);
+          cell.insert("line", ":first-child").attr("class", "sml-gridline")
+            .attr("x1", 0).attr("x2", this.cellW)
+            .attr("y1", yy).attr("y2", yy);
+          if (col === 0) {
+            cell.append("text").attr("class", "sml-ytick")
+              .attr("x", -8).attr("y", yy + 3).attr("text-anchor", "end")
+              .text(`${t}%`);
+          }
         });
+      }
+    }
+  }
+
+  _initialReveal() {
+    const reduced = this.ctx.motion.reduced;
+    if (reduced) {
+      this.panelGs.forEach(cell => {
+        cell.select("path.sml-line").attr("stroke-dasharray", null).attr("stroke-dashoffset", null);
+        cell.select("path.sml-area").attr("opacity", 0.18);
+        cell.select(".sml-peak-dot").attr("r", 2.6);
+        cell.select(".sml-peak-tag").attr("opacity", 1);
+        cell.select(".sml-last-tag").attr("opacity", 1);
+      });
+      return;
+    }
+    this.cats.forEach((cat, idx) => {
+      const cell = this.panelGs.get(cat);
+      if (!cell) return;
+      const lp = cell.select("path.sml-line");
+      const node = lp.node();
+      if (!node) return;
+      const L = node.getTotalLength() || 1;
+      lp.attr("stroke-dasharray", `${L} ${L}`).attr("stroke-dashoffset", L);
+      const startDelay = idx * 80;
+      lp.transition().delay(startDelay).duration(900).ease(d3.easeCubicOut)
+        .attr("stroke-dashoffset", 0);
+      cell.select("path.sml-area").transition().delay(startDelay + 600).duration(500).attr("opacity", 0.18);
+      cell.select(".sml-peak-dot").transition().delay(startDelay + 750).duration(280).attr("r", 2.6);
+      cell.select(".sml-peak-tag").transition().delay(startDelay + 850).duration(300).attr("opacity", 1);
+      cell.select(".sml-last-tag").transition().delay(startDelay + 850).duration(300).attr("opacity", 1);
+    });
+  }
+
+  _buildOverlay() {
+    const m = this.opts.margin;
+    this.overlay = this.svg.append("rect")
+      .attr("class", "sml-overlay")
+      .attr("x", m.left).attr("y", m.top)
+      .attr("width", this.W - m.left - m.right)
+      .attr("height", this.H - m.top - m.bottom)
+      .attr("fill", "transparent")
+      .style("cursor", "crosshair")
+      .on("mousemove", (event) => {
+        const [mxAbs, myAbs] = d3.pointer(event, this.svg.node());
+        const mx = mxAbs - m.left, my = myAbs - m.top;
+        const cellWi = this.cellW + this.gapX;
+        const col = Math.min(this.cols - 1, Math.max(0, Math.floor(mx / cellWi)));
+        const localX = mx - col * cellWi;
+        if (localX < 0 || localX > this.cellW) { this._brush(null, null); return; }
+        const t = this.x.invert(localX);
+        const monthKey = d3.timeFormat("%Y-%m")(t);
+        this._brush(monthKey, event);
+      })
+      .on("mouseleave", () => this._brush(null, null));
+  }
+
+  _brush(monthKey, event) {
+    this.panelGs.forEach(cell => {
+      cell.selectAll(".cursor-line").remove();
+      cell.selectAll(".cursor-dot").remove();
+      if (!monthKey) return;
+      const d = cell.datum();
+      if (!d) return;
+      const rec = d.series.find(p => p.time === monthKey);
+      if (!rec) return;
+      cell.append("line").attr("class", "cursor-line")
+        .attr("x1", this.x(rec.t)).attr("x2", this.x(rec.t))
+        .attr("y1", 0).attr("y2", this.cellH)
+        .attr("stroke", "var(--ink)").attr("stroke-opacity", 0.42).attr("stroke-dasharray", "1 2");
+      cell.append("circle").attr("class", "cursor-dot")
+        .attr("cx", this.x(rec.t)).attr("cy", this.y(rec.v))
+        .attr("r", 3).attr("fill", "var(--ink)").attr("stroke", "var(--bg)").attr("stroke-width", 1.5);
+    });
+    if (monthKey && event) {
+      const eu = this.eu;
+      const items = this.cats.map(c => {
+        const v = this.data.hicpMonthly[eu]?.[c]?.[monthKey];
+        const lbl = SHORT_LABEL[c] || this.data.categoryLabel(c);
+        return `<div class="row"><span class="key">${lbl}</span><span class="val">${v == null ? "—" : (v >= 0 ? "+" : "") + v.toFixed(1) + "%"}</span></div>`;
+      }).join("");
+      const fmt = d3.timeFormat("%b %Y");
+      this.ctx.tooltip.show(`<h5>${fmt(this.parse(monthKey))}</h5>${items}`, event.clientX, event.clientY);
+    } else {
+      this.ctx.tooltip.hide();
+    }
+  }
+
+  _setKicker(focusCat) {
+    if (!focusCat) {
+      this.kickerY.text("Eight categories");
+      this.kickerSub.text("hover any panel · scroll to walk through energy → food → services");
+      return;
+    }
+    const series = this.seriesMap.get(focusCat) || [];
+    const peak = d3.greatest(series, d => d.v);
+    this.kickerY.text(SHORT_LABEL[focusCat] || this.data.categoryLabel(focusCat));
+    this.kickerSub.text(peak
+      ? `peaked at ${peak.v.toFixed(1)}% in ${d3.timeFormat("%b %Y")(peak.t)}`
+      : "");
+  }
+
+  onStep(index, el) {
+    const cfg = STEP_CONFIG[Math.max(0, Math.min(STEP_CONFIG.length - 1, index))];
+    this._focusCat = cfg.focus;
+    this._stepCaption = cfg.caption;
+    this._applyFocus();
+    this._setKicker(cfg.focus);
+    this._renderStamp();
+  }
+
+  _applyFocus() {
+    const focus = this._focusCat;
+    const reduced = this.ctx.motion.reduced;
+    this.panelGs.forEach((cell, cat) => {
+      const isFocus = !focus || cat === focus;
+      const target = isFocus ? 1 : 0.22;
+      if (reduced) cell.style("opacity", target);
+      else cell.transition("focus").duration(440).ease(d3.easeCubicOut).style("opacity", target);
+      cell.select(".sml-line").attr("filter", (focus && cat === focus) ? "url(#sml-focus-glow)" : null);
+    });
+    if (focus) this.panelGs.get(focus)?.raise();
+  }
+
+  _renderStamp() {
+    if (!this.stampG) return;
+    this.stampG.selectAll("*").remove();
+    const focus = this._focusCat;
+    if (!focus) return;
+    const m = this.opts.margin;
+    const idx = this.cats.indexOf(focus);
+    if (idx < 0) return;
+    const col = idx % this.cols, row = Math.floor(idx / this.cols);
+    const panelLeft = m.left + col * (this.cellW + this.gapX);
+    const panelTop  = m.top  + row * (this.cellH + this.gapY);
+    const panelRight = panelLeft + this.cellW;
+    const panelBottom = panelTop + this.cellH;
+    const panelCx = (panelLeft + panelRight) / 2;
+    const panelCy = (panelTop + panelBottom) / 2;
+
+    const series = this.seriesMap.get(focus) || [];
+    const peak = d3.greatest(series, d => d.v);
+    if (!peak) return;
+
+    const stampW = 240, stampH = 132;
+    const W = this.W, H = this.H;
+    const placeRight = col === 0;
+    let stampX = placeRight ? Math.min(W - stampW - 18, panelRight + 28)
+                            : Math.max(18, panelLeft - 28 - stampW);
+    let stampY = Math.max(m.top + 4, Math.min(H - stampH - 18, panelCy - stampH / 2));
+
+    const leaderX = placeRight ? panelRight - 2 : panelLeft + 2;
+    const leaderY = panelCy;
+    const lineEndX = placeRight ? stampX - 4 : stampX + stampW + 4;
+    const lineEndY = stampY + 22;
+
+    const g = this.stampG.append("g").attr("class", "stamp");
+    const lp = g.append("path").attr("class", "stamp-line")
+      .attr("d", `M ${leaderX} ${leaderY} L ${lineEndX} ${lineEndY}`)
+      .attr("fill", "none").attr("stroke", "var(--ink)").attr("stroke-width", 0.8);
+    const len = lp.node().getTotalLength();
+    lp.attr("stroke-dasharray", len).attr("stroke-dashoffset", len)
+      .transition().duration(540).ease(d3.easeCubicOut).attr("stroke-dashoffset", 0);
+    g.append("circle").attr("cx", leaderX).attr("cy", leaderY).attr("r", 0)
+      .attr("fill", "var(--accent)")
+      .transition().delay(450).duration(260).attr("r", 4);
+
+    const sg = g.append("g").attr("transform", `translate(${stampX}, ${stampY})`).style("opacity", 0);
+    sg.append("rect").attr("class", "stamp-plate")
+      .attr("x", -10).attr("y", -10).attr("width", stampW + 20).attr("height", stampH + 20);
+    sg.append("text").attr("class", "stamp-eyebrow")
+      .attr("x", 0).attr("y", 0)
+      .text(`${focus.toUpperCase()} · PEAK`);
+    sg.append("text").attr("class", "stamp-num")
+      .attr("x", 0).attr("y", 32)
+      .text(`${peak.v.toFixed(1)}%`);
+
+    const sentence = this._stepCaption || `Peaked in ${d3.timeFormat("%B %Y")(peak.t)}.`;
+    const words = sentence.split(" ");
+    let lineN = 0, buf = "";
+    const maxChars = 30;
+    const sentenceG = sg.append("g").attr("transform", "translate(0, 52)");
+    words.forEach(w => {
+      if ((buf + " " + w).trim().length > maxChars) {
+        sentenceG.append("text").attr("class", "stamp-sentence")
+          .attr("x", 0).attr("y", lineN * 16).text(buf.trim());
+        buf = w; lineN++;
+      } else { buf += " " + w; }
+    });
+    if (buf.trim()) sentenceG.append("text").attr("class", "stamp-sentence")
+      .attr("x", 0).attr("y", lineN * 16).text(buf.trim());
+
+    const arr = series.slice(-72).map(d => ({ value: d.v }));
+    if (arr.length > 12) {
+      const sw2 = stampW, sh = 28;
+      const sp = sparkPath(arr, sw2, sh);
+      const skg = sg.append("g").attr("transform", `translate(0, ${stampH - sh - 4})`);
+      skg.append("path").attr("d", sp.d).attr("fill", "none")
+        .attr("stroke", "var(--accent)").attr("stroke-width", 1.4)
+        .attr("stroke-dasharray", sp.length).attr("stroke-dashoffset", sp.length)
+        .transition().delay(700).duration(900).ease(d3.easeCubicOut).attr("stroke-dashoffset", 0);
+      skg.append("circle").attr("cx", sp.lastX).attr("cy", sp.lastY).attr("r", 0)
+        .attr("fill", "var(--accent)")
+        .transition().delay(1500).duration(260).attr("r", 2.5);
     }
 
-    draw() {
-        const { hicpMonthly, coicopNames } = this.data;
-        if (!hicpMonthly) return;
+    sg.transition().delay(380).duration(420).style("opacity", 1);
+  }
 
-        const coicops = ['CP00', 'NRG', 'FOOD', 'SERV', 'CP04'];
-        const categories = coicops.filter(c => coicopNames[c]);
-
-        // Filter to 2015+ for cleaner view
-        const euData = hicpMonthly.filter(d => d.geo === 'EA' && d.year >= 2015);
-        const countryData = hicpMonthly.filter(d => d.geo !== 'EA' && d.geo !== 'EU27_2020' && d.year >= 2015);
-
-        // Parse dates
-        const parseTime = d3.timeParse('%Y-%m');
-        euData.forEach(d => d.date = parseTime(d.time));
-        countryData.forEach(d => d.date = parseTime(d.time));
-
-        // Layout: 2 columns with title padding + a bottom brush track (overview).
-        // Lecture 13's "overview + detail" pattern: the brush below acts as the
-        // overview, the small-multiples grid above is the detail view.
-        const cols = 2;
-        const titlePad = 22;
-        const brushH = 50;
-        const brushGap = 28;
-        const captionH = 16;
-        const panelArea = this.innerHeight - brushH - brushGap - captionH;
-        const panelW = (this.width - (cols - 1) * 20) / cols;
-        const rowsCount = Math.ceil(categories.length / cols);
-        const panelH = (panelArea - (rowsCount - 1) * 20 - titlePad) / rowsCount;
-
-        const fullDomain = d3.extent(euData, d => d.date);
-        const xScale = d3.scaleTime().domain(fullDomain).range([0, panelW]);
-
-        const lineGen = d3.line()
-            .x(d => xScale(d.date))
-            .curve(d3.curveMonotoneX);
-
-        let selectedCountry = null;
-        // Track every renderable element so the brush handler can re-issue the
-        // line generator + axis call against the new (zoomed) domain.
-        const updaters = [];
-
-        categories.forEach((cat, i) => {
-            const col = i % cols;
-            const row = Math.floor(i / cols);
-            const gx = col * (panelW + 20);
-            const gy = row * (panelH + 20 + titlePad);
-
-            const panel = this.g.append('g')
-                .attr('transform', `translate(${gx},${gy})`);
-
-            // Per-panel Y scale
-            const catEu = euData.filter(d => d.coicop === cat);
-            const catCountries = countryData.filter(d => d.coicop === cat);
-            const catVals = [...catEu, ...catCountries].map(d => d.value);
-            const yScale = d3.scaleLinear()
-                .domain([d3.min(catVals) - 1, d3.max(catVals) + 1])
-                .range([panelH, 0]);
-
-            const catLineGen = lineGen.y(d => yScale(d.value));
-
-            // Title
-            panel.append('text')
-                .attr('x', panelW / 2)
-                .attr('y', -titlePad + 6)
-                .attr('text-anchor', 'middle')
-                .attr('fill', 'var(--color-text-primary)')
-                .attr('font-size', '0.85rem')
-                .attr('font-weight', '600')
-                .text(coicopNames[cat]);
-
-            // Axes — bottom axis is brush-reactive (its scale changes), so we
-            // remember the group and re-call axisBottom on brush events.
-            const xAxisG = panel.append('g')
-                .attr('class', 'sm-x-axis')
-                .attr('transform', `translate(0,${panelH})`);
-            const renderXAxis = () => {
-                xAxisG.call(d3.axisBottom(xScale).ticks(3).tickFormat(d3.timeFormat('%Y')));
-                xAxisG.selectAll('text').attr('fill', 'var(--color-axis-text)').attr('font-size', '0.65rem');
-            };
-            renderXAxis();
-            updaters.push(renderXAxis);
-
-            panel.append('g')
-                .call(d3.axisLeft(yScale).ticks(3).tickFormat(d => d + '%'))
-                .selectAll('text').attr('fill', 'var(--color-axis-text)').attr('font-size', '0.65rem');
-
-            // Grid
-            panel.append('g')
-                .call(d3.axisLeft(yScale).ticks(3).tickSize(-panelW).tickFormat('').tickSizeOuter(0))
-                .selectAll('line').attr('stroke', 'var(--color-grid)');
-
-            // Zero reference line
-            if (yScale.domain()[0] < 0 && yScale.domain()[1] > 0) {
-                panel.append('line')
-                    .attr('class', 'zero-line')
-                    .attr('x1', 0).attr('x2', panelW)
-                    .attr('y1', yScale(0)).attr('y2', yScale(0))
-                    .attr('stroke', 'rgba(255,255,255,0.2)')
-                    .attr('stroke-width', 1)
-                    .attr('stroke-dasharray', '3,3');
-            }
-
-            // Country lines (light)
-            const byCountry = d3.group(catCountries, d => d.geo);
-
-            byCountry.forEach((vals, geo) => {
-                const path = panel.append('path')
-                    .datum(vals)
-                    .attr('fill', 'none')
-                    .attr('stroke', selectedCountry === geo ? 'var(--color-text-accent)' : PALETTE.line.contextDim)
-                    .attr('stroke-width', selectedCountry === geo ? 2 : 1)
-                    .attr('class', `country-line-${geo}`)
-                    .attr('d', catLineGen);
-                updaters.push(() => path.attr('d', catLineGen));
-                path
-                    .on('mouseover', (event) => {
-                        selectedCountry = geo;
-                        this.g.selectAll('[class^="country-line-"]')
-                            .attr('stroke', PALETTE.line.contextFade)
-                            .attr('stroke-width', 1);
-                        this.g.selectAll(`.country-line-${geo}`)
-                            .attr('stroke', 'var(--color-text-accent)')
-                            .attr('stroke-width', 2);
-                    })
-                    .on('mousemove', (event) => {
-                        const [mx] = d3.pointer(event, panel.node());
-                        const x0 = xScale.invert(mx);
-                        const i = d3.bisector(p => p.date).left(vals, x0, 1);
-                        const point = vals[Math.min(i, vals.length - 1)];
-                        if (!point) { this.tooltip.move(event); return; }
-                        this.tooltip.show(`
-                            <div class="tt-title">${this.data.countryNames[geo] || geo}</div>
-                            <div class="tt-value">${this.data.coicopNames[cat] || cat}</div>
-                            <div class="tt-value">${d3.timeFormat('%b %Y')(point.date)}: ${point.value.toFixed(1)}%</div>
-                        `, event);
-                    })
-                    .on('mouseout', () => {
-                        this.tooltip.hide();
-                        selectedCountry = null;
-                        this.g.selectAll('[class^="country-line-"]')
-                            .attr('stroke', PALETTE.line.contextDim)
-                            .attr('stroke-width', 1);
-                    });
-            });
-
-            // EU average line (bold) — also brush-reactive so the average
-            // re-fits the zoomed window.
-            const euPath = panel.append('path')
-                .datum(catEu)
-                .attr('fill', 'none')
-                .attr('stroke', this.getCatColor(cat))
-                .attr('stroke-width', 2.5)
-                .attr('d', catLineGen);
-            updaters.push(() => euPath.attr('d', catLineGen));
-
-            // Annotation: Ukraine invasion (Feb 2022). Position is x-scale
-            // dependent, so the brush handler must move it.
-            const ukraineDate = parseTime('2022-02');
-            const ukraineLine = panel.append('line')
-                .attr('class', 'sm-ukraine-line')
-                .attr('x1', xScale(ukraineDate)).attr('x2', xScale(ukraineDate))
-                .attr('y1', 0).attr('y2', panelH)
-                .attr('stroke', PALETTE.annotationLine)
-                .attr('stroke-width', 1)
-                .attr('stroke-dasharray', '2,3')
-                .attr('pointer-events', 'none');
-            updaters.push(() => {
-                const x = xScale(ukraineDate);
-                const inRange = ukraineDate >= xScale.domain()[0] && ukraineDate <= xScale.domain()[1];
-                ukraineLine
-                    .attr('x1', x).attr('x2', x)
-                    .style('display', inRange ? null : 'none');
-            });
-        });
-
-        // Caption explaining the annotation (only render once, below all panels)
-        this.g.append('text')
-            .attr('x', 0)
-            .attr('y', panelArea + 12)
-            .attr('font-size', '0.65rem')
-            .attr('fill', 'var(--color-axis-text)')
-            .attr('font-style', 'italic')
-            .text('Dashed line: Russia invades Ukraine (Feb 2022)');
-
-        // ─── Brush track (overview + detail, Lecture 13) ──────────────────────
-        // The mini-line at the bottom shows the EU CP00 (all-items) series at
-        // full time range. Drag a selection on it to zoom every panel above
-        // simultaneously. Click outside to reset.
-        const brushG = this.g.append('g')
-            .attr('class', 'sm-brush')
-            .attr('transform', `translate(0,${panelArea + brushGap})`);
-
-        brushG.append('text')
-            .attr('x', 0).attr('y', -6)
-            .attr('font-size', '0.62rem')
-            .attr('fill', 'var(--color-axis-text)')
-            .attr('font-style', 'italic')
-            .text('Drag a range to zoom · click to reset');
-
-        const brushXScale = d3.scaleTime().domain(fullDomain).range([0, this.width]);
-        const brushOverview = euData.filter(d => d.coicop === 'CP00');
-        const brushYScale = d3.scaleLinear()
-            .domain(d3.extent(brushOverview, d => d.value))
-            .range([brushH, 0]);
-        const brushLineGen = d3.line()
-            .x(d => brushXScale(d.date))
-            .y(d => brushYScale(d.value))
-            .curve(d3.curveMonotoneX);
-
-        // Overview line (CP00, EU average — same series the headline uses)
-        brushG.append('path')
-            .datum(brushOverview)
-            .attr('class', 'sm-brush-line')
-            .attr('fill', 'none')
-            .attr('stroke', this.getCatColor('CP00'))
-            .attr('stroke-width', 1)
-            .attr('opacity', 0.5)
-            .attr('d', brushLineGen);
-
-        // Brush bottom axis (always full range)
-        const brushAxisG = brushG.append('g')
-            .attr('transform', `translate(0,${brushH})`)
-            .call(d3.axisBottom(brushXScale).ticks(8).tickFormat(d3.timeFormat('%Y')))
-            .attr('class', 'sm-brush-axis');
-        brushAxisG.selectAll('text').attr('fill', 'var(--color-axis-text)').attr('font-size', '0.6rem');
-
-        const brush = d3.brushX()
-            .extent([[0, 0], [this.width, brushH]])
-            .on('end', (event) => {
-                if (!event.sourceEvent) return; // ignore programmatic
-                const sel = event.selection;
-                const newDomain = sel
-                    ? [brushXScale.invert(sel[0]), brushXScale.invert(sel[1])]
-                    : fullDomain;
-                xScale.domain(newDomain);
-                updaters.forEach(fn => fn());
-            });
-
-        brushG.append('g')
-            .attr('class', 'sm-brush-area')
-            .call(brush);
-    }
-
-    getCatColor(cat) {
-        const colors = {
-            'CP00': 'var(--color-cp00)', 'CP01': 'var(--color-cp01)',
-            'CP04': 'var(--color-cp04)', 'CP045': 'var(--color-cp045)',
-            'CP07': 'var(--color-cp07)', 'CP11': 'var(--color-cp11)',
-            'NRG': 'var(--color-nrg)', 'FOOD': 'var(--color-food)',
-            'SERV': 'var(--color-housing)'
-        };
-        return colors[cat] || 'var(--color-text-primary)';
-    }
+  onThemeChange() { this.render(); }
 }

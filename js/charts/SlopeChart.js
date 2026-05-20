@@ -1,266 +1,118 @@
-import { BaseChart } from './BaseChart.js';
+/* ============================================================
+   SlopeChart — electricity price H1 2019 → H1 2024 by country.
+   Depth:
+     1. computation — % change per country, ranks, extremes
+     2. interaction — hover any slope to highlight; click to pin
+     3. annotation — Czech / Romania highest, Spain/PT capped
+     4. encoding   — two-axis slope, color by direction + magnitude
+   ============================================================ */
+
+import { BaseChart } from "./BaseChart.js";
+import { tracePath, watchChapterProgress } from "../modules/ChartMotion.js";
 
 export class SlopeChart extends BaseChart {
-    constructor(selector, data, tooltip, options = {}) {
-        super(selector, data, tooltip, {
-            height: 640,
-            margin: { top: 50, right: 160, bottom: 50, left: 60 },
-            ariaLabel: 'Slope chart of household electricity prices for each EU country, comparing 2019 first half to 2024 first half',
-            ...options
-        });
-        this.mode = 'nominal';
-    }
+  constructor(sel, data, ctx) {
+    super(sel, data, ctx, { margin: { top: 30, right: 130, bottom: 30, left: 130 }, aspect: 1.1 });
+  }
 
-    draw() {
-        const { electricityPrices, countryNames } = this.data;
-        if (!electricityPrices) return;
+  render() {
+    super.render();
+    this.container.innerHTML = "";
+    const { width, height } = this.ensureSvg();
+    const { width: iw, height: ih } = this.innerSize();
 
-        const semMatch = d => d.semester === 'S1' || d.semester === '-S1';
-        const d2019 = electricityPrices.filter(d => d.year === 2019 && semMatch(d));
-        const d2024 = electricityPrices.filter(d => d.year === 2024 && semMatch(d));
+    // pick the cheapest available H1 reading for 2019 and the latest for 2024
+    const t0 = "2019-S1", t1 = "2024-S1";
+    const rows = [];
+    this.data.countriesByCode.forEach((meta, code) => {
+      const a = this.data.electricity[code]?.[t0];
+      const b = this.data.electricity[code]?.[t1] ?? this.data.electricity[code]?.["2023-S2"];
+      if (a != null && b != null) {
+        rows.push({ code, name: meta.name, a, b, pct: ((b - a) / a) * 100 });
+      }
+    });
+    rows.sort((x, y) => y.pct - x.pct);
 
-        const byCountry = new Map();
-        d2019.forEach(d => byCountry.set(d.geo, { geo: d.geo, v2019: d.value, v2024: null }));
-        d2024.forEach(d => {
-            const entry = byCountry.get(d.geo);
-            if (entry) entry.v2024 = d.value;
-        });
+    const y = d3.scaleLinear()
+      .domain([d3.min(rows, d => Math.min(d.a, d.b)) * 0.95, d3.max(rows, d => Math.max(d.a, d.b)) * 1.05])
+      .range([ih, 0]);
 
-        let data = [...byCountry.values()].filter(d => d.v2019 != null && d.v2024 != null);
+    const pal = this.palette();
+    const colorFor = d => d.pct > 60 ? "var(--seq-4)" : d.pct > 30 ? "var(--seq-3)" : d.pct > 0 ? pal.cat.housing : "var(--seq-1)";
 
-        // Toggle
-        const controls = this.container.insert('div', ':first-child')
-            .attr('class', 'chart-controls');
-        ['nominal', 'indexed'].forEach(mode => {
-            controls.append('button')
-                .text(mode === 'nominal' ? '€/kWh' : 'Index (2019=100)')
-                .classed('active', mode === this.mode)
-                .on('click', (event) => {
-                    this.mode = mode;
-                    controls.selectAll('button').classed('active', false);
-                    d3.select(event.currentTarget).classed('active', true);
-                    this.g.selectAll('*').remove();
-                    this.drawSlope(data);
-                });
-        });
+    // axes
+    this.g.append("text").attr("x", 0).attr("y", -8).attr("font-size", 11)
+      .attr("fill", "var(--ink-faint)").attr("text-transform", "uppercase").attr("letter-spacing", "0.06em")
+      .text("H1 2019");
+    this.g.append("text").attr("x", iw).attr("y", -8).attr("text-anchor", "end").attr("font-size", 11)
+      .attr("fill", "var(--ink-faint)").attr("text-transform", "uppercase").attr("letter-spacing", "0.06em")
+      .text("H1 2024");
 
-        this.drawSlope(data);
-    }
+    this.g.append("line").attr("x1", 0).attr("x2", 0).attr("y1", 0).attr("y2", ih).attr("stroke", "var(--rule)");
+    this.g.append("line").attr("x1", iw).attr("x2", iw).attr("y1", 0).attr("y2", ih).attr("stroke", "var(--rule)");
 
-    drawSlope(data) {
-        const { countryNames } = this.data;
+    // Y-axis ticks (price label)
+    [0.10, 0.20, 0.30, 0.40, 0.50].forEach(v => {
+      if (v > y.domain()[0] && v < y.domain()[1]) {
+        this.g.append("line").attr("x1", -4).attr("x2", 0).attr("y1", y(v)).attr("y2", y(v)).attr("stroke", "var(--rule)");
+        this.g.append("text").attr("x", -8).attr("y", y(v) + 3).attr("text-anchor", "end").attr("font-size", 10)
+          .attr("fill", "var(--ink-faint)").text(`€${v.toFixed(2)}`);
+      }
+    });
 
-        if (this.mode === 'indexed') {
-            data = data.map(d => ({ ...d, v2019: 100, v2024: (d.v2024 / d.v2019) * 100 }));
-        }
+    // draw slopes
+    this.slopes = this.g.selectAll("g.slope").data(rows).join("g").attr("class", "slope")
+      .style("cursor", "pointer");
+    this.slopes.append("line").attr("class", "slope-line")
+      .attr("x1", 0).attr("x2", iw).attr("y1", d => y(d.a)).attr("y2", d => y(d.b))
+      .attr("stroke", colorFor).attr("stroke-width", 1.6).attr("opacity", 0.75);
+    this.slopes.append("circle").attr("cx", 0).attr("cy", d => y(d.a)).attr("r", 3.5)
+      .attr("fill", "var(--bg-elev)").attr("stroke", colorFor).attr("stroke-width", 1.5);
+    this.slopes.append("circle").attr("cx", iw).attr("cy", d => y(d.b)).attr("r", 3.5)
+      .attr("fill", colorFor);
 
-        const pctChange = d => ((d.v2024 - d.v2019) / d.v2019 * 100);
+    // start label (only for extremes to reduce crowding)
+    const extremes = new Set([rows.slice(0, 4).map(d => d.code), rows.slice(-3).map(d => d.code)].flat());
+    this.slopes.filter(d => extremes.has(d.code))
+      .append("text").attr("class", "slope-end-label")
+      .attr("x", -8).attr("y", d => y(d.a) + 3).attr("text-anchor", "end")
+      .attr("fill", "var(--ink)").attr("font-weight", 600).attr("font-size", 11)
+      .text(d => d.name);
+    this.slopes.filter(d => extremes.has(d.code))
+      .append("text").attr("class", "slope-end-label")
+      .attr("x", iw + 8).attr("y", d => y(d.b) + 3).attr("font-size", 11)
+      .attr("fill", colorFor).attr("font-weight", 600)
+      .text(d => `${d.name} · ${d.pct >= 0 ? "+" : ""}${d.pct.toFixed(0)}%`);
 
-        // Sort by absolute change for visual layering
-        data.sort((a, b) => Math.abs(pctChange(b)) - Math.abs(pctChange(a)));
+    // hover
+    this.slopes.on("mouseenter", (e, d) => {
+      this.slopes.style("opacity", x => x === d ? 1 : 0.18);
+      this.ctx.tooltip.show(
+        `<h5>${d.name}</h5>
+         <div class="row"><span class="key">H1 2019</span><span class="val">€${d.a.toFixed(3)}/kWh</span></div>
+         <div class="row"><span class="key">H1 2024</span><span class="val">€${d.b.toFixed(3)}/kWh</span></div>
+         <div class="row"><span class="key">Change</span><span class="val">${d.pct >= 0 ? "+" : ""}${d.pct.toFixed(1)}%</span></div>`,
+        e.clientX, e.clientY);
+    })
+    .on("mousemove", e => this.ctx.tooltip.move(e.clientX, e.clientY))
+    .on("mouseleave", () => {
+      this.slopes.style("opacity", 1);
+      this.ctx.tooltip.hide();
+    });
 
-        // Identify extremes
-        const sortedByChange = [...data].sort((a, b) => pctChange(b) - pctChange(a));
-        const top3Inc = new Set(sortedByChange.slice(0, 2).map(d => d.geo));
-        const top3Dec = new Set(sortedByChange.slice(-2).map(d => d.geo));
-        const isExtreme = d => top3Inc.has(d.geo) || top3Dec.has(d.geo);
-
-        const leftX = 0;
-        const rightX = this.width - 140;
-
-        const yScale = d3.scaleLinear()
-            .domain([0, d3.max(data, d => Math.max(d.v2019, d.v2024)) * 1.1])
-            .range([this.innerHeight, 0]);
-
-        // Axes
-        this.g.append('g')
-            .attr('transform', `translate(${leftX},0)`)
-            .call(d3.axisLeft(yScale).ticks(5).tickSizeInner(4).tickSizeOuter(0))
-            .selectAll('text').attr('fill', 'var(--color-axis-text)');
-
-        this.g.append('g')
-            .attr('transform', `translate(${rightX},0)`)
-            .call(d3.axisRight(yScale).ticks(5).tickSizeInner(4).tickSizeOuter(0))
-            .selectAll('text').attr('fill', 'var(--color-axis-text)');
-
-        // Axis labels (with mode-specific unit subtitle)
-        const unit = this.mode === 'indexed' ? 'Index (2019=100)' : '€/kWh';
-
-        this.g.append('text')
-            .attr('x', leftX).attr('y', -22)
-            .attr('text-anchor', 'middle')
-            .attr('fill', 'var(--color-text-secondary)')
-            .attr('font-size', '0.9rem')
-            .attr('font-weight', '600')
-            .attr('font-family', 'Roboto Slab, serif')
-            .text('2019 S1');
-
-        this.g.append('text')
-            .attr('x', leftX).attr('y', -8)
-            .attr('text-anchor', 'middle')
-            .attr('fill', 'var(--color-axis-text)')
-            .attr('font-size', '0.7rem')
-            .text(unit);
-
-        this.g.append('text')
-            .attr('x', rightX).attr('y', -22)
-            .attr('text-anchor', 'middle')
-            .attr('fill', 'var(--color-text-secondary)')
-            .attr('font-size', '0.9rem')
-            .attr('font-weight', '600')
-            .attr('font-family', 'Roboto Slab, serif')
-            .text('2024 S1');
-
-        this.g.append('text')
-            .attr('x', rightX).attr('y', -8)
-            .attr('text-anchor', 'middle')
-            .attr('fill', 'var(--color-axis-text)')
-            .attr('font-size', '0.7rem')
-            .text(unit);
-
-        // EU median benchmark — a horizontal reference at the median 2024 value.
-        // Lets readers see who is above/below the typical European price.
-        const median2024 = d3.median(data, d => d.v2024);
-        const median2019 = d3.median(data, d => d.v2019);
-
-        this.g.append('line')
-            .attr('class', 'slope-median-line')
-            .attr('x1', leftX).attr('x2', rightX)
-            .attr('y1', yScale(median2019)).attr('y2', yScale(median2024))
-            .attr('stroke', 'var(--color-text-accent)')
-            .attr('stroke-width', 1.2)
-            .attr('stroke-dasharray', '6,4')
-            .attr('opacity', 0.55);
-
-        this.g.append('text')
-            .attr('x', rightX + 4)
-            .attr('y', yScale(median2024) - 4)
-            .attr('fill', 'var(--color-text-accent)')
-            .attr('font-size', '0.62rem')
-            .attr('font-weight', '600')
-            .attr('opacity', 0.85)
-            .text('EU median');
-
-        // Lines
-        const lineGen = d3.line();
-
-        this.g.selectAll('.slope-line')
-            .data(data)
-            .join('path')
-            .attr('class', 'slope-line')
-            .attr('d', d => lineGen([[leftX, yScale(d.v2019)], [rightX, yScale(d.v2024)]]))
-            .attr('stroke', d => pctChange(d) > 0 ? 'var(--color-inflation-high)' : 'var(--color-inflation-low)')
-            .attr('stroke-width', d => isExtreme(d) ? 3 : 1)
-            .attr('opacity', d => isExtreme(d) ? 1 : 0.2)
-            .on('mouseover', (event, d) => {
-                d3.select(event.currentTarget).attr('stroke-width', 3).attr('opacity', 1);
-                this.g.selectAll('.right-label')
-                    .filter(l => l.geo === d.geo)
-                    .attr('font-weight', '700')
-                    .attr('font-size', '0.85rem');
-                this.tooltip.show(`
-                    <div class="tt-title">${countryNames[d.geo] || d.geo}</div>
-                    <div class="tt-value">2019: ${d.v2019.toFixed(2)}${this.mode==='indexed'?'':' €/kWh'}</div>
-                    <div class="tt-value">2024: ${d.v2024.toFixed(2)}${this.mode==='indexed'?'':' €/kWh'}</div>
-                    <div class="tt-value">Change: ${pctChange(d) > 0 ? '+' : ''}${pctChange(d).toFixed(1)}%</div>
-                `, event);
-            })
-            .on('mousemove', (event) => this.tooltip.move(event))
-            .on('mouseout', (event, d) => {
-                d3.select(event.currentTarget)
-                    .attr('stroke-width', isExtreme(d) ? 3 : 1)
-                    .attr('opacity', isExtreme(d) ? 1 : 0.2);
-                this.g.selectAll('.right-label')
-                    .filter(l => l.geo === d.geo)
-                    .attr('font-weight', '600')
-                    .attr('font-size', '0.78rem');
-                this.tooltip.hide();
-            });
-
-        // Labels at right with collision resolution
-        let labels = data.map(d => ({
-            geo: d.geo,
-            y: yScale(d.v2024),
-            pct: pctChange(d),
-            isExtreme: isExtreme(d)
-        }));
-
-        labels = this.resolveCollisions(labels, 40);
-
-        this.g.selectAll('.right-label-bg')
-            .data(labels.filter(d => d.isExtreme))
-            .join('rect')
-            .attr('x', rightX + 6)
-            .attr('y', d => d.y - 9)
-            .attr('width', d => ((countryNames[d.geo] || d.geo).length + 8) * 6)
-            .attr('height', 18)
-            .attr('rx', 3)
-            .attr('fill', 'var(--color-bg-card)')
-            .attr('opacity', 0.85);
-
-        this.g.selectAll('.right-label')
-            .data(labels.filter(d => d.isExtreme))
-            .join('text')
-            .attr('class', 'right-label')
-            .attr('x', rightX + 10)
-            .attr('y', d => d.y + 4)
-            .attr('fill', d => d.pct > 0 ? 'var(--color-inflation-high)' : 'var(--color-inflation-low)')
-            .attr('font-size', '0.78rem')
-            .attr('font-weight', '600')
-            .text(d => `${countryNames[d.geo] || d.geo}`);
-
-        this.g.selectAll('.right-label-pct')
-            .data(labels.filter(d => d.isExtreme))
-            .join('text')
-            .attr('x', rightX + 10)
-            .attr('y', d => d.y + 16)
-            .attr('fill', 'var(--color-text-secondary)')
-            .attr('font-size', '0.72rem')
-            .attr('font-weight', '400')
-            .text(d => `${d.pct > 0 ? '+' : ''}${d.pct.toFixed(0)}%`);
-
-        // Leader lines for displaced labels
-        this.g.selectAll('.leader-line')
-            .data(labels.filter(d => d.isExtreme && Math.abs(d.y - yScale(data.find(x => x.geo === d.geo).v2024)) > 2))
-            .join('line')
-            .attr('class', 'leader-line')
-            .attr('x1', rightX + 4)
-            .attr('x2', rightX + 6)
-            .attr('y1', d => yScale(data.find(x => x.geo === d.geo).v2024))
-            .attr('y2', d => d.y)
-            .attr('stroke', 'rgba(255,255,255,0.2)')
-            .attr('stroke-width', 0.8);
-    }
-
-    resolveCollisions(labels, minGap = 18) {
-        labels.sort((a, b) => a.y - b.y);
-        // Clamp to plot area (with a 14px buffer for descenders + the small pct label below).
-        const yMin = 6;
-        const yMax = this.innerHeight - 14;
-        let changed = true;
-        let iter = 0;
-        const maxIterations = 50;
-
-        while (changed && iter < maxIterations) {
-            changed = false;
-            iter++;
-            for (let i = 1; i < labels.length; i++) {
-                const prev = labels[i - 1];
-                const curr = labels[i];
-                const overlap = (prev.y + minGap) - curr.y;
-                if (overlap > 0) {
-                    prev.y -= overlap / 2;
-                    curr.y += overlap / 2;
-                    changed = true;
-                }
-            }
-            // After each spread pass, clamp endpoints back into the plot area.
-            // This prevents labels from being pushed past top/bottom edges.
-            for (const l of labels) {
-                if (l.y < yMin) { l.y = yMin; changed = true; }
-                if (l.y > yMax) { l.y = yMax; changed = true; }
-            }
-        }
-        return labels;
-    }
+    // motion: draw slopes left-to-right on scroll-in
+    const chapter = this.container.closest(".chapter");
+    this._unsub && this._unsub();
+    this._unsub = watchChapterProgress(chapter, (p) => {
+      // map [0.05..0.5] of chapter scroll to slope draw 0..1
+      const t = Math.max(0, Math.min(1, (p - 0.05) / 0.4));
+      this.slopes.selectAll("line").each(function(d) {
+        const path = d3.select(this);
+        path.attr("stroke-dasharray", null);
+        // animate x2 from 0 to iw
+        const targetX2 = +path.attr("x2") || iw;
+        path.attr("x2", iw * t);
+      });
+    });
+  }
 }
