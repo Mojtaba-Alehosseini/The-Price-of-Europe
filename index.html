@@ -1,289 +1,683 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>The Price of Europe | A Cost of Living Data Story</title>
-    <meta name="description" content="Interactive data visualization exploring Europe's cost of living crisis (2019-2025) through Eurostat data.">
-    
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@300;400;600;700&family=Fira+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
-    
-    <link rel="stylesheet" href="css/main.css">
-    <link rel="stylesheet" href="css/typography.css">
-    <link rel="stylesheet" href="css/charts.css">
-    <link rel="stylesheet" href="css/scrollytelling.css">
-    <link rel="stylesheet" href="css/responsive.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="description" content="The Price of Europe — how life got expensive in Europe from 2019 to 2025. A scrollytelling data essay from the University of Genova." />
+  <meta name="theme-color" content="#f5f1e8" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#131218" media="(prefers-color-scheme: dark)" />
+  <title>The Price of Europe · 2019 – 2025</title>
+
+  <!-- Google Fonts (variable) — fall back to system if blocked -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,300..800,30..100&family=Inter:wght@300..700&family=JetBrains+Mono:wght@400;500&display=swap" />
+
+  <!-- Theme bootstrap: set theme BEFORE first paint to avoid flash -->
+  <script>
+    (() => {
+      try {
+        const stored = localStorage.getItem('pricEU:theme');
+        const sys = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        const t = stored && stored !== 'system' ? stored : sys;
+        if (t === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+        document.documentElement.dataset.themeChoice = stored || 'system';
+      } catch (e) { /* localStorage unavailable */ }
+    })();
+  </script>
+
+  <!-- Design system + chart styles -->
+  <link rel="stylesheet" href="css/tokens.css" />
+  <link rel="stylesheet" href="css/base.css" />
+  <link rel="stylesheet" href="css/layout.css" />
+  <link rel="stylesheet" href="css/charts.css" />
+  <link rel="stylesheet" href="css/scrollytelling.css" />
+  <link rel="stylesheet" href="css/responsive.css" />
 </head>
 <body>
-    <a href="#hero" class="skip-link">Skip to content</a>
-    <div class="scroll-progress" aria-hidden="true"></div>
+  <a class="skip-link" href="#story">Skip to story</a>
 
-    <!-- NAVIGATION -->
-    <nav id="main-nav">
-        <a href="#" class="nav-logo">The Price of Europe</a>
-        <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false" aria-controls="nav-links">
-            <span aria-hidden="true"></span>
-            <span aria-hidden="true"></span>
-            <span aria-hidden="true"></span>
-        </button>
-        <ul class="nav-links" id="nav-links">
-            <li><a href="#act-1" data-nav-act="act-1"><span class="nav-act-num">01</span> The Calm</a></li>
-            <li><a href="#act-2" data-nav-act="act-2"><span class="nav-act-num">02</span> COVID</a></li>
-            <li><a href="#act-3" data-nav-act="act-3"><span class="nav-act-num">03</span> Energy</a></li>
-            <li><a href="#act-4" data-nav-act="act-4"><span class="nav-act-num">04</span> Food & Wages</a></li>
-            <li><a href="#act-5" data-nav-act="act-5"><span class="nav-act-num">05</span> Aftermath</a></li>
-            <li><a href="#methodology" data-nav-act="methodology"><span class="nav-act-num">06</span> Methodology</a></li>
-        </ul>
-    </nav>
-    
-    <!-- HERO SECTION -->
-    <header id="hero" class="hero-section">
-        <h1>The Price of Europe</h1>
-        <p class="hero-author">
-            By <a href="https://www.linkedin.com/in/mojtaba-alehosseini/" target="_blank" rel="noopener noreferrer">Mojtaba Alehosseini</a>
-            &nbsp;·&nbsp; Master's in Computer Science (AI) &nbsp;·&nbsp;
-            University of Genova, 2025–2026
-        </p>
-        <p class="hero-subtitle">How inflation reshaped daily life across 27 countries</p>
-        <p class="hero-framing">Economic hardship is among the most pervasive forms of human suffering. Across Europe, the inflation crisis of 2020–2024 eroded wages, made food unaffordable, and pushed millions toward housing insecurity. This project maps that cost — country by country, year by year.</p>
-        <p class="hero-tagline">A data story built with Eurostat data (2019–2025)</p>
-        <div class="hero-stats">
-            <div class="hero-stat">
-                <div class="hero-stat-number" data-target="10.6" data-prefix="+" data-suffix="%">0%</div>
-                <div class="hero-stat-label">Peak EU inflation<br>October 2022</div>
-            </div>
-            <div class="hero-stat">
-                <div class="hero-stat-number" data-target="27" data-suffix="">0</div>
-                <div class="hero-stat-label">Countries<br>tracked</div>
-            </div>
-            <div class="hero-stat">
-                <div class="hero-stat-number" data-target="18" data-prefix="€−" data-suffix="">€0</div>
-                <div class="hero-stat-label">Purchasing power lost<br>per €100 since 2019</div>
-            </div>
-        </div>
-        <div class="scroll-indicator" aria-hidden="true">
-            <div class="scroll-line"></div>
-            <div class="scroll-text">Scroll</div>
-        </div>
-    </header>
-    
-    <!-- ACT 1: THE CALM -->
-    <section id="act-1" class="story-act" data-act="act-1">
-        <div class="act-title">
-            <span class="act-number">ACT I</span>
-            <p class="act-kicker">The Calm Before the Storm</p>
-            <h2>When Inflation Was Just a Number</h2>
-            <p class="act-subtitle">2019: the last year of normal prices</p>
-        </div>
-        
-        <div class="scroll-step" data-chart="choropleth">
-            <div class="step-text narrative-text">
-                <h3>The Inflation Map of Europe</h3>
-                <p>In 2019, most EU countries sat near the ECB's 2% inflation target. Press play, or drag the slider, to scrub through the next six years and watch the map shift from green to red.</p>
-                <p>By mid-2022 almost every country has tipped red. Inflation runs above 10% in energy-dependent economies. The hardest hits: the Baltics, Hungary, and Czechia.</p>
-                <p>Hover any country to see its full timeline in the corner panel. Click to pin it. The dashed gold ring marks the worst-hit country at the current month.</p>
-                <p class="source-line">Source: Eurostat HICP (prc_hicp_manr) — Monthly rate of annual change, all items (CP00)</p>
-            </div>
-            <div class="step-chart" id="viz-choropleth" role="img" aria-label="Animated EU inflation choropleth visualization"></div>
-        </div>
+  <!-- ========== HEADER ========== -->
+  <header class="site-header" id="site-header">
+    <div class="container">
+      <a class="brand" href="#top" aria-label="The Price of Europe — home">
+        <span class="brand-mark" aria-hidden="true"></span>
+        The Price of Europe
+      </a>
 
-        <div class="scroll-step" data-chart="smallMultiples">
-            <div class="step-text narrative-text">
-                <h3>Not All Prices Are Equal</h3>
-                <p>The headline number hides what's underneath. Split inflation by category and the picture is much sharper: energy shot up, food followed, services barely moved.</p>
-                <p>Each panel shows one category, with countries faded behind the bold euro-area average. Hover any country line to follow the same country across every panel.</p>
-                <p>Drag a range on the overview strip below to zoom every panel into a shared time window — and click outside the selection to reset.</p>
-                <p class="source-line">Source: Eurostat HICP (prc_hicp_manr) — by COICOP category</p>
-            </div>
-            <div class="step-chart" id="viz-small-multiples" role="img" aria-label="Small multiples line chart of inflation by category visualization"></div>
-        </div>
-    </section>
-    
-    <!-- ACT 2: COVID SHOCK -->
-    <section id="act-2" class="story-act" data-act="act-2">
-        <div class="act-title">
-            <span class="act-number">ACT II</span>
-            <p class="act-kicker">The First Shock — COVID</p>
-            <h2>Supply Chains Snapped</h2>
-            <p class="act-subtitle">2020–2021: the first cracks appeared</p>
-        </div>
-        
-        <div class="scroll-step" data-chart="heatmap">
-            <div class="step-text narrative-text">
-                <h3>Who Suffered Most?</h3>
-                <p>One row per country, one column per category. Red means high inflation, blue means deflation, white sits at the ECB's 2% target. Sort by any column to rank countries by energy, food, or services pain.</p>
-                <p>Drag the time slider to compare 2019, the 2022 peak, and today. Eastern Europe runs hotter than the West across nearly every column — France and Germany stay close to the ECB target while Hungary, Estonia, and Slovakia don't.</p>
-                <p class="source-line">Source: Eurostat HICP (prc_hicp_manr)</p>
-            </div>
-            <div class="step-chart" id="viz-heatmap" role="img" aria-label="Heatmap of inflation by country and category visualization"></div>
-        </div>
-    </section>
-    
-    <!-- ACT 3: ENERGY CRISIS -->
-    <section id="act-3" class="story-act" data-act="act-3">
-        <div class="act-title">
-            <span class="act-number">ACT III</span>
-            <p class="act-kicker">The Energy Crisis</p>
-            <h2>When Gas Prices Exploded</h2>
-            <p class="act-subtitle">2022: the world changed overnight</p>
-        </div>
-        
-        <div class="scroll-step" data-chart="slopeChart">
-            <div class="step-text narrative-text">
-                <h3>Electricity: 2019 vs 2024</h3>
-                <p>Household electricity doubled or tripled in some countries. Each line links a country's 2019 price to its 2024 price; the steeper the line, the bigger the bill shock.</p>
-                <p>The dashed gold line marks the EU median — anything above it is worse than typical. Switch between €/kWh and an index pinned to 2019=100 to compare absolute prices and relative jumps.</p>
-                <p class="source-line">Source: Eurostat nrg_pc_204 — Electricity prices for household consumers, band DC</p>
-            </div>
-            <div class="step-chart" id="viz-slope-chart" role="img" aria-label="Electricity price slope chart 2019 vs 2024 visualization"></div>
-        </div>
+      <nav class="nav-pills" aria-label="Story sections">
+        <a href="#act-1" data-nav="1">The Calm</a>
+        <a href="#act-2" data-nav="2">The Shock</a>
+        <a href="#act-3" data-nav="3">The Squeeze</a>
+        <a href="#act-4" data-nav="4">Aftermath</a>
+        <a href="#act-5" data-nav="5">Five Years On</a>
 
-        <div class="scroll-step" data-chart="annotatedLine">
-            <div class="step-text narrative-text">
-                <h3>Timeline of Crisis</h3>
-                <p>Euro-area inflation with the events that moved it. The shaded bands cover the COVID period (grey) and the energy crisis (orange). Filter by category to isolate one storyline.</p>
-                <p>The ECB rate hikes (gold) only start in mid-2022 — months after inflation had already crossed 7%. By the time policy reacted, the spike was well under way.</p>
-                <p class="source-line">Source: Eurostat HICP (prc_hicp_manr) + manual event timeline</p>
-            </div>
-            <div class="step-chart" id="viz-annotated-line" role="img" aria-label="Euro-area inflation timeline with annotated events visualization"></div>
+        <div class="theme-toggle" role="group" aria-label="Color theme">
+          <button type="button" data-theme-set="light" aria-pressed="false" aria-label="Light theme" title="Light">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+          </button>
+          <button type="button" data-theme-set="system" aria-pressed="true" aria-label="System theme" title="Match system">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+          </button>
+          <button type="button" data-theme-set="dark" aria-pressed="false" aria-label="Dark theme" title="Dark">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"/></svg>
+          </button>
         </div>
-
-        <div class="scroll-step" data-chart="stackedArea">
-            <div class="step-text narrative-text">
-                <h3>What Drove Inflation?</h3>
-                <p>The same euro-area number, broken into the categories beneath it. Energy ran the show in 2022, food took the baton in 2023, services held it through 2024.</p>
-                <p>The gold dot marks the headline peak. Switch between stacked, stream, and 100% views to see contribution, shape, and share. Hover any layer to read its value at that month.</p>
-                <p class="source-line">Source: Eurostat HICP (prc_hicp_manr) — Euro Area aggregate</p>
-            </div>
-            <div class="step-chart" id="viz-stacked-area" role="img" aria-label="Stacked area chart of inflation drivers visualization"></div>
-        </div>
-    </section>
-    
-    <!-- ACT 4: FOOD & WAGES -->
-    <section id="act-4" class="story-act" data-act="act-4">
-        <div class="act-title">
-            <span class="act-number">ACT IV</span>
-            <p class="act-kicker">Food & Wages</p>
-            <h2>The Wage-Price Divergence</h2>
-            <p class="act-subtitle">2023: did salaries keep up?</p>
-        </div>
-        
-        <div class="scroll-step" data-chart="divergingBar">
-            <div class="step-text narrative-text">
-                <h3>Did Wages Keep Up?</h3>
-                <p>For most workers, no. The bars show real wage change — what you actually take home after inflation chews through nominal pay. Green: wages beat inflation. Red: purchasing power slipped.</p>
-                <p>Six countries have no statutory minimum wage and rely on sectoral bargaining (Denmark, Sweden, Finland, Austria, Italy, Cyprus). Their bars are shown faded.</p>
-                <p class="source-line">Source: Eurostat earn_mw_cur + prc_hicp_aind</p>
-            </div>
-            <div class="step-chart" id="viz-diverging-bar" role="img" aria-label="Diverging bar chart of real wage change by country visualization"></div>
-        </div>
-    </section>
-    
-    <!-- ACT 5: AFTERMATH -->
-    <section id="act-5" class="story-act" data-act="act-5">
-        <div class="act-title">
-            <span class="act-number">ACT V</span>
-            <p class="act-kicker">The Aftermath</p>
-            <h2>A New Normal?</h2>
-            <p class="act-subtitle">2024–2025: the long shadow of inflation</p>
-        </div>
-        
-        <div class="scroll-step" data-chart="waffleChart">
-            <div class="step-text narrative-text">
-                <h3>What €100 Buys Today</h3>
-                <p>One hundred squares, each one a euro. The gold ones are what €100 from 2019 still buys today; the grey ones are gone, eaten by inflation.</p>
-                <p>Pick a country and a category — the big number tweens from €100 down to the actual value. A small line below tells you whether you fared better or worse than the EU average. In parts of Eastern Europe €100 from 2019 now stretches to less than €75 of the same shopping basket.</p>
-                <p class="source-line">Source: Eurostat HICP Index (prc_hicp_midx) — 2015=100</p>
-            </div>
-            <div class="step-chart" id="viz-waffle-chart" role="img" aria-label="Waffle chart of euro purchasing power loss visualization"></div>
-        </div>
-    </section>
-    
-    <!-- METHODOLOGY SECTION -->
-    <section id="methodology" class="methodology-section" data-act="methodology">
-        <div class="narrative-text">
-            <h2>Methodology</h2>
-            
-            <h3>Data Sources</h3>
-            <table class="data-table">
-                <thead>
-                    <tr><th>Dataset</th><th>Code</th><th>Time Range</th><th>Granularity</th></tr>
-                </thead>
-                <tbody>
-                    <tr><td>HICP Monthly Rate</td><td>prc_hicp_manr</td><td>2018–2025</td><td>Monthly × Country × Category</td></tr>
-                    <tr><td>HICP Index</td><td>prc_hicp_midx</td><td>2018–2025</td><td>Monthly × Country × Category</td></tr>
-                    <tr><td>Electricity Prices</td><td>nrg_pc_204</td><td>2018–2024</td><td>Semester × Country</td></tr>
-                    <tr><td>Minimum Wages</td><td>earn_mw_cur</td><td>2018–2025</td><td>Semester × Country</td></tr>
-                    <tr><td>House Price Index</td><td>prc_hpi_q</td><td>2018–2024</td><td>Quarterly × Country</td></tr>
-                </tbody>
-            </table>
-            
-            <h3>Architecture</h3>
-            <p>This project uses a single-page scrollytelling architecture in which each visualization corresponds to a distinct narrative section, accessible directly via the navigation links above — the functional equivalent of the multi-page structure described in the course brief.</p>
-
-            <h3>Data Processing Pipeline</h3>
-            <p>All data was fetched from the Eurostat JSON API, parsed from the standard Eurostat dimension-value format, filtered to EU-27 countries plus the Euro Area aggregate, and exported as JSON for D3 consumption. Missing values (marked with ":" in Eurostat) were dropped. Where API data was unavailable, realistic synthetic data was generated based on known historical patterns.</p>
-            
-            <h3>Limitations & Biases</h3>
-            <p><strong>HICP vs. national CPI:</strong> HICP uses harmonized methodology, which may differ from what citizens actually experience. <strong>Reporting lag:</strong> Some countries submit data 2–3 months late; provisional data may be revised. <strong>Missing minimum wage data:</strong> 6 EU countries have no statutory minimum wage — Denmark, Sweden, Finland, Austria, Italy, and Cyprus. <strong>Currency effects:</strong> Non-Euro countries have additional exchange rate volatility.</p>
-            
-            <h3>Acknowledgments</h3>
-            <p>Data: <a href="https://ec.europa.eu/eurostat" rel="noopener noreferrer">Eurostat</a>. Visualization built with <a href="https://d3js.org" rel="noopener noreferrer">D3.js v7</a>, <a href="https://scrollama.js.org" rel="noopener noreferrer">Scrollama</a>, and TopoJSON. Course: Data Visualization 2025–2026, University of Genova.</p>
-        </div>
-    </section>
-    
-    <!-- ABOUT / FOOTER -->
-    <section id="about" class="about-section">
-        <div class="narrative-text">
-            <h2>About This Project</h2>
-            <p>A solo data visualization project exploring Europe's cost of living crisis through interactive storytelling. Built with HTML, CSS, JavaScript, and D3.js — no frameworks.</p>
-        </div>
-    </section>
-    
-    <footer>
-        <div class="footer-left">
-            <strong>The Price of Europe</strong>
-            <span class="footer-meta">© 2025–2026 Mojtaba Alehosseini · Master's in Computer Science (AI), University of Genova</span>
-        </div>
-        <div class="footer-right">
-            <ul class="footer-links" aria-label="External links">
-                <li>
-                    <a href="https://github.com/Mojtaba-Alehosseini" target="_blank" rel="noopener noreferrer" aria-label="GitHub profile">
-                        <svg class="footer-icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false">
-                            <path fill="currentColor" d="M12 0.5C5.65 0.5 0.5 5.65 0.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56 0-.27-.01-1-.02-1.95-3.2.69-3.87-1.54-3.87-1.54-.52-1.32-1.27-1.67-1.27-1.67-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.76 2.69 1.25 3.34.95.1-.74.4-1.25.72-1.54-2.55-.29-5.24-1.27-5.24-5.66 0-1.25.45-2.27 1.18-3.07-.12-.29-.51-1.46.11-3.04 0 0 .96-.31 3.15 1.17.91-.25 1.89-.38 2.86-.38.97 0 1.95.13 2.86.38 2.18-1.48 3.14-1.17 3.14-1.17.62 1.58.23 2.75.11 3.04.74.8 1.18 1.82 1.18 3.07 0 4.4-2.69 5.36-5.25 5.65.41.36.78 1.06.78 2.14 0 1.55-.01 2.79-.01 3.17 0 .31.21.68.8.56C20.21 21.39 23.5 17.07 23.5 12 23.5 5.65 18.35 0.5 12 0.5z"/>
-                        </svg>
-                        <span>GitHub</span>
-                    </a>
-                </li>
-                <li>
-                    <a href="https://www.linkedin.com/in/mojtaba-alehosseini/" target="_blank" rel="noopener noreferrer" aria-label="LinkedIn profile">
-                        <svg class="footer-icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false">
-                            <path fill="currentColor" d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/>
-                        </svg>
-                        <span>LinkedIn</span>
-                    </a>
-                </li>
-                <li>
-                    <a href="https://ec.europa.eu/eurostat" target="_blank" rel="noopener noreferrer">Data: Eurostat</a>
-                </li>
-            </ul>
-            <span class="footer-built">Built with D3.js v7</span>
-        </div>
-    </footer>
-
-    <!-- INSTITUTIONAL STRIP (white background — UniGe brand requirement) -->
-    <div class="footer-institution">
-        <img src="assets/images/logo_orizzontale_COLORE.png"
-             alt="Università di Genova"
-             class="unige-logo">
+      </nav>
     </div>
+    <div class="scroll-progress" id="scroll-progress" aria-hidden="true"></div>
+  </header>
 
-    <!-- SCRIPTS — order matters: globals first, then our entry module -->
-    <script src="https://d3js.org/d3.v7.min.js"></script>
-    <script src="https://unpkg.com/topojson-client@3"></script>
-    <script src="https://cdn.jsdelivr.net/npm/d3-svg-annotation@2.5.1/d3-annotation.min.js"></script>
-    <script src="https://unpkg.com/scrollama@3.2.0/build/scrollama.min.js"></script>
-    <script type="module" src="js/main.js"></script>
+  <main id="top">
+    <!-- ========== HERO ========== -->
+    <section class="hero">
+      <!-- Two stacked videos for seamless ping-pong loop: forward + pre-encoded reverse.
+           JS swaps the [data-active] flag on `ended`. -->
+      <video id="hero-video" class="hero-video" data-active="true"
+             autoplay muted playsinline preload="auto" aria-hidden="true"
+             poster="assets/images/hero.jpeg"
+             onerror="this.style.display='none'">
+        <source src="assets/images/hero.mp4" type="video/mp4">
+      </video>
+      <video id="hero-video-rev" class="hero-video" data-active="false"
+             muted playsinline preload="auto" aria-hidden="true"
+             onerror="this.style.display='none'">
+        <source src="assets/images/hero_reversed.mp4" type="video/mp4">
+      </video>
+      <img id="hero-image" alt="" src="assets/images/hero.jpeg" aria-hidden="true"
+           loading="eager" decoding="async"
+           onerror="this.style.display='none'">
+      <canvas id="hero-sequence" aria-hidden="true"></canvas>
+      <div class="container">
+        <div class="hero-kicker">A data essay · University of Genova · MSc AI</div>
+        <h1>The price of <em>everything</em>, suddenly, all at once.</h1>
+        <p class="hero-sub">Between 2019 and 2025 Europe absorbed three overlapping shocks — a pandemic, an energy war, and a wage chase — and consumer prices climbed faster than at any point in two generations. Here is how that crisis unfolded, country by country, category by category.</p>
+        <div class="hero-meta">
+          <span><strong>27</strong> EU countries</span>
+          <span><strong>12</strong> hand-built D3 charts</span>
+          <span><strong>5</strong> acts</span>
+          <span><strong>11.9</strong>% · EU peak inflation, Oct 2022</span>
+        </div>
+      </div>
+      <div class="hero-scroll-cue" aria-hidden="true">Scroll</div>
+    </section>
+
+    <!-- ========== INTRO PROSE ========== -->
+    <section class="section-prose" id="story">
+      <div class="container container-prose">
+        <p class="lede">The European Central Bank's inflation target is two percent. For nearly a decade after the eurozone crisis, that target held: prices drifted, wages crept, debates about deflation outnumbered debates about the cost of bread. Then 2021 arrived, and the line that had been almost flat for ten years bent sharply upward.</p>
+        <p>This piece does not try to argue that prices rose — anyone who bought electricity, pasta, or a Berlin apartment in 2022 knows that already. It tries to show <em>which</em> prices rose, <em>where</em> the rises hit hardest, and what happened to the wages meant to keep up. Each chart is a small instrument: rotate it, scrub the slider, hover over a country. The numbers are from Eurostat, the same source the ECB watches.</p>
+      </div>
+    </section>
+
+    <!-- Divider photo · Act I -->
+    <figure class="act-divider" data-img="act-1-calm.jpg" aria-hidden="true">
+      <picture>
+        <source srcset="assets/images/act-1-calm.jpeg" type="image/jpeg">
+        <img alt="" src="assets/images/act-1-calm.jpeg" loading="lazy" onerror="this.parentElement.parentElement.classList.add('act-divider--placeholder');this.remove();">
+      </picture>
+      <figcaption>Bologna, before · 2019</figcaption>
+      <noscript><p>Image placeholder — Act I</p></noscript>
+    </figure>
+
+    <!-- ============================================================
+         ACT I — THE CALM (2015 – 2019)
+         ============================================================ -->
+    <section class="act-intro" id="act-1" aria-labelledby="act-1-title">
+      <div class="container">
+        <p class="act-num">Act I · 2015 – 2019</p>
+        <h2 class="act-title" id="act-1-title">The Calm</h2>
+        <p class="act-lede">Five quiet years when the European Central Bank worried, mostly, about prices being too low. The geography of inflation looked nearly uniform — Estonia, Italy, Portugal all roughly the same shade of nothing-to-see.</p>
+      </div>
+    </section>
+
+    <!-- Chapter 1 · Choropleth -->
+    <article class="chapter" data-chart="choropleth">
+      <div class="scroller">
+        <div class="scroller__text">
+          <div class="scroller__step" data-step="0" data-year="2019">
+            <div class="step-eyebrow">2019 · Before</div>
+            <h3>A continent on cruise control</h3>
+            <p>In 2019 the European Union's annual inflation rate was <strong>1.4 %</strong> — comfortably below the ECB's target. The map shows almost every country in the muted greens of the sub-target band. The Baltic states ran slightly warmer, southern Europe slightly cooler, but the spread between them was a couple of percentage points at most.</p>
+          </div>
+          <div class="scroller__step" data-step="1" data-year="2021">
+            <div class="step-eyebrow">2021 · Heating</div>
+            <h3>The first shade darker</h3>
+            <p>As supply chains unkinked after the pandemic, prices began catching up. By December 2021 the eurozone hit <strong>5.0 %</strong>. The map turns amber across the Baltics first — Estonia, Lithuania and Latvia all already above 7 %.</p>
+          </div>
+          <div class="scroller__step" data-step="2" data-year="2022" data-focus="baltic">
+            <div class="step-eyebrow">Oct 2022 · Peak</div>
+            <h3>The map turns red</h3>
+            <p>The October 2022 reading — <strong>11.5 %</strong> for the euro area, <strong>17.4 %</strong> for the Baltics on average — was the highest in the euro's existence. By this point hardly any country sits below five percent.</p>
+          </div>
+          <div class="scroller__step" data-step="3" data-year="2024">
+            <div class="step-eyebrow">2024 · Cooling</div>
+            <h3>Most of the heat drains away</h3>
+            <p>By late 2024 the map has cooled back into greens and yellows, but unevenly. <strong>Hover any country</strong> for its 2019-to-now mini-trend — some never overshot much, some have not yet returned.</p>
+          </div>
+          <div class="scroller__step" data-step="4" data-focus="all">
+            <div class="step-eyebrow">Explore</div>
+            <h3>Try the slider</h3>
+            <p>Drag the timeline to watch the map breathe in and out of crisis. Pause on any month. The Baltic spike is unmistakable; so is the slow Spanish climb that peaks half a year later.</p>
+          </div>
+          <aside id="choropleth-detail" class="map-detail" data-active="false" aria-live="polite" aria-label="Selected country detail"></aside>
+        </div>
+        <figure class="scroller__chart" data-chart-mount="choropleth" aria-labelledby="chart-1-title">
+          <header>
+            <h3 id="chart-1-title">Annual HICP inflation, by country</h3>
+            <p class="chart-subtitle">Each country is shaded by its annual consumer-price inflation rate. Click a country for detail, or drag the timeline below the map to change the year.</p>
+          </header>
+          <div class="chart-body" id="chart-choropleth"></div>
+          <div class="chart-controls" id="chart-choropleth-controls"></div>
+          <p class="chart-source">Source · Eurostat HICP (prc_hicp_manr) · annual rates</p>
+        </figure>
+      </div>
+    </article>
+
+    <!-- Chapter 2 · SmallMultiplesLine -->
+    <article class="chapter" data-chart="smallMultiples">
+      <div class="scroller">
+        <div class="scroller__text">
+          <div class="scroller__step" data-step="0">
+            <div class="step-eyebrow">Categories</div>
+            <h3>It was not just one thing</h3>
+            <p>HICP — the basket Eurostat uses — splits into a dozen broad categories: food, housing, energy, transport, services. Each panel shows one. <strong>Most lines stay near zero through 2020.</strong> Then they don't.</p>
+          </div>
+          <div class="scroller__step" data-step="1">
+            <div class="step-eyebrow">Energy first</div>
+            <h3>The energy panel lights up first</h3>
+            <p>Look at <em>Housing, water, electricity</em>. It peels off in mid-2021, six months ahead of the other categories. By March 2022 it is well above 30 %. This is the lit fuse on the rest of the chart.</p>
+          </div>
+          <div class="scroller__step" data-step="2">
+            <div class="step-eyebrow">Food follows</div>
+            <h3>Food picks up the wave</h3>
+            <p>Food prices follow energy with about a six-month lag — fertiliser, transport and processing costs catching up. The food panel peaks above 15 % in early 2023, after energy has already begun to fall.</p>
+          </div>
+          <div class="scroller__step" data-step="3">
+            <div class="step-eyebrow">Services last</div>
+            <h3>Services rise quietly and stay</h3>
+            <p>The services line never spikes the way energy does, but it climbs steadily and refuses to come back down — the textbook signature of inflation moving from imported costs into domestic wages and rents.</p>
+          </div>
+        </div>
+        <figure class="scroller__chart" data-chart-mount="smallMultiples" aria-labelledby="chart-2-title">
+          <header>
+            <h3 id="chart-2-title">HICP by category · monthly YoY %</h3>
+            <p class="chart-subtitle">Eight categories, one panel each. Hover any panel.</p>
+          </header>
+          <div class="chart-body" id="chart-smallMultiples"></div>
+          <p class="chart-source">Source · Eurostat HICP (prc_hicp_manr) · COICOP categories</p>
+        </figure>
+      </div>
+    </article>
+
+    <!-- Divider photo · Act II -->
+    <figure class="act-divider" data-img="act-2-shock.jpg" aria-hidden="true">
+      <picture>
+        <source srcset="assets/images/act-2-shock.jpeg" type="image/jpeg">
+        <img alt="" src="assets/images/act-2-shock.jpeg" loading="lazy" onerror="this.parentElement.parentElement.classList.add('act-divider--placeholder');this.remove();">
+      </picture>
+      <figcaption>Milan · March 2020</figcaption>
+    </figure>
+
+    <!-- ============================================================
+         ACT II — THE SHOCK (2020 – 2021)
+         ============================================================ -->
+    <section class="act-intro" id="act-2" aria-labelledby="act-2-title">
+      <div class="container">
+        <p class="act-num">Act II · 2020 – 2021</p>
+        <h2 class="act-title" id="act-2-title">The Shock</h2>
+        <p class="act-lede">A pandemic shuts down half the global economy; then re-opens it all at once. Container ships queue off the coast of Los Angeles. Furniture costs double. Used cars become collateral. The signal of the crisis is not yet visible to most consumers — but it is loud on the chart.</p>
+      </div>
+    </section>
+
+    <!-- Chapter 3 · AnnotatedLine -->
+    <article class="chapter" data-chart="annotatedLine">
+      <div class="scroller">
+        <div class="scroller__text">
+          <div class="scroller__step" data-step="0">
+            <div class="step-eyebrow">The single line</div>
+            <h3>EU-27 inflation, one number a month</h3>
+            <p>Stripped to a single line, the story is almost cleaner than it should be. The flat decade of <strong>2009–2020</strong>. The COVID dip. The reopening climb. The October 2022 peak. The slow, uneven descent.</p>
+          </div>
+          <div class="scroller__step" data-step="1">
+            <div class="step-eyebrow">March 2020</div>
+            <h3>The pandemic dent</h3>
+            <p>For a brief moment in spring 2020, deflation looked like the bigger risk. Energy prices collapsed; oil briefly traded negative; demand for everything except groceries and games consoles fell off a cliff.</p>
+          </div>
+          <div class="scroller__step" data-step="2">
+            <div class="step-eyebrow">Feb 2022</div>
+            <h3>Ukraine, and the gas valves</h3>
+            <p>Russia's invasion of Ukraine on <strong>24 February 2022</strong> turned an already-rising line vertical. The orange band marks the gas-price spike that followed; everything indexed to wholesale gas — heating, electricity, fertiliser, food — followed it up.</p>
+          </div>
+          <div class="scroller__step" data-step="3">
+            <div class="step-eyebrow">Jul 2022 – Sep 2023</div>
+            <h3>The ECB hike cycle</h3>
+            <p>The ECB raised its deposit rate ten times in fourteen months, from <strong>–0.5 %</strong> to <strong>4.0 %</strong>. The line peaks, then falls — though not all at the same speed.</p>
+          </div>
+        </div>
+        <figure class="scroller__chart" data-chart-mount="annotatedLine" aria-labelledby="chart-3-title">
+          <header>
+            <h3 id="chart-3-title">EU-27 inflation, 2010 – 2025</h3>
+            <p class="chart-subtitle">With event markers · drag to zoom into a year.</p>
+          </header>
+          <div class="chart-body" id="chart-annotatedLine"></div>
+          <p class="chart-source">Source · Eurostat HICP (prc_hicp_manr) · monthly EU aggregate</p>
+        </figure>
+      </div>
+    </article>
+
+    <!-- Chapter 4 · Ridgeline -->
+    <article class="chapter" data-chart="ridgeline">
+      <div class="scroller">
+        <div class="scroller__text">
+          <div class="scroller__step" data-step="0">
+            <div class="step-eyebrow">Spread, not average</div>
+            <h3>The average hides the spread</h3>
+            <p>Every line you have seen so far averages the EU. This chart fans the distribution open. Each ridge is one year. The width of the ridge shows how spread out the 27 country-level rates were.</p>
+          </div>
+          <div class="scroller__step" data-step="1">
+            <div class="step-eyebrow">2019</div>
+            <h3>A narrow, tidy ridge</h3>
+            <p>In 2019 nearly every country sat between 0 and 2 percent. The 2019 ridge is sharp and narrow — Europe was, by this measure, a uniform inflation environment.</p>
+          </div>
+          <div class="scroller__step" data-step="2">
+            <div class="step-eyebrow">2022</div>
+            <h3>The ridge bursts</h3>
+            <p>The 2022 ridge is squashed and stretched across half the chart. <strong>Estonia</strong> sat at <strong>19.4 %</strong> while <strong>France</strong> held under <strong>6 %</strong>. The same currency union, fifteen points apart.</p>
+          </div>
+          <div class="scroller__step" data-step="3">
+            <div class="step-eyebrow">2024</div>
+            <h3>It narrows again — mostly</h3>
+            <p>By 2024 the ridge has tightened, but it has not snapped back to its old shape. The Baltic tail is shorter; the centre still runs hotter than 2019.</p>
+          </div>
+        </div>
+        <figure class="scroller__chart" data-chart-mount="ridgeline" aria-labelledby="chart-4-title">
+          <header>
+            <h3 id="chart-4-title">Distribution of country inflation rates, by year</h3>
+            <p class="chart-subtitle">Density across the 27 EU member states.</p>
+          </header>
+          <div class="chart-body" id="chart-ridgeline"></div>
+          <p class="chart-source">Source · Eurostat HICP annual (prc_hicp_aind)</p>
+        </figure>
+      </div>
+    </article>
+
+    <!-- Inline still · banknotes macro -->
+    <figure class="act-divider act-divider--banner" data-img="inline-banknotes.jpg" aria-hidden="true" style="block-size: clamp(28dvh, 35vw, 50dvh);">
+      <picture>
+        <img alt="" src="assets/images/inline-banknotes.png" loading="lazy" onerror="this.parentElement.parentElement.classList.add('act-divider--placeholder');this.remove();">
+      </picture>
+    </figure>
+
+    <!-- Divider photo · Act III -->
+    <figure class="act-divider" data-img="act-3-squeeze.jpg" aria-hidden="true">
+      <picture>
+        <img alt="" src="assets/images/act-3-squeeze.jpeg" loading="lazy" onerror="this.parentElement.parentElement.classList.add('act-divider--placeholder');this.remove();">
+      </picture>
+      <figcaption>Berlin · January 2023</figcaption>
+    </figure>
+
+    <!-- ============================================================
+         ACT III — THE SQUEEZE (2022 – 2023)
+         ============================================================ -->
+    <section class="act-intro" id="act-3" aria-labelledby="act-3-title">
+      <div class="container">
+        <p class="act-num">Act III · 2022 – 2023</p>
+        <h2 class="act-title" id="act-3-title">The Squeeze</h2>
+        <p class="act-lede">Energy markets break. Bills double, then triple. Governments scramble cap-and-rebate schemes. Then the wave moves through food, then services, then services-after-food, until everyone — not just the heating bill — has noticed.</p>
+      </div>
+    </section>
+
+    <!-- Chapter 5 · StackedArea -->
+    <article class="chapter" data-chart="stackedArea">
+      <div class="scroller">
+        <div class="scroller__text">
+          <div class="scroller__step" data-step="0">
+            <div class="step-eyebrow">Decomposed</div>
+            <h3>Three drivers, one number</h3>
+            <p>Eurostat's headline rate is a weighted average of dozens of sub-indices. Stack the three largest — energy, food, services — and you can see which is doing the work in any given month.</p>
+          </div>
+          <div class="scroller__step" data-step="1">
+            <div class="step-eyebrow">Energy dominates</div>
+            <h3>The orange wall</h3>
+            <p>From late 2021 through 2022, energy alone accounts for more than half of the headline figure. The orange band swells until it is almost the whole chart.</p>
+          </div>
+          <div class="scroller__step" data-step="2">
+            <div class="step-eyebrow">Hand-off</div>
+            <h3>Food takes over</h3>
+            <p>By spring 2023 energy is contributing nothing; it is the green band — food — that holds the headline above 7 %. This is the textbook second-round effect: yesterday's energy bill becomes today's fertiliser cost.</p>
+          </div>
+          <div class="scroller__step" data-step="3">
+            <div class="step-eyebrow">Stubborn services</div>
+            <h3>Why the ECB kept hiking</h3>
+            <p>Even in 2024, the purple slice — services — refuses to drop below the ECB's target. Wages chasing prices, rents catching up to leases signed in cheaper times, restaurants passing through last year's energy bill.</p>
+          </div>
+        </div>
+        <figure class="scroller__chart" data-chart-mount="stackedArea" aria-labelledby="chart-5-title">
+          <header>
+            <h3 id="chart-5-title">Contributions to headline inflation</h3>
+            <p class="chart-subtitle">Toggle absolute % · share of total · streamgraph.</p>
+          </header>
+          <div class="chart-body" id="chart-stackedArea"></div>
+          <div class="chart-controls" id="chart-stackedArea-controls"></div>
+          <p class="chart-source">Source · Eurostat HICP categories (prc_hicp_manr)</p>
+        </figure>
+      </div>
+    </article>
+
+    <!-- Chapter 6 · SlopeChart -->
+    <article class="chapter" data-chart="slope">
+      <div class="scroller">
+        <div class="scroller__text">
+          <div class="scroller__step" data-step="0">
+            <div class="step-eyebrow">Two points</div>
+            <h3>What an electricity bill cost · then and now</h3>
+            <p>Eurostat publishes household electricity prices twice a year. We plot two: <strong>H1 2019</strong> and <strong>H1 2024</strong>. Each line is one country. The slope tells you the story without much else needed.</p>
+          </div>
+          <div class="scroller__step" data-step="1">
+            <div class="step-eyebrow">Steepest</div>
+            <h3>The Czech and Romanian climbs</h3>
+            <p>Czechia roughly doubled. So did Romania. Both started from low bases and rely heavily on natural-gas-fired generation; both went up the most in percentage terms.</p>
+          </div>
+          <div class="scroller__step" data-step="2">
+            <div class="step-eyebrow">Quiet</div>
+            <h3>Spain and Portugal — almost flat</h3>
+            <p>The Iberian exception: an EU-approved cap on gas prices fed into electricity from mid-2022. The slope is barely positive. Whether this was good policy or expensive subsidy is a question for a different essay.</p>
+          </div>
+        </div>
+        <figure class="scroller__chart" data-chart-mount="slope" aria-labelledby="chart-6-title">
+          <header>
+            <h3 id="chart-6-title">Household electricity price, 2019 → 2024</h3>
+            <p class="chart-subtitle">EUR per kWh including taxes · second half of each year.</p>
+          </header>
+          <div class="chart-body" id="chart-slope"></div>
+          <p class="chart-source">Source · Eurostat household electricity prices (nrg_pc_204)</p>
+        </figure>
+      </div>
+    </article>
+
+    <!-- Chapter 7 · Heatmap -->
+    <article class="chapter" data-chart="heatmap">
+      <div class="scroller">
+        <div class="scroller__text">
+          <div class="scroller__step" data-step="0">
+            <div class="step-eyebrow">Country × Category</div>
+            <h3>Where did each shock land hardest?</h3>
+            <p>Twenty-seven rows. Twelve columns. Each cell is the average inflation a country saw in a given category over a year. Reds are bad, greens are calm.</p>
+          </div>
+          <div class="scroller__step" data-step="1">
+            <div class="step-eyebrow">Drag the slider</div>
+            <h3>Scrub through the years</h3>
+            <p>Watch how the pattern of red migrates. In 2021 it is concentrated in housing/energy. In 2022 the whole upper half lights up. In 2024 it cools — except for a few stubborn services cells.</p>
+          </div>
+          <div class="scroller__step" data-step="2">
+            <div class="step-eyebrow">Sort</div>
+            <h3>Sort countries by hottest cell</h3>
+            <p>Click any column header to sort by that category. Sort by <em>Housing, water, electricity</em> and the Baltic states pin to the top of the table.</p>
+          </div>
+        </div>
+        <figure class="scroller__chart" data-chart-mount="heatmap" aria-labelledby="chart-7-title">
+          <header>
+            <h3 id="chart-7-title">Country × Category inflation</h3>
+            <p class="chart-subtitle">Annual mean YoY % · select a year with the slider.</p>
+          </header>
+          <div class="chart-body" id="chart-heatmap"></div>
+          <div class="chart-controls" id="chart-heatmap-controls"></div>
+          <p class="chart-source">Source · Eurostat HICP (prc_hicp_manr)</p>
+        </figure>
+      </div>
+    </article>
+
+    <!-- Inline still · meter banner -->
+    <figure class="act-divider act-divider--banner" data-img="inline-meter.jpg" aria-hidden="true" style="block-size: clamp(24dvh, 28vw, 42dvh);">
+      <picture>
+        <img alt="" src="assets/images/inline-meter.png" loading="lazy" onerror="this.parentElement.parentElement.classList.add('act-divider--placeholder');this.remove();">
+      </picture>
+    </figure>
+
+    <!-- Divider photo · Act IV -->
+    <figure class="act-divider" data-img="act-4-aftermath.jpg" aria-hidden="true">
+      <picture>
+        <img alt="" src="assets/images/act-4-aftermath.jpeg" loading="lazy" onerror="this.parentElement.parentElement.classList.add('act-divider--placeholder');this.remove();">
+      </picture>
+      <figcaption>The household table · 2024</figcaption>
+    </figure>
+
+    <!-- ============================================================
+         ACT IV — THE AFTERMATH (2023 – 2025)
+         ============================================================ -->
+    <section class="act-intro" id="act-4" aria-labelledby="act-4-title">
+      <div class="container">
+        <p class="act-num">Act IV · 2023 – 2025</p>
+        <h2 class="act-title" id="act-4-title">The Aftermath</h2>
+        <p class="act-lede">Headline inflation is back near target. But what is left behind is a price level that does not return — and a question about whether wages caught up enough to live with it.</p>
+      </div>
+    </section>
+
+    <!-- Chapter 8 · DivergingBar -->
+    <article class="chapter" data-chart="divergingBar">
+      <div class="scroller">
+        <div class="scroller__text">
+          <div class="scroller__step" data-step="0">
+            <div class="step-eyebrow">Real wage change</div>
+            <h3>Did pay keep up?</h3>
+            <p>Real wage change is nominal wage growth minus inflation. We compute it for every EU country with a statutory minimum wage, 2019 → 2024. Bars going right mean wages outran prices. Bars going left mean prices outran wages.</p>
+          </div>
+          <div class="scroller__step" data-step="1">
+            <div class="step-eyebrow">Winners</div>
+            <h3>The east caught up</h3>
+            <p>Romania, Bulgaria, Lithuania, Hungary — every single country that started 2019 with a minimum wage under €500 saw it climb in real terms. Catch-up convergence didn't pause for the crisis.</p>
+          </div>
+          <div class="scroller__step" data-step="2">
+            <div class="step-eyebrow">Losers</div>
+            <h3>The west fell behind</h3>
+            <p>Czechia, Estonia, Belgium — all bars going left. Real purchasing power on a minimum-wage paycheck shrank between five and twelve percent.</p>
+          </div>
+        </div>
+        <figure class="scroller__chart" data-chart-mount="divergingBar" aria-labelledby="chart-8-title">
+          <header>
+            <h3 id="chart-8-title">Real minimum-wage change · 2019 → 2024</h3>
+            <p class="chart-subtitle">Nominal change minus cumulative HICP.</p>
+          </header>
+          <div class="chart-body" id="chart-divergingBar"></div>
+          <p class="chart-source">Source · Eurostat earn_mw_cur + HICP indices</p>
+        </figure>
+      </div>
+    </article>
+
+    <!-- Chapter 9 · WaffleChart -->
+    <article class="chapter" data-chart="waffle">
+      <div class="scroller">
+        <div class="scroller__text">
+          <div class="scroller__step" data-step="0">
+            <div class="step-eyebrow">€100 then · €? now</div>
+            <h3>What €100 buys you today</h3>
+            <p>If you had €100 in January 2019, this many of those €100 worth of goods you can still afford today, holding the rest of your basket constant.</p>
+          </div>
+          <div class="scroller__step" data-step="1">
+            <div class="step-eyebrow">Pick a country</div>
+            <h3>Pick your country</h3>
+            <p>The waffle redraws. In Germany, your €100 is worth about <strong>€81</strong>. In Estonia, about <strong>€61</strong>. The squares that fade out are the purchasing power you lost.</p>
+          </div>
+          <div class="scroller__step" data-step="2">
+            <div class="step-eyebrow">Pick a category</div>
+            <h3>Pick what you were buying</h3>
+            <p>For <em>energy</em>, that €100 buys roughly <strong>half</strong> as much as it did in 2019. For <em>services</em>, around 80 cents on the euro. For <em>food</em>, around 70.</p>
+          </div>
+        </div>
+        <figure class="scroller__chart" data-chart-mount="waffle" aria-labelledby="chart-9-title">
+          <header>
+            <h3 id="chart-9-title">Purchasing power of €100 since Jan 2019</h3>
+            <p class="chart-subtitle">Pick a country and a category.</p>
+          </header>
+          <div class="chart-body" id="chart-waffle"></div>
+          <div class="chart-controls" id="chart-waffle-controls"></div>
+          <p class="chart-source">Source · Eurostat HICP index (prc_hicp_midx)</p>
+        </figure>
+      </div>
+    </article>
+
+    <!-- Chapter 10 · ConnectedScatter -->
+    <article class="chapter" data-chart="connectedScatter">
+      <div class="scroller">
+        <div class="scroller__text">
+          <div class="scroller__step" data-step="0">
+            <div class="step-eyebrow">Two axes</div>
+            <h3>Wages on one axis, prices on the other</h3>
+            <p>The horizontal axis is cumulative HICP since 2019. The vertical axis is cumulative nominal-wage growth. The diagonal is the break-even line where they tie. Points above the diagonal: pay won. Below it: prices won.</p>
+          </div>
+          <div class="scroller__step" data-step="1">
+            <div class="step-eyebrow">A path per country</div>
+            <h3>One country, one path</h3>
+            <p>Each path traces a country from 2019 to 2024. The shape of the path matters: a steep climb early, a flat tail, suggests pay caught up first then lagged. A flat early-section then a recent vertical rise suggests pay finally responded.</p>
+          </div>
+          <div class="scroller__step" data-step="2">
+            <div class="step-eyebrow">Hover one</div>
+            <h3>Hover a country to highlight its trajectory</h3>
+            <p>Hover any path. Its arrowhead lights up. The rest of the chart fades back — to keep the visual quiet while you read one story.</p>
+          </div>
+        </div>
+        <figure class="scroller__chart" data-chart-mount="connectedScatter" aria-labelledby="chart-10-title">
+          <header>
+            <h3 id="chart-10-title">Wage growth vs price growth · 2019 → 2024</h3>
+            <p class="chart-subtitle">Path per country, year-by-year.</p>
+          </header>
+          <div class="chart-body" id="chart-connectedScatter"></div>
+          <p class="chart-source">Source · Eurostat earn_mw_cur + HICP indices</p>
+        </figure>
+      </div>
+    </article>
+
+    <!-- Divider photo · Act V -->
+    <figure class="act-divider" data-img="act-5-five-years.jpg" aria-hidden="true">
+      <picture>
+        <img alt="" src="assets/images/act-5-five-years.png" loading="lazy" onerror="this.parentElement.parentElement.classList.add('act-divider--placeholder');this.remove();">
+      </picture>
+      <figcaption>Paris · dusk, 2025</figcaption>
+    </figure>
+
+    <!-- ============================================================
+         ACT V — FIVE YEARS LATER (2025)
+         ============================================================ -->
+    <section class="act-intro" id="act-5" aria-labelledby="act-5-title">
+      <div class="container">
+        <p class="act-num">Act V · 2025</p>
+        <h2 class="act-title" id="act-5-title">Five Years Later</h2>
+        <p class="act-lede">The crisis is over, by the textbook definition. But its fingerprint is on the price level, the wage league, and the political vocabulary of the continent. Two final charts to close the file.</p>
+      </div>
+    </section>
+
+    <!-- Chapter 11 · BumpChart -->
+    <article class="chapter" data-chart="bump">
+      <div class="scroller">
+        <div class="scroller__text">
+          <div class="scroller__step" data-step="0">
+            <div class="step-eyebrow">Rankings</div>
+            <h3>Who was the most expensive country?</h3>
+            <p>Each year we rank the 27 EU countries from most-expensive to least-expensive household electricity. The bump chart shows how those rankings shuffled across the crisis.</p>
+          </div>
+          <div class="scroller__step" data-step="1">
+            <div class="step-eyebrow">Movers</div>
+            <h3>The Czech leap</h3>
+            <p>Czechia jumps from rank 19 in 2019 to rank 6 in 2024 — bigger relative climb than any other country.</p>
+          </div>
+          <div class="scroller__step" data-step="2">
+            <div class="step-eyebrow">Anchors</div>
+            <h3>Some lines stay almost flat</h3>
+            <p>France barely moves. Germany barely moves. Bulgaria barely moves. The crisis re-ranked the middle of the league more than the ends.</p>
+          </div>
+        </div>
+        <figure class="scroller__chart" data-chart-mount="bump" aria-labelledby="chart-11-title">
+          <header>
+            <h3 id="chart-11-title">Country rankings · electricity price 2019 – 2024</h3>
+            <p class="chart-subtitle">Each line is a country. Hover to highlight.</p>
+          </header>
+          <div class="chart-body" id="chart-bump"></div>
+          <p class="chart-source">Source · Eurostat household electricity (nrg_pc_204)</p>
+        </figure>
+      </div>
+    </article>
+
+    <!-- Chapter 12 · BoxPlot -->
+    <article class="chapter" data-chart="boxplot">
+      <div class="scroller">
+        <div class="scroller__text">
+          <div class="scroller__step" data-step="0">
+            <div class="step-eyebrow">Spread</div>
+            <h3>The cheap-to-dear gap, by year</h3>
+            <p>One box per year. The box is the inter-quartile range of country annual inflation rates. The line in the middle is the median. The dots are outliers.</p>
+          </div>
+          <div class="scroller__step" data-step="1">
+            <div class="step-eyebrow">2022</div>
+            <h3>The widest box</h3>
+            <p>The 2022 box is the tallest in the series. The whiskers reach to <strong>+19.4 %</strong> at the top, <strong>+5.9 %</strong> at the bottom — a gap of nearly fourteen percentage points within a single currency union.</p>
+          </div>
+          <div class="scroller__step" data-step="2">
+            <div class="step-eyebrow">2024</div>
+            <h3>The narrowest in three years</h3>
+            <p>The 2024 box is the tightest since 2020 — but its median sits above 2019's, and one dot pokes out from the top. The gap is closing; it has not closed.</p>
+          </div>
+        </div>
+        <figure class="scroller__chart" data-chart-mount="boxplot" aria-labelledby="chart-12-title">
+          <header>
+            <h3 id="chart-12-title">Country-level inflation spread · 2015 – 2024</h3>
+            <p class="chart-subtitle">One box per year, dots for outliers.</p>
+          </header>
+          <div class="chart-body" id="chart-boxplot"></div>
+          <p class="chart-source">Source · Eurostat HICP annual (prc_hicp_aind)</p>
+        </figure>
+      </div>
+    </article>
+
+    <!-- ========== METHODOLOGY ========== -->
+    <section class="section-prose" id="methodology">
+      <div class="container container-prose">
+        <h2>How this was made</h2>
+        <p>All data are pulled directly from the Eurostat JSON API by the Python scripts in <code>preprocessing/</code>. Six tables: harmonised consumer prices (monthly, annual, indexed), household electricity prices, minimum wages, and the house price index. A topojson of EU borders comes from the <code>leakymirror</code> fork of <em>world-atlas</em>. No proprietary sources.</p>
+        <p>The site is hand-written HTML, CSS custom properties, and ES modules. The only run-time dependencies are D3 v7, Scrollama, topojson-client and d3-annotation — all loaded as globals from a CDN. Animations use the lightweight Motion One library plus CSS transitions, with a static fallback wherever <code>prefers-reduced-motion</code> is set.</p>
+        <p>The full rationale for every chart — what question it answers, what alternatives were rejected, what depth criteria it passes — is in <code>docs/chart_rationale/</code>. Source code is at <code>github.com/&lt;handle&gt;/price-of-europe</code>.</p>
+      </div>
+    </section>
+  </main>
+
+  <!-- ========== FOOTER ========== -->
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div>
+          <h4>The Price of Europe</h4>
+          <p>A solo MSc project for the Data Visualization course at the University of Genova, 2025–2026 academic year.</p>
+        </div>
+        <div>
+          <h4>Data</h4>
+          <ul>
+            <li><a href="https://ec.europa.eu/eurostat/data/database">Eurostat database</a></li>
+            <li><a href="https://ec.europa.eu/eurostat/web/hicp">HICP overview</a></li>
+            <li><a href="https://ec.europa.eu/eurostat/web/energy/data/database">Energy prices</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Built with</h4>
+          <ul>
+            <li><a href="https://d3js.org">D3.js v7</a></li>
+            <li><a href="https://github.com/russellgoldenberg/scrollama">Scrollama</a></li>
+            <li><a href="https://motion.dev">Motion One</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="legal">
+        <span>Data © European Union · CC-BY 4.0</span>
+        <span>Code MIT · 2026</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- ========== JAVASCRIPT (deferred, modules) ========== -->
+  <script src="https://d3js.org/d3.v7.min.js" defer></script>
+  <script src="https://unpkg.com/topojson-client@3" defer></script>
+  <script src="https://unpkg.com/d3-svg-annotation@2.5.1/d3-annotation.min.js" defer></script>
+  <script src="https://unpkg.com/scrollama@3.2.0/build/scrollama.min.js" defer></script>
+  <script type="module" src="js/main.js"></script>
 </body>
 </html>
