@@ -52,8 +52,11 @@ async function boot() {
   const heroFwd = document.getElementById("hero-video");
   const heroRev = document.getElementById("hero-video-rev");
   if (heroFwd && heroRev && !motion.reduced) {
+    heroFwd.playbackRate = 0.5;
+    heroRev.playbackRate = 0.5;
     const swap = (hide, show) => {
       show.currentTime = 0;
+      show.playbackRate = 0.5;
       show.dataset.active = "true";
       hide.dataset.active = "false";
       const p = show.play();

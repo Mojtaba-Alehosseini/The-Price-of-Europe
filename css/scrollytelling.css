@@ -102,7 +102,7 @@
   position: relative;
   display: flex; align-items: center; justify-content: center;
 }
-.scroller__chart .chart-body svg.chart-svg { max-block-size: 100%; }
+.scroller__chart .chart-body svg.chart-svg { max-block-size: 100%; inline-size: 100%; }
 .scroller__chart .chart-controls {
   display: flex; gap: var(--space-3); flex-wrap: wrap;
   align-items: center;

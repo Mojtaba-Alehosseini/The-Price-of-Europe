@@ -55,9 +55,12 @@ export class BaseChart {
         .attr("preserveAspectRatio", "xMidYMid meet")
         .attr("role", "img")
         .attr("aria-labelledby", titleId);
-      // Look up the chapter title for a meaningful aria label
+      // Prefer the figure's own h3 (chart title); fall back to first h3 in chapter
+      const figure  = this.container.closest("figure");
       const chapter = this.container.closest(".chapter");
-      const titleText = chapter?.querySelector("h3")?.textContent || "Chart";
+      const titleText = figure?.querySelector("h3")?.textContent
+                     || chapter?.querySelector("h3")?.textContent
+                     || "Chart";
       this.svg.append("title").attr("id", titleId).text(titleText);
       this.g = this.svg.append("g")
         .attr("transform", `translate(${this.opts.margin.left},${this.opts.margin.top})`);

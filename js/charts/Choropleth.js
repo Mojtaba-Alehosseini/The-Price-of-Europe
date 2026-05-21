@@ -47,7 +47,7 @@ function sparkPath(data, w, h) {
 
 export class Choropleth extends BaseChart {
   constructor(sel, data, ctx) {
-    super(sel, data, ctx, { margin: { top: 0, right: 0, bottom: 0, left: 0 }, aspect: 1.05 });
+    super(sel, data, ctx, { margin: { top: 0, right: 0, bottom: 0, left: 0 }, aspect: 0.9 });
     this.controlsEl = document.getElementById("chart-choropleth-controls");
     this.years = (data.yearsCP00 ? data.yearsCP00() : []).filter(y => y >= 2015 && y <= 2025);
     if (!this.years.length) this.years = [2015,2016,2017,2018,2019,2020,2021,2022,2023,2024];
@@ -63,12 +63,33 @@ export class Choropleth extends BaseChart {
           ?? data.hicpAnnual["EU"]?.CP00?.[String(y)]
           ?? this._meanAnnual(y)
     }));
+
+    // Monthly EU average for the timeline line (smoother than annual dots)
+    this._euMonthly = data.monthsCP00()
+      .filter(t => { const y = +t.slice(0, 4); return y >= 2015 && y <= 2025; })
+      .map(t => {
+        const yr = +t.slice(0, 4), mo = +t.slice(5, 7);
+        const v = data.hicpMonthly["EU27_2020"]?.CP00?.[t]
+               ?? data.hicpMonthly["EU"]?.CP00?.[t]
+               ?? this._meanMonthly(t);
+        return v != null ? { time: t, year: yr, timeNum: yr + (mo - 1) / 12, value: v } : null;
+      })
+      .filter(Boolean);
   }
 
   _meanAnnual(year) {
     const vals = [];
     this.data.countriesByCode.forEach((meta, code) => {
       const v = this.data.hicpAnnual[code]?.CP00?.[String(year)];
+      if (Number.isFinite(v)) vals.push(v);
+    });
+    return vals.length ? d3.mean(vals) : null;
+  }
+
+  _meanMonthly(time) {
+    const vals = [];
+    this.data.countriesByCode.forEach((meta, code) => {
+      const v = this.data.hicpMonthly[code]?.CP00?.[time];
       if (Number.isFinite(v)) vals.push(v);
     });
     return vals.length ? d3.mean(vals) : null;
@@ -88,7 +109,7 @@ export class Choropleth extends BaseChart {
       type: "FeatureCollection",
       features: this.featCol.features.filter(d => this.data.countriesByCode.has(this.data.topoToIso(d.id)))
     };
-    const proj = d3.geoMercator().fitExtent([[18, 96], [this.W - 18, this.H - 36]], eu27Feats);
+    const proj = d3.geoMercator().fitExtent([[14, 86], [this.W - 14, this.H - 6]], eu27Feats);
     this.proj = proj;
     this.path = d3.geoPath(proj);
     this.color = d3.scaleLinear()
@@ -105,9 +126,12 @@ export class Choropleth extends BaseChart {
     m.append("feMergeNode").attr("in", "SourceGraphic");
     defs.append("filter").attr("id", "country-desat")
       .append("feColorMatrix").attr("type", "saturate").attr("values", "0.18");
+    defs.append("clipPath").attr("id", "choro-map-clip")
+      .append("rect").attr("x", 0).attr("y", 0).attr("width", this.W).attr("height", this.H);
 
     this.g.attr("transform", null);
     this._cam = { tx: 0, ty: 0, k: 1, side: null };
+    this.svg.classed("is-pannable", true);
 
     // year kicker
     this.kickerG = this.svg.append("g").attr("class", "year-kicker-g").attr("pointer-events", "none");
@@ -120,7 +144,7 @@ export class Choropleth extends BaseChart {
 
     this._renderLegend();
 
-    this.gMap = this.svg.append("g").attr("class", "map-layer");
+    this.gMap = this.svg.append("g").attr("class", "map-layer").attr("clip-path", "url(#choro-map-clip)");
     const graticule = d3.geoGraticule().step([5, 5]);
     this.gMap.append("path").attr("class", "graticule")
       .attr("d", this.path(graticule()))
@@ -155,9 +179,9 @@ export class Choropleth extends BaseChart {
         this._click(d);
       });
 
-    // Scroll-zoom — only intercept wheel when the pointer is over a country.
+    // Scroll-zoom — only intercept wheel when Alt is held, so normal page scrolling is not hijacked.
     this.svg.on("wheel", (event) => {
-      if (!this._mouseInCountry) return;
+      if (!event.altKey) return;
       event.preventDefault();
       const factor = event.deltaY > 0 ? 0.92 : 1.08;
       const t = this._cam || { tx: 0, ty: 0, k: 1 };
@@ -229,21 +253,37 @@ export class Choropleth extends BaseChart {
   }
 
   _renderLegend() {
-    const W = this.W;
-    const stops = [-1, 1.5, 3.5, 7, 12];
-    const sw = 32;
-    const totalW = stops.length * sw;
-    const lg = this.svg.append("g").attr("class", "map-legend")
-      .attr("transform", `translate(${W - 22 - totalW}, 36)`);
-    lg.append("text").attr("x", totalW).attr("y", -10).attr("text-anchor", "end")
-      .attr("class", "legend-title").text("ANNUAL INFLATION %");
-    stops.forEach((s, i) => {
-      lg.append("rect").attr("x", i * sw).attr("y", 0).attr("width", sw).attr("height", 8)
-        .attr("class", "legend-swatch").attr("fill", this.color(s));
-      const lbl = i === 0 ? "< 0" : i === stops.length - 1 ? "≥ 10" : `${stops[i - 1] < 0 ? "0" : stops[i - 1]}–${s}`;
-      lg.append("text").attr("x", i * sw + sw / 2).attr("y", 22)
-        .attr("text-anchor", "middle").attr("class", "legend-tick").text(lbl);
-    });
+    const slot = document.getElementById("choro-legend-slot");
+    const target = slot || this.container;
+    target.querySelectorAll(".choro-legend-html").forEach(el => el.remove());
+
+    // Build CSS gradient matching the color scale domain [-2, 0, 2, 5, 10, 17]
+    const domainPts = [-2, 0, 2, 5, 10, 17];
+    const dMin = domainPts[0], dMax = domainPts[domainPts.length - 1];
+    const toPct = v => ((v - dMin) / (dMax - dMin) * 100).toFixed(1);
+    const gradientStops = domainPts.map(v => `${this.color(v)} ${toPct(v)}%`).join(", ");
+
+    const ticks = [
+      { v: dMin, label: "< 0 %", anchor: "start" },
+      { v: 2,    label: "2 %",   anchor: "center" },
+      { v: 5,    label: "5 %",   anchor: "center" },
+      { v: 10,   label: "10 %",  anchor: "center" },
+      { v: dMax, label: "≥ 15 %", anchor: "end" },
+    ];
+    const tickHtml = ticks.map(t => {
+      const xf = t.anchor === "start" ? "translateX(0)" : t.anchor === "end" ? "translateX(-100%)" : "translateX(-50%)";
+      return `<span class="choro-legend-tick-label" style="left:${toPct(t.v)}%;transform:${xf}">${t.label}</span>`;
+    }).join("");
+
+    const div = document.createElement("div");
+    div.className = "choro-legend-html";
+    div.setAttribute("aria-hidden", "true");
+    div.innerHTML = `
+      <div class="choro-legend-bar-wrap">
+        <div class="choro-legend-bar" style="background:linear-gradient(to right,${gradientStops})"></div>
+        <div class="choro-legend-ticks">${tickHtml}</div>
+      </div>`;
+    target.appendChild(div);
   }
 
   _buildControls() {
@@ -252,14 +292,15 @@ export class Choropleth extends BaseChart {
     this.controlsEl.dataset.wired = "1";
     this.controlsEl.innerHTML = `
       <div class="map-timeline-wrap">
-        <svg class="map-timeline" viewBox="0 0 600 64" preserveAspectRatio="none" aria-hidden="true"></svg>
+        <svg class="map-timeline" viewBox="0 0 600 80" preserveAspectRatio="none" aria-hidden="true"></svg>
         <input type="range" id="chor-slider" class="vis-hidden" min="${this.years[0]}" max="${this.years.at(-1)}" step="1" value="${this.year}" aria-label="Year">
       </div>
       <div class="map-timeline-foot">
         <button class="play-btn" id="chor-play" aria-label="Play timeline" title="Play / pause">
           <span class="play-icon"><svg viewBox="0 0 12 12" width="11" height="11"><path d="M2.5 1.2 L10 6 L2.5 10.8 Z" fill="currentColor"/></svg></span>
         </button>
-        <span class="ctrl-hint">Click anywhere on the timeline · or hit ▶</span>
+        <span class="ctrl-hint">Click timeline or hit ▶</span>
+        <span class="ctrl-src">Source · Eurostat HICP (prc_hicp_manr) · annual rates</span>
       </div>`;
     this.sl = this.controlsEl.querySelector("#chor-slider");
     this.playBtn = this.controlsEl.querySelector("#chor-play");
@@ -276,46 +317,56 @@ export class Choropleth extends BaseChart {
     if (!svgEl) return;
     const svg = d3.select(svgEl);
     svg.selectAll("*").remove();
-    const W = 600, H = 64, padT = 14, padB = 22;
-    const data = this._euAnnual;
+    const W = 600, H = 80, padT = 18, padB = 26;
+    const monthly = this._euMonthly;
     const x = d3.scaleLinear().domain([this.years[0], this.years.at(-1)]).range([10, W - 10]);
-    const yMax = Math.max((d3.max(data, d => d.value || 0) || 12) * 1.08, 12);
+    const yMax = Math.max((d3.max(monthly, d => d.value || 0) || 12) * 1.08, 12);
     const y = d3.scaleLinear().domain([0, yMax]).range([H - padB, padT]);
     this._timeX = x;
+    this._timelineSvg = svg;
+    this._yTimeline = y;
     svg.append("line").attr("class", "tl-target").attr("x1", 0).attr("x2", W).attr("y1", y(2)).attr("y2", y(2));
     svg.append("line").attr("class", "tl-base").attr("x1", 0).attr("x2", W).attr("y1", y(0)).attr("y2", y(0));
-    const area = d3.area().x(d => x(d.year)).y0(y(0)).y1(d => y(d.value || 0)).curve(d3.curveMonotoneX);
-    const line = d3.line().x(d => x(d.year)).y(d => y(d.value || 0)).curve(d3.curveMonotoneX);
-    svg.append("path").attr("class", "tl-area").attr("d", area(data));
-    svg.append("path").attr("class", "tl-line").attr("d", line(data));
-    data.forEach(d => {
-      const isMajor = d.year % 2 === 0 || d.year === this.years.at(-1) || d.year === this.years[0];
+    const area = d3.area().x(d => x(d.timeNum)).y0(y(0)).y1(d => y(d.value || 0)).curve(d3.curveMonotoneX);
+    const line = d3.line().x(d => x(d.timeNum)).y(d => y(d.value || 0)).curve(d3.curveMonotoneX);
+    svg.append("path").attr("class", "tl-area").attr("d", area(monthly));
+    svg.append("path").attr("class", "tl-line").attr("d", line(monthly));
+    this.years.forEach(yr => {
+      const isMajor = yr % 2 === 0 || yr === this.years.at(-1) || yr === this.years[0];
       svg.append("text").attr("class", isMajor ? "tl-tick tl-tick--major" : "tl-tick")
-        .attr("x", x(d.year)).attr("y", H - 4).attr("text-anchor", "middle")
-        .text(isMajor ? d.year : "·");
+        .attr("x", x(yr)).attr("y", H - 4).attr("text-anchor", "middle")
+        .text(isMajor ? yr : "·");
     });
     const ph = svg.append("g").attr("class", "tl-playhead");
-    ph.append("line").attr("class", "tl-playhead-line").attr("y1", padT - 8).attr("y2", H - padB);
-    ph.append("circle").attr("class", "tl-playhead-dot").attr("r", 4.5).attr("cy", H - padB);
-    ph.append("text").attr("class", "tl-playhead-num").attr("y", padT - 14).attr("text-anchor", "middle");
-    ph.append("text").attr("class", "tl-playhead-val").attr("y", padT - 2).attr("text-anchor", "middle");
+    ph.append("line").attr("class", "tl-playhead-line").attr("y1", padT - 12).attr("y2", H - padB);
+    ph.append("circle").attr("class", "tl-playhead-dot").attr("r", 6).attr("cy", H - padB);
+    ph.append("text").attr("class", "tl-playhead-num").attr("y", padT - 17).attr("text-anchor", "middle");
+    ph.append("text").attr("class", "tl-playhead-val").attr("y", padT - 3).attr("text-anchor", "middle");
     this._playhead = ph;
+
+    // Scrub: d3.pointer(e, svgEl) already returns viewBox coords — use directly
     const onScrub = (e) => {
-      const pt = d3.pointer(e, svgEl);
-      const r = svgEl.getBoundingClientRect();
-      const vbX = (pt[0] / r.width) * W;
+      const [vbX] = d3.pointer(e, svgEl);
       const yr = Math.round(Math.max(this.years[0], Math.min(this.years.at(-1), x.invert(vbX))));
+      if (this.playing) this._togglePlay(false);
       if (yr !== this.year) {
-        if (this.playing) this._togglePlay(false);
         const prev = this.year; this.year = yr;
         if (this.sl) this.sl.value = yr;
-        this._animateYearChange(prev); this._updatePlayhead();
+        this._animateYearChange(prev);
       }
+      this._updatePlayhead();
     };
+
+    // Window-level drag so scrubbing works even when mouse leaves the SVG
     let dragging = false;
+    if (this._tlWinMove) window.removeEventListener("mousemove", this._tlWinMove);
+    if (this._tlWinUp)   window.removeEventListener("mouseup",   this._tlWinUp);
+    this._tlWinMove = (e) => { if (dragging) onScrub(e); };
+    this._tlWinUp   = ()  => { dragging = false; };
+    window.addEventListener("mousemove", this._tlWinMove);
+    window.addEventListener("mouseup",   this._tlWinUp);
+
     svg.on("mousedown", (e) => { dragging = true; onScrub(e); });
-    window.addEventListener("mouseup", () => { dragging = false; });
-    svg.on("mousemove", (e) => { if (dragging) onScrub(e); });
     svg.on("click", onScrub);
     svg.style("cursor", "pointer");
     this._updatePlayhead();
@@ -386,6 +437,8 @@ export class Choropleth extends BaseChart {
     this._swapKicker(prevYear, this.year);
     this._renderTopLabels(m);
     this._renderDetail();
+    this._updateCountryLabel();
+    if (this.lockedCode) this._renderMapLabel(this.lockedCode);
   }
 
   _swapKicker(prev, next) {
@@ -564,14 +617,125 @@ export class Choropleth extends BaseChart {
   }
 
   _click(d) {
-    if (!d) { this.lockedCode = null; }
-    else {
+    if (!d) {
+      this.lockedCode = null;
+    } else {
       const iso = this.data.topoToIso(d.id);
-      if (!this.data.countriesByCode.has(iso)) return;
-      this.lockedCode = (this.lockedCode === iso) ? null : iso;
+      if (!this.data.countriesByCode.has(iso)) {
+        // Click on ocean / non-EU country → reset
+        this.lockedCode = null;
+      } else {
+        this.lockedCode = (this.lockedCode === iso) ? null : iso;
+      }
     }
     this._applyFocus();
     this._cameraTo(this.lockedCode || this.focusCode);
+    this._renderCountryLine(this.lockedCode);
+
+    // Label: remove immediately, show after camera settles
+    this.svg.selectAll(".map-country-label-g").remove();
+    clearTimeout(this._labelTimeout);
+    if (this.lockedCode) {
+      const code = this.lockedCode;
+      const delay = !this.ctx.motion.reduced ? 1150 : 0;
+      this._labelTimeout = setTimeout(() => { if (this.lockedCode === code) this._renderMapLabel(code); }, delay);
+    }
+  }
+
+  _renderMapLabel(code) {
+    this.svg.selectAll(".map-country-label-g").remove();
+    if (!code || !this.featCol) return;
+    const featId = this._codeToFeatId(code);
+    const feat = this.featCol.features.find(f => f.id === featId || this.data.topoToIso(f.id) === code);
+    if (!feat) return;
+
+    const v = this.data.hicpAnnual[code]?.CP00?.[String(this.year)];
+    const name = this.data.countryName(code);
+    const valText = v != null ? v.toFixed(1) + " %" : "—";
+    const labelTxt = `${name}  ${valText}`;
+
+    // Project centroid then apply current camera transform
+    const [gx, gy] = this.proj(d3.geoCentroid(feat));
+    const cam = this._cam || { tx: 0, ty: 0, k: 1 };
+    const sx = gx * cam.k + cam.tx;
+    const sy = gy * cam.k + cam.ty;
+    const cx = Math.max(40, Math.min(this.W - 40, sx));
+    const cy = Math.max(20, Math.min(this.H - 20, sy - 18));
+
+    const g = this.svg.append("g").attr("class", "map-country-label-g")
+      .attr("pointer-events", "none")
+      .style("opacity", 0);
+
+    const text = g.append("text").attr("class", "map-country-label")
+      .attr("x", cx).attr("y", cy);
+    text.text(labelTxt);
+
+    try {
+      const bb = text.node().getBBox();
+      const px = 9, py = 5;
+      g.insert("rect", "text").attr("class", "map-country-label-bg")
+        .attr("rx", 4)
+        .attr("x", bb.x - px).attr("y", bb.y - py)
+        .attr("width", bb.width + px * 2).attr("height", bb.height + py * 2);
+    } catch (_) {}
+
+    g.transition("label-in").duration(220).style("opacity", 1);
+  }
+
+  _renderCountryLine(code) {
+    if (!this._timelineSvg) return;
+    const existing = this._timelineSvg.selectAll(".ctr-line-g");
+    if (!code) {
+      this._ctrCode = null;
+      existing.transition("ctr-exit").duration(350).style("opacity", 0)
+        .on("end", function () { d3.select(this).remove(); });
+      return;
+    }
+    existing.remove();
+    this._ctrCode = code;
+
+    const data = this.years.map(yr => ({
+      year: yr,
+      value: this.data.hicpAnnual[code]?.CP00?.[String(yr)] ?? null
+    }));
+    if (!data.some(d => d.value != null)) return;
+
+    const x = this._timeX, y = this._yTimeline;
+    if (!x || !y) return;
+
+    const lineGen = d3.line()
+      .x(d => x(d.year)).y(d => y(d.value))
+      .defined(d => d.value != null)
+      .curve(d3.curveMonotoneX);
+
+    const g = this._timelineSvg.append("g").attr("class", "ctr-line-g");
+    const path = g.append("path").attr("class", "ctr-line")
+      .attr("d", lineGen(data)).attr("fill", "none");
+
+    const L = path.node()?.getTotalLength() || 0;
+    path.attr("stroke-dasharray", `${L} ${L}`).attr("stroke-dashoffset", L)
+      .transition("ctr-draw").duration(900).ease(d3.easeCubicOut)
+      .attr("stroke-dashoffset", 0);
+
+    this._updateCountryLabel();
+  }
+
+  _updateCountryLabel() {
+    if (!this._timelineSvg || !this._ctrCode) return;
+    const g = this._timelineSvg.select(".ctr-line-g");
+    if (g.empty()) return;
+    const x = this._timeX, y = this._yTimeline;
+    if (!x || !y) return;
+    const val = this.data.hicpAnnual[this._ctrCode]?.CP00?.[String(this.year)];
+    g.selectAll(".ctr-label").remove();
+    if (val == null) return;
+    const lx = x(this.year);
+    g.append("text").attr("class", "ctr-label")
+      .attr("x", lx + (lx > 500 ? -5 : 5)).attr("y", y(val) - 5)
+      .attr("text-anchor", lx > 500 ? "end" : "start")
+      .text(`${this.data.countryName(this._ctrCode)} ${val.toFixed(1)}%`)
+      .style("opacity", 0)
+      .transition("ctr-label-in").delay(500).duration(280).style("opacity", 1);
   }
 
   _hover(event, d) {

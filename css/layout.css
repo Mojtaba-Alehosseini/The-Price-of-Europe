@@ -114,14 +114,14 @@
   max-inline-size: 50ch;
   margin-block-start: var(--space-6);
   font-size: var(--fs-500);
-  color: var(--ink-soft);
+  color: var(--ink);
   line-height: var(--lh-normal);
 }
 .hero-meta {
   margin-block-start: var(--space-7);
   display: flex; gap: var(--space-6); flex-wrap: wrap;
   font-size: var(--fs-200);
-  color: var(--ink-faint);
+  color: var(--ink-soft);
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -134,8 +134,8 @@
   block-size: 100%;
   object-fit: cover;
   z-index: -2;
-  opacity: 0.85;
-  filter: saturate(0.92) contrast(1.02);
+  opacity: 0.62;
+  filter: saturate(0.88) brightness(0.72) contrast(1.04);
 }
 /* If video present it sits on top of img, hiding it; if video fails JS hides it */
 .hero video.hero-video { z-index: -2; transition: opacity 0ms; }
@@ -169,22 +169,6 @@
 [data-theme="dark"] .hero canvas#hero-sequence { mix-blend-mode: screen; opacity: 0.45; }
 [data-theme="dark"] .hero img#hero-image { opacity: 0.55; filter: saturate(0.85) brightness(0.7); }
 
-.hero-scroll-cue {
-  position: absolute;
-  inset-inline-start: 50%;
-  inset-block-end: var(--space-7);
-  transform: translateX(-50%);
-  color: var(--ink-faint);
-  font-size: var(--fs-100);
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-}
-.hero-scroll-cue::after {
-  content: ""; display: block;
-  margin: var(--space-3) auto 0;
-  inline-size: 1px; block-size: var(--space-8);
-  background: linear-gradient(to bottom, var(--ink-faint), transparent);
-}
 
 /* ---------- Act intro panel ---------- */
 .act-intro {
