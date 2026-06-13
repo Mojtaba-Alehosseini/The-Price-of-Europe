@@ -435,8 +435,11 @@
         <figure class="scroller__chart" data-chart-mount="stackedArea" aria-labelledby="chart-5-title">
           <header>
             <h3 id="chart-5-title">Composition of headline inflation</h3>
-            <p class="chart-subtitle">Energy + food + services + other, monthly. Estimated contributions that sum to the headline rate — not Eurostat's official decomposition. Toggle absolute % · share · streamgraph.
-              <span class="chart-subtitle__more" data-sa-disclosure>How the estimate works: each category's YoY rate is weighted (energy × 0.30, food × 0.20, services × 0.40) and the four bands are rescaled so they always add up to the official headline (CP00). "Other" is the remaining residual.</span></p>
+            <p class="chart-subtitle">Energy + food + services + other, monthly. Estimated contributions that sum to the headline rate — not Eurostat's official decomposition. Toggle absolute / share / stream.</p>
+            <details class="chart-note">
+              <summary>How the estimate works</summary>
+              <p>Each category's YoY rate is weighted (energy × 0.30, food × 0.20, services × 0.40) and the four bands are rescaled to always add up to the official headline (CP00). “Other” is the remaining residual.</p>
+            </details>
           </header>
           <div class="chart-body" id="chart-stackedArea"></div>
           <div class="chart-controls" id="chart-stackedArea-controls"></div>
@@ -468,7 +471,11 @@
         <figure class="scroller__chart" data-chart-mount="slope" aria-labelledby="chart-6-title">
           <header>
             <h3 id="chart-6-title">Household electricity price, 2019 → 2024</h3>
-            <p class="chart-subtitle">EUR per kWh including taxes · first half (H1) of each year. Robust median across Eurostat consumption bands — a like-for-like band split is not preserved in the published file, so read these as comparable estimates.</p>
+            <p class="chart-subtitle">EUR per kWh including taxes · first half (H1) of each year. Read these as comparable estimates, not a single tariff.</p>
+            <details class="chart-note">
+              <summary>How the figures are derived</summary>
+              <p>A robust median across Eurostat consumption bands. The published file does not preserve a like-for-like band split, so these are comparable estimates rather than one household's exact tariff.</p>
+            </details>
           </header>
           <div class="chart-body" id="chart-slope"></div>
           <p class="chart-source">Source · Eurostat household electricity prices (nrg_pc_204)</p>
@@ -557,7 +564,7 @@
         <figure class="scroller__chart" data-chart-mount="divergingBar" aria-labelledby="chart-8-title">
           <header>
             <h3 id="chart-8-title">Real minimum-wage change · 2019 → 2024</h3>
-            <p class="chart-subtitle">Real Δ = (1 + nominal wage Δ) / (1 + HICP Δ) − 1. Six EU countries excluded — they set wages through collective bargaining, not a statutory minimum: Austria, Cyprus, Denmark, Finland, Italy, Sweden.</p>
+            <p class="chart-subtitle">Real Δ = (1 + nominal wage Δ) / (1 + HICP Δ) − 1 — minimum wage after inflation, across the 21 EU countries with a statutory minimum.</p>
           </header>
           <div class="chart-body" id="chart-divergingBar"></div>
           <p class="chart-source">Source · Eurostat earn_mw_cur + HICP indices</p>
@@ -588,7 +595,7 @@
         <figure class="scroller__chart" data-chart-mount="waffle" aria-labelledby="chart-9-title">
           <header>
             <h3 id="chart-9-title">Purchasing power of €100 since Jan 2019</h3>
-            <p class="chart-subtitle">Each square is €1 of January-2019 money. Solid squares still buy; hatched squares were eroded by inflation. Tap or hover any square — or pick a country and basket below.</p>
+            <p class="chart-subtitle">Each square is €1 of Jan-2019 money — solid still buys, hatched is eroded by inflation. Tap any square, or pick a country and basket below.</p>
           </header>
           <div class="chart-body" id="chart-waffle"></div>
           <div class="chart-controls" id="chart-waffle-controls"></div>
