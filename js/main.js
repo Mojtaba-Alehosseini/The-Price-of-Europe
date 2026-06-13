@@ -5,10 +5,10 @@
 
 import { ThemeManager }    from "./modules/ThemeManager.js";
 import { MotionManager }   from "./modules/MotionManager.js";
-import { DataManager }     from "./modules/DataManager.js";
+import { DataManager }     from "./modules/dataManager.js";
 import { ScrollController }from "./modules/ScrollController.js";
-import { Tooltip }         from "./modules/Tooltip.js";
-import { Navigation }      from "./modules/Navigation.js";
+import { Tooltip }         from "./modules/tooltip.js";
+import { Navigation }      from "./modules/navigation.js";
 import { HeroSequence }    from "./video/heroSequence.js";
 
 import { Choropleth }         from "./charts/Choropleth.js";

@@ -8,7 +8,7 @@
    ============================================================ */
 
 import { BaseChart } from "./BaseChart.js";
-import { KEY_CATEGORIES } from "../modules/DataManager.js";
+import { KEY_CATEGORIES } from "../modules/dataManager.js";
 
 // Focus codes MUST match entries in KEY_CATEGORIES (see DataManager.js).
 // "FOOD" / "SERV" are aggregate codes in Eurostat but KEY_CATEGORIES uses CP01 for food

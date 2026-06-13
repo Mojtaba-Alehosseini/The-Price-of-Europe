@@ -8,7 +8,7 @@
    ============================================================ */
 
 import { BaseChart } from "./BaseChart.js";
-import { KEY_CATEGORIES } from "../modules/DataManager.js";
+import { KEY_CATEGORIES } from "../modules/dataManager.js";
 import { watchChapterProgress, progressBetween } from "../modules/ChartMotion.js";
 
 export class Heatmap extends BaseChart {
