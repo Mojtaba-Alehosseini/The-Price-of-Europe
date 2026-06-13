@@ -14,14 +14,35 @@ export class HeroSequence {
     this.t = 0;
     this.years = [2019, 2020, 2021, 2022, 2023, 2024, 2025];
     this.start = performance.now();
+    this._running = false;
+    this._lastDraw = 0;
+    this._onScreen = false;
     this._resize();
     addEventListener("resize", () => this._resize());
     if (this.motion?.reduced) {
-      this._drawFrame(0);          // static frame
-    } else {
-      requestAnimationFrame(this._tick.bind(this));
+      this._drawFrame(0);          // static frame, no loop
+      return;
     }
+    // [R2 perf] Only animate while the hero canvas is on-screen, capped to ~30fps. A
+    // forever-running 60fps rAF was burning main-thread time (TBT) long after the hero
+    // scrolled away. Also pause when the tab is hidden.
+    this._io = new IntersectionObserver(([e]) => {
+      this._onScreen = !!(e && e.isIntersecting);
+      if (this._onScreen) this._startLoop(); else this._stopLoop();
+    }, { threshold: 0 });
+    this._io.observe(this.canvas);
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) this._stopLoop();
+      else if (this._onScreen) this._startLoop();
+    });
   }
+
+  _startLoop() {
+    if (this._running || this.motion?.reduced || document.hidden) return;
+    this._running = true;
+    requestAnimationFrame(this._tick.bind(this));
+  }
+  _stopLoop() { this._running = false; }
 
   _resize() {
     const dpr = devicePixelRatio || 1;
@@ -90,8 +111,11 @@ export class HeroSequence {
   }
 
   _tick(now) {
-    const elapsed = now - this.start;
-    this._drawFrame(elapsed);
+    if (!this._running) return;
+    if (now - this._lastDraw >= 32) {   // ~30fps cap — the waves are slow; 60fps is wasted work
+      this._drawFrame(now - this.start);
+      this._lastDraw = now;
+    }
     requestAnimationFrame(this._tick.bind(this));
   }
 }

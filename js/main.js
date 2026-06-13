@@ -65,8 +65,20 @@ async function boot() {
     };
     heroFwd.addEventListener("ended", () => swap(heroFwd, heroRev));
     heroRev.addEventListener("ended", () => swap(heroRev, heroFwd));
+    // [R2 perf] Videos are preload="none" with no autoplay; start the ambient loop on the
+    // FIRST user interaction (not idle) so its ~1 MB never downloads during the initial paint —
+    // the 175 KB poster carries the hero until then. Reduced-motion users get the static poster.
+    let started = false;
+    const startHero = () => {
+      if (started) return; started = true;
+      removeEventListener("scroll", startHero); removeEventListener("pointerdown", startHero);
+      const p = heroFwd.play(); if (p && p.catch) p.catch(() => {});
+    };
+    addEventListener("scroll", startHero, { passive: true });
+    addEventListener("pointerdown", startHero);
   } else if (heroFwd && motion.reduced) {
     heroFwd.setAttribute("loop", "");                          // native loop for reduced-motion
+    heroFwd.playbackRate = 0.5;                                // BUG-6 — keep the calmer 0.5x like the default
   }
 
   // 3. data — single Promise.all
@@ -82,24 +94,27 @@ async function boot() {
   }
   ctx.data = data;
 
-  // 4. instantiate charts (do not render yet — scroll controller mounts them)
-  const charts = {
-    choropleth        : new Choropleth        ("#chart-choropleth",        data, ctx),
-    smallMultiples    : new SmallMultiplesLine("#chart-smallMultiples",    data, ctx),
-    annotatedLine     : new AnnotatedLine     ("#chart-annotatedLine",     data, ctx),
-    ridgeline         : new Ridgeline         ("#chart-ridgeline",         data, ctx),
-    stackedArea       : new StackedArea       ("#chart-stackedArea",       data, ctx),
-    slope             : new SlopeChart        ("#chart-slope",             data, ctx),
-    heatmap           : new Heatmap           ("#chart-heatmap",           data, ctx),
-    divergingBar      : new DivergingBar      ("#chart-divergingBar",      data, ctx),
-    waffle            : new WaffleChart       ("#chart-waffle",            data, ctx),
-    connectedScatter  : new ConnectedScatter  ("#chart-connectedScatter",  data, ctx),
-    bump              : new BumpChart         ("#chart-bump",              data, ctx),
-    boxplot           : new BoxPlot           ("#chart-boxplot",           data, ctx),
+  // 4. [R2 perf] Lazy chart construction — factories, not instances. ScrollController
+  //    constructs each chart only when its chapter nears the viewport (after its deferred
+  //    data is ensured), so boot does no per-chart work and the initial paint stays light.
+  const charts = {};   // key -> live instance, filled on mount
+  const chartFactories = {
+    choropleth        : () => new Choropleth        ("#chart-choropleth",        data, ctx),
+    smallMultiples    : () => new SmallMultiplesLine("#chart-smallMultiples",    data, ctx),
+    annotatedLine     : () => new AnnotatedLine     ("#chart-annotatedLine",     data, ctx),
+    ridgeline         : () => new Ridgeline         ("#chart-ridgeline",         data, ctx),
+    stackedArea       : () => new StackedArea       ("#chart-stackedArea",       data, ctx),
+    slope             : () => new SlopeChart        ("#chart-slope",             data, ctx),
+    heatmap           : () => new Heatmap           ("#chart-heatmap",           data, ctx),
+    divergingBar      : () => new DivergingBar      ("#chart-divergingBar",      data, ctx),
+    waffle            : () => new WaffleChart       ("#chart-waffle",            data, ctx),
+    connectedScatter  : () => new ConnectedScatter  ("#chart-connectedScatter",  data, ctx),
+    bump              : () => new BumpChart         ("#chart-bump",              data, ctx),
+    boxplot           : () => new BoxPlot           ("#chart-boxplot",           data, ctx),
   };
 
   // 5. scroll controller wires steps + mounts charts on enter
-  const scroller = new ScrollController(charts, ctx);
+  const scroller = new ScrollController(chartFactories, charts, ctx);
   scroller.init();
 
   // 6. resize observer (single, debounced)

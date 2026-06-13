@@ -4,6 +4,10 @@
    themes update interpolators automatically.
    ============================================================ */
 
+// Read a CSS custom property's value for d3. The seq / cat / surface tokens are stored as hex
+// (NOT oklch) precisely because d3 7.9's colour parser can't read oklch()/color-mix() — it returns
+// null → black in d3 colour scales. getPropertyValue returns the declared value and resolves a
+// nested var() (e.g. --seq-4: var(--accent) → the accent hex), which d3 then parses. See D15.
 const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
 export function readPalette() {

@@ -43,7 +43,7 @@ def main():
 
     if not BAK.exists():
         shutil.copy2(SRC, BAK)
-        print(f"  backup → {BAK.name}")
+        print(f"  backup -> {BAK.name}")
 
     SRC.write_text(json.dumps(slim, separators=(",", ":")))
     print(f"Wrote {SRC} ({SRC.stat().st_size / 1024 / 1024:.1f} MB)")

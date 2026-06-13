@@ -23,6 +23,10 @@
   transition: border-color var(--dur-3) var(--ease-out);
 }
 .site-header[data-scrolled="true"] { border-block-end-color: var(--rule); }
+/* Solid-enough fallback where backdrop-filter is unsupported — keeps the glass nav legible without blur. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .site-header { background: color-mix(in srgb, var(--bg) 94%, transparent); }
+}
 .site-header .container {
   display: flex; align-items: center; justify-content: space-between;
   height: 100%; max-width: var(--w-full);
@@ -190,6 +194,19 @@
   block-size: clamp(40dvh, 60vw, 80dvh);
   overflow: hidden;
   background: var(--bg-sunken);
+  isolation: isolate;              /* self-contained stacking for the photo / scrim / caption layers */
+  content-visibility: auto;        /* skip rendering the heavy full-bleed photo while off-screen */
+  contain-intrinsic-size: auto 600px;   /* size already fixed by block-size, so this is just a fallback — no reflow jump */
+}
+/* Editorial scrim: soft top shade + transparent middle + stronger bottom (gives the photo depth
+   and lets the caption read). Sits above the image (z 1) and below the caption (z 2). */
+.act-divider::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(0,0,0,0.12) 0%, transparent 30%, transparent 58%, rgba(0,0,0,0.40) 100%);
 }
 .act-divider img {
   inline-size: 100%; block-size: 100%;
@@ -201,13 +218,14 @@
 .act-divider[data-in-view="true"] img { transform: scale(1.0); }
 .act-divider figcaption {
   position: absolute;
+  z-index: 2;                      /* above the ::after scrim */
   inset-block-end: var(--space-5);
   inset-inline-start: var(--space-6);
   font-size: var(--fs-100);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--ink-invert);
-  background: rgba(0,0,0,0.45);
+  background: rgba(0,0,0,0.66);   /* [R2·1e] darker scrim → caption clears WCAG AA over any photo */
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-1);
   backdrop-filter: blur(4px);
@@ -280,11 +298,14 @@
 .site-footer .footer-grid p,
 .site-footer .footer-grid li { font-size: var(--fs-200); color: var(--ink-soft); }
 .site-footer ul { list-style: none; padding: 0; }
+/* [R2·1e] Footer "Data/Built with" links used --accent (3.86:1 on cream — fails AA);
+   the AA-safe deep terracotta passes. */
+.site-footer a { color: var(--accent-text); }
 .site-footer .legal {
   border-block-start: 1px solid var(--rule);
   padding-block-start: var(--space-5);
   font-size: var(--fs-100);
-  color: var(--ink-faint);
+  color: var(--ink-soft);
   display: flex; justify-content: space-between; flex-wrap: wrap; gap: var(--space-4);
 }
 

@@ -26,18 +26,22 @@
 
   /* Editorial accent */
   --accent          : #c8553d;     /* terracotta */
+  --accent-text     : #a8432e;     /* [R2·1e] AA-safe deep terracotta (5.3:1 on cream) for small accent text */
   --accent-bright   : #e0664a;
   --accent-soft     : #e6a597;
-  --accent-veil     : rgba(200,85,61,.08);
+  --accent-veil     : color-mix(in srgb, var(--accent) 8%, transparent);
   --link            : #2b6cb0;
   --link-hover      : #1a4480;
 
-  /* Sequential inflation ramp (deflation → extreme) */
-  --seq-1 : #5b8a72;   /* sage    — < 0  to ECB target */
-  --seq-2 : #a9b88a;   /* moss    — near target */
-  --seq-3 : #d4a548;   /* gold    — elevated 3–5 % */
-  --seq-4 : #c8553d;   /* terra   — high 5–10 % */
-  --seq-5 : #7a1f2b;   /* wine    — extreme >10 % */
+  /* Sequential inflation ramp (deflation → extreme) — perceptually evened via oklch reasoning,
+     stored as sRGB hex (oklch source kept in comments). d3 7.9 cannot parse oklch() — it returns
+     null → BLACK in d3 colour scales (this silently broke the Heatmap into accent-or-black); hex
+     is parsed by both d3 and the browser. seq-4 IS the editorial accent (severity-4). See D15. */
+  --seq-1 : #70977a;   /* sage — oklch(.64 .062 152) — < 0 to ECB target */
+  --seq-2 : #9bad71;   /* moss — oklch(.72 .085 122) — near target */
+  --seq-3 : #d2ac48;   /* gold — oklch(.76 .125 88)  — elevated 3–5 % */
+  --seq-4 : var(--accent);   /* terra — high 5–10 % = editorial accent */
+  --seq-5 : #822325;   /* wine — oklch(.41 .130 24)  — extreme >10 % */
   --seq-target : #2b6cb0;  /* ECB 2 % reference */
 
   /* Categorical palette (independent series) */
@@ -50,15 +54,26 @@
   --cat-transport : #b07a3a;
   --cat-other     : #998877;
 
-  /* Event ribbon tints */
-  --event-covid   : rgba(120,120,135,.16);
-  --event-energy  : rgba(200,85,61,.14);
-  --event-policy  : rgba(212,165,72,.16);
-  --event-food    : rgba(91,138,114,.14);
+  /* Event ribbon tints — color-mix-derived so each band tracks its palette source
+     (energy↔accent, policy↔gold seq-3, food↔sage seq-1, covid↔neutral ink-faint). */
+  --event-covid   : color-mix(in srgb, var(--ink-faint) 18%, transparent);
+  --event-energy  : color-mix(in srgb, var(--accent) 14%, transparent);
+  --event-policy  : color-mix(in srgb, var(--seq-3) 16%, transparent);
+  --event-food    : color-mix(in srgb, var(--seq-1) 14%, transparent);
+
+  /* [R2 elevate · chart 03] Country-spread envelope — a NEUTRAL ink wash so the
+     dispersion band reads as context and never competes with the terracotta line
+     (which previously shared the --accent hue). Edge = a faint defined ceiling. */
+  --anno-spread-fill : rgba(24,24,30,.072);
+  --anno-spread-edge : rgba(24,24,30,.20);
+
+  /* [R4·P4] House grey-down level for non-focused marks — the canonical .is-dim opacity, so the
+     terracotta accent stays reserved for the single focused element. Charts adopt it over P5–P12. */
+  --dim-nonfocus : 0.25;
 
   /* Typography stack */
   --font-display  : "Fraunces", "Playfair Display", "Georgia", serif;
-  --font-body     : "Inter", "Source Sans 3", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-body     : "Inter", "Inter Fallback", "Source Sans 3", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono     : "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
 
   /* Type scale (modular 1.250) */
@@ -115,6 +130,15 @@
   --dur-5 : 640ms;
   --dur-6 : 900ms;
 
+  /* Canonical motion vocabulary (house set) — 3 durations × 2 easings, used for global + new
+     motion so everything reads as one system. The granular --dur-1..6 above stay for the per-chart
+     d3 timings tuned in rounds 2–3. Note: our eases are custom curves (built-in CSS eases are weak). */
+  --motion-fast            : var(--dur-2);   /* 180ms — feedback, hovers, small toggles */
+  --motion-base            : var(--dur-3);   /* 280ms — enters/exits, theme + chart-mode transitions */
+  --motion-slow            : var(--dur-5);   /* 640ms — larger reveals, camera moves */
+  --motion-ease            : var(--ease-out);      /* default — enters / exits / UI feedback */
+  --motion-ease-emphasized : var(--ease-in-out);   /* on-screen movement / morphs */
+
   /* Layout widths */
   --w-prose    : 38rem;
   --w-content  : 64rem;
@@ -151,17 +175,18 @@
   --rule-bold       : #4a4854;
 
   --accent          : #e87a5b;
+  --accent-text     : #e87a5b;     /* [R2·1e] bright terracotta is already AA on the warm-dark bg */
   --accent-soft     : #b06148;
-  --accent-veil     : rgba(232,122,91,.10);
+  --accent-veil     : color-mix(in srgb, var(--accent) 10%, transparent);
   --link            : #7fb8ff;
   --link-hover      : #b3d4ff;
 
-  /* Slightly desaturated sequential for dark background */
-  --seq-1 : #6ea688;
-  --seq-2 : #b3c39a;
-  --seq-3 : #e0b85a;
-  --seq-4 : #e87a5b;
-  --seq-5 : #c84257;
+  /* Sequential for dark bg — same hues, lifted L + trimmed C for warm-dark (oklch-evened, stored
+     as hex for d3 7.9 — see D15). seq-4 inherits var(--accent) (the dark terracotta). */
+  --seq-1 : #83b28f;   /* oklch(.72 .072 152) */
+  --seq-2 : #adc17e;   /* oklch(.78 .092 122) */
+  --seq-3 : #e1bc5f;   /* oklch(.81 .120 88)  */
+  --seq-5 : #be4e4f;   /* oklch(.57 .145 22)  */
   --seq-target : #7fb8ff;
 
   --cat-overall   : #f0ece4;
@@ -173,10 +198,15 @@
   --cat-transport : #c89762;
   --cat-other     : #b3a698;
 
-  --event-covid   : rgba(170,170,180,.18);
-  --event-energy  : rgba(232,122,91,.18);
-  --event-policy  : rgba(224,184,90,.18);
-  --event-food    : rgba(110,166,136,.18);
+  --event-covid   : color-mix(in srgb, var(--ink-faint) 30%, transparent);
+  --event-energy  : color-mix(in srgb, var(--accent) 18%, transparent);
+  --event-policy  : color-mix(in srgb, var(--seq-3) 18%, transparent);
+  --event-food    : color-mix(in srgb, var(--seq-1) 18%, transparent);
+
+  /* [R2 elevate · chart 03] On warm-dark, a light ink wash reads as the spread
+     region without the heavy brown smear the old --accent fill produced. */
+  --anno-spread-fill : rgba(240,236,228,.07);
+  --anno-spread-edge : rgba(240,236,228,.22);
 
   --shadow-1 : 0 1px 0 rgba(0,0,0,.3),  0 0 1px rgba(0,0,0,.4);
   --shadow-2 : 0 4px 16px rgba(0,0,0,.5), 0 1px 2px rgba(0,0,0,.4);

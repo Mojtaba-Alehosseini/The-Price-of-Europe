@@ -134,7 +134,7 @@ def process_all():
         recs = eurostat_json_to_records(data)
         if recs:
             df = pd.DataFrame(recs)
-            df = df[df['geo'].isin(EU27+['EA'])]
+            df = df[df['geo'].isin(EU27 + ['EA', 'EU27_2020', 'EA20', 'EA19'])]
             df = df[df['coicop'].isin(COICOP_KEEP)]
             df['year'] = df['time'].str[:4].astype(int)
             df['month'] = df['time'].str[5:].str.lstrip('M').str.lstrip('0').astype(int)
@@ -153,7 +153,7 @@ def process_all():
         recs = eurostat_json_to_records(data)
         if recs:
             df = pd.DataFrame(recs)
-            df = df[df['geo'].isin(EU27+['EA'])]
+            df = df[df['geo'].isin(EU27 + ['EA', 'EU27_2020', 'EA20', 'EA19'])]
             df = df[df['coicop'].isin(COICOP_KEEP)]
             df['year'] = df['time'].str[:4].astype(int)
             df['month'] = df['time'].str[5:].str.lstrip('M').str.lstrip('0').astype(int)

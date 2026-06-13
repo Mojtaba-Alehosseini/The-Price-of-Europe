@@ -32,7 +32,15 @@ export class ThemeManager {
     this.choice = choice;
     try { localStorage.setItem(STORAGE_KEY, choice); } catch (e) { /* ignore */ }
     this.root.dataset.themeChoice = choice;
-    this.applyEffective();
+    // [R4-motion] Cross-fade the theme flip via the View Transitions API when available and motion
+    // is allowed; everywhere else (no support / reduced-motion) apply instantly. The cross-fade
+    // duration is tuned in base.css (::view-transition-old/new → --motion-base).
+    const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (typeof document.startViewTransition === "function" && !reduce) {
+      document.startViewTransition(() => this.applyEffective());
+    } else {
+      this.applyEffective();
+    }
     this.updateToggleUI();
   }
 

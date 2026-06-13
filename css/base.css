@@ -17,52 +17,85 @@ p, h1, h2, h3, h4, h5, h6 { overflow-wrap: break-word; }
 /* Self-hosted variable fonts — fallback to Google CDN load in index.html */
 @font-face {
   font-family: "Fraunces";
-  src: local("Fraunces"), url("../assets/fonts/Fraunces.woff2") format("woff2-variations");
+  /* Web font is served by the Google CDN @font-face in <head>; assets/fonts/ is not bundled,
+     so we keep only local() here to avoid a guaranteed 404 on the missing woff2. */
+  src: local("Fraunces");
   font-weight: 100 900;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
   font-family: "Inter";
-  src: local("Inter"), url("../assets/fonts/Inter.woff2") format("woff2-variations");
+  /* Web font is served by the Google CDN @font-face in <head>; assets/fonts/ is not bundled. */
+  src: local("Inter");
   font-weight: 100 900;
   font-style: normal;
   font-display: swap;
 }
+/* [R2 CLS] Metric-matched fallback: makes local Arial occupy the SAME box as Inter, so when
+   the Inter web-font swaps in there is no reflow — kills the hero layout shift (CLS). */
+@font-face {
+  font-family: "Inter Fallback";
+  src: local("Arial");
+  ascent-override: 90.49%;
+  descent-override: 22.56%;
+  line-gap-override: 0%;
+  size-adjust: 107.06%;
+}
 
 html {
   font-family: var(--font-body);
-  font-size: 17px;
+  font-optical-sizing: auto;
+  font-size: clamp(15.5px, 14.84px + 0.17vw, 17px);   /* fluid root: ~15.5 phone → 16 tablet → 17 desktop */
   line-height: var(--lh-normal);
   color: var(--ink);
   background: var(--bg);
   color-scheme: light dark;
   scroll-behavior: smooth;
   -moz-osx-font-smoothing: grayscale;
-  font-feature-settings: "ss01", "cv11", "tnum" 0;
+  font-feature-settings: "ss01", "cv11";   /* dropped "tnum" 0 — it silently blocked font-variant-numeric on figures */
   transition: background-color var(--dur-3) var(--ease-out),
               color var(--dur-3) var(--ease-out);
 }
 
-@media (max-width: 768px) { html { font-size: 16px; } }
-@media (max-width: 480px) { html { font-size: 15.5px; } }
+/* Root font-size is now fluid via the clamp() above (15.5→17px); the old stepped
+   @media font-size overrides were removed so the whole rem scale interpolates smoothly. */
 
 body {
-  background: var(--bg);
+  background: transparent;   /* html supplies the surface colour; the fixed grain (below) sits between it and the content */
   color: var(--ink);
   min-height: 100dvh;
 }
 
-/* Display headings — Fraunces with optical sizing */
+/* ---------- Paper grain — printed-paper texture, fixed behind content, theme-aware ---------- */
+/* A single inline feTurbulence data-URI (zero assets, zero network). Very low opacity,
+   pointer-events:none. Light = faint dark specks; dark = faint light specks. Static → reduced-motion safe. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.05;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='grain'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.9 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23grain)'/%3E%3C/svg%3E");
+}
+[data-theme="dark"] body::before {
+  opacity: 0.07;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='grain'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.9 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23grain)'/%3E%3C/svg%3E");
+}
+
+/* Display headings — Fraunces; opsz now driven by font-optical-sizing:auto (size-appropriate,
+   so h1 reads more display-like and h4 more text-like); SOFT keeps the editorial roundness. */
 h1, h2, h3, h4 {
   font-family: var(--font-display);
   color: var(--ink);
   font-weight: 600;
   letter-spacing: -0.01em;
   line-height: var(--lh-tight);
-  font-variation-settings: "opsz" 96, "SOFT" 30;
+  font-variation-settings: "SOFT" 30;
+  text-wrap: balance;
 }
-h1 { font-size: clamp(var(--fs-800), 6vw, var(--fs-max)); font-weight: 700; }
+h1 { font-size: clamp(var(--fs-800), 6.5vw, var(--fs-max)); font-weight: 700; }
 h2 { font-size: clamp(var(--fs-700), 4vw, var(--fs-900)); }
 h3 { font-size: var(--fs-600); }
 h4 { font-size: var(--fs-500); }
@@ -76,6 +109,7 @@ p {
   margin-block-end: var(--space-5);
   color: var(--ink-soft);
   font-size: var(--fs-400);
+  text-wrap: pretty;   /* avoids orphans/short last lines in prose */
 }
 p strong { color: var(--ink); font-weight: 600; }
 p em { color: var(--ink); font-style: italic; }
@@ -85,10 +119,12 @@ p em { color: var(--ink); font-style: italic; }
   font-size: var(--fs-500);
   color: var(--ink);
   line-height: var(--lh-normal);
+  text-wrap: pretty;
 }
 
-/* Tabular numerals everywhere in figures */
-.tnum, figure, .num { font-variant-numeric: tabular-nums; }
+/* Tabular numerals on every data-number run — figures (charts + their controls), the
+   singleton tooltip, and the .tnum/.num/.tabular/output utilities. */
+.tnum, .num, .tabular, figure, output, .tooltip { font-variant-numeric: tabular-nums; }
 
 a {
   color: var(--link);
@@ -101,7 +137,7 @@ a:hover { color: var(--link-hover); }
 
 /* Lists */
 ul, ol { padding-inline-start: 1.25em; margin-block-end: var(--space-5); color: var(--ink-soft); }
-li { margin-block-end: var(--space-2); }
+li { margin-block-end: var(--space-2); text-wrap: pretty; }
 
 /* Inline code */
 code, kbd, samp {
@@ -110,6 +146,7 @@ code, kbd, samp {
   background: var(--bg-sunken);
   padding: 1px 6px;
   border-radius: var(--radius-1);
+  font-variant-numeric: tabular-nums;
 }
 
 /* Block quotes — used for editorial pull-quotes */
@@ -122,6 +159,7 @@ blockquote {
   padding-inline-start: var(--space-5);
   margin-block: var(--space-7);
   max-width: var(--w-prose);
+  text-wrap: balance;
 }
 blockquote cite {
   display: block;
@@ -153,6 +191,16 @@ blockquote cite {
     animation-iteration-count: 1 !important;
     transition-duration: 0ms !important;
     scroll-behavior: auto !important;
+  }
+}
+
+/* [R4-motion] Theme-toggle cross-fade via the View Transitions API (ThemeManager wraps the theme
+   flip in document.startViewTransition where supported). Tune the root cross-fade to the house
+   duration; gated to no-preference so reduced-motion users get the instant apply ThemeManager does. */
+@media (prefers-reduced-motion: no-preference) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: var(--motion-base);
   }
 }
 

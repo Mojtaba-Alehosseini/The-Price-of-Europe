@@ -32,7 +32,7 @@
     padding: var(--space-4) var(--space-5);
   }
   .scroller__chart {
-    block-size: 60dvh;
+    block-size: 70dvh;
     padding: var(--space-4);
     border-radius: var(--radius-2);
   }
@@ -41,6 +41,11 @@
 
   .chart .axis text { font-size: 0.72rem; }
   .chart .end-label { font-size: 0.72rem; }
+
+  /* Heatmap → bar morph: on small screens, sparklines + event ticks would crowd. */
+  .chart-svg .spark, .chart-svg .spark-event-tick { display: none; }
+  .chart-svg .flag-glyph { width: 11px; height: 7px; }
+  .chart-svg .country-name { font-size: 11px; }
 
   .act-intro { padding-block: var(--space-9); }
   .act-title { font-size: clamp(var(--fs-700), 9vw, var(--fs-800)); }
@@ -63,15 +68,209 @@
 
   .scroller { gap: var(--space-5); padding-inline: var(--space-4); }
   .scroller__text { gap: 65dvh; }
+  /* [Sweep iter 3] Bump panel height so the map / 8-panel grid has enough
+     vertical space on phone-sized viewports. 55dvh left only ~170px for the
+     chart body once header + controls + source were stacked. */
   .scroller__chart {
-    block-size: 55dvh;
+    block-size: 72dvh;
     padding: var(--space-3);
   }
+  /* Trim the always-on choropleth hint on phone — touch users don't have
+     "alt+scroll", so the hint is misleading anyway. */
+  .choro-header__hint { display: none !important; }
 
   /* Reduce chart label density on tiny screens */
   .chart .axis text { font-size: 0.68rem; }
-  .chart .bump-label, .chart .ridge-label { font-size: 0.68rem; }
+  .chart .ridge-label { font-size: 0.68rem; }
   .chart .end-label { display: none; }   /* hide redundant end labels on phone */
+  /* Choropleth kicker year stays large but extremes get more compact */
+  .chart-svg .year-kicker { font-size: 44px; }
+  .chart-svg .year-kicker-extreme { font-size: 10px; }
+  /* SmallMultiples kicker overrides — written AFTER .year-kicker so this wins
+     CSS-specificity ties (both single-class selectors). Even 38px overflows on
+     a 375px phone for the longest category name. */
+  .chart-svg .sml-kicker-text { font-size: 26px; }
+  .chart-svg .sml-kicker-sub  { font-size: 11px; }
+  /* [Slice 4-6 R1 fix] Chart 5 (StackedArea) subtitle is the longest in the
+     project (proxy-weight disclosure). On phone it wraps to 4 lines + eats
+     ~150 px of sticky-panel height, crushing the chart-body to 245 px (vs
+     420 px viewBox target). Tighter type + line-height claws back ~50 px
+     without truncating the disclosure. */
+  article.chapter[data-chart="stackedArea"] .chart-subtitle {
+    font-size: var(--fs-200);
+    line-height: 1.35;
+  }
+
+  /* [Comp-eval R2] Mobile typography pass for the remaining charts.
+     Pattern matches the chart 1 + 2 mobile passes: kicker smaller, sub smaller,
+     axis labels tighter, legend caps muted. */
+
+  /* Chart 3 — AnnotatedLine */
+  #chart-annotatedLine + * .year-kicker,
+  #chart-annotatedLine svg .year-kicker { font-size: 32px; }
+  #chart-annotatedLine svg .year-kicker-sub { font-size: 10.5px; }
+  /* [R2 elevate] Peak callout shrinks but stays the headline number on phone. */
+  #chart-annotatedLine svg .anno-peak-num { font-size: 28px; }
+  #chart-annotatedLine svg .anno-peak-date { font-size: 9px; }
+  #chart-annotatedLine svg .anno-peak-eyebrow { font-size: 8px; }
+  /* Calm bracket + inline event label get crowded on 390px — drop them; the kicker
+     copy carries the same framing and the line itself is the message. */
+  #chart-annotatedLine svg .anno-calm-g { display: none; }
+  #chart-annotatedLine svg .anno-evt-text { font-size: 11px; }
+  /* [AUDIT 03] On phone the top-right legend duplicated the subtitle and rendered
+     as a sub-8px smear colliding with the peak/band labels. Drop it; the subtitle
+     above the chart already states the unit + aggregate. Mute the band labels too
+     (the bands themselves still carry the colour coding via the kicker copy). */
+  #chart-annotatedLine svg .anno-legend { display: none; }
+  #chart-annotatedLine svg .event-band-label { display: none; }
+
+  /* Chart 4 — Ridgeline */
+  #chart-ridgeline svg .year-kicker { font-size: 32px; }
+  #chart-ridgeline svg .ridge-label { font-size: 9.5px; }
+  #chart-ridgeline svg .ridge-extreme { font-size: 9px; }
+  /* [AUDIT 04] On phone the top-right legend collided with the kicker subtitle
+     in the cramped top-left; the chart subtitle above already discloses the unit
+     + aggregate. Drop the legend and tighten the kicker sub so they stop tangling. */
+  #chart-ridgeline svg .anno-legend { display: none; }
+  #chart-ridgeline svg .year-kicker-sub { font-size: 9.5px; }
+  /* [R2 ELEVATE 04] In the ~330px phone band the 11 ridges stack tight; the
+     extreme-country PLATES + the median tick tangle with the per-row year labels
+     and the ECB line. The phone's job is the SHAPE (narrow 2019 peak vs the wide
+     2022 lurch) + the dot strip; the kicker and the scrolling step text carry the
+     Portugal/Estonia named reads. So suppress the plates on phone (the median
+     mark is already suppressed in JS) — the ridge shape + dots stay uncluttered.
+     Chart-scoped by #chart-ridgeline; no other chart touched. */
+  #chart-ridgeline svg .rdg-extreme { display: none; }
+  #chart-ridgeline svg .rdg-stamp-spread { font-size: 9px; }
+
+  /* Chart 5 — StackedArea */
+  #chart-stackedArea svg .year-kicker { font-size: 30px; }
+  #chart-stackedArea svg .sa-peak-label { font-size: 11px; }
+  /* [AUDIT 05] On phone the top-right unit cap collided with the inline swatch
+     legend + kicker subtitle in the cramped header band. The chart subtitle above
+     already states the unit; drop the in-SVG unit cap and tighten the kicker. */
+  #chart-stackedArea svg .anno-legend { display: none; }
+  #chart-stackedArea svg .year-kicker-sub { font-size: 9.5px; }
+  #chart-stackedArea svg .stacked-legend__text { font-size: 9px; letter-spacing: 0.04em; }
+  /* [R4·P8] The proxy-weight disclosure moved from an always-on desktop paragraph
+     (.chart-subtitle__more) into a collapsed <details class="chart-note"> — tight on every
+     breakpoint by default, one tap to expand. Just tighten this figure's subtitle here so the
+     header steals less panel height on phone. */
+  .scroller__chart[data-chart-mount="stackedArea"] .chart-subtitle {
+    font-size: var(--fs-200); line-height: 1.34;
+  }
+
+  /* Chart 6 — SlopeChart: tiny end-labels + kicker. The in-SVG legend is now
+     removed in JS (it overprinted the kicker sub), so nothing to hide here.
+     Labels are de-collided with leader lines; keep them small but readable. */
+  #chart-slope svg .year-kicker { font-size: 30px; }
+  #chart-slope svg .year-kicker-sub { font-size: 9.5px; }
+  #chart-slope svg .slope-end-label { font-size: 9.5px; }
+  #chart-slope svg .slope-value-pair { font-size: 8.5px; }
+  #chart-slope svg .slope-axis-label { font-size: 8.5px; }
+  #chart-slope svg .slope-y-label { font-size: 8.5px; }
+  #chart-slope svg .slope-dir-key__label { font-size: 8px; letter-spacing: 0.1em; }
+
+  /* Chart 7 — Heatmap. Compact mode (JS, width < 560) swaps to 2-letter ISO
+     row codes + short rotated headers so the 8×27 matrix stays legible on
+     phone instead of crushing to ~6 px rows. */
+  #chart-heatmap svg .year-kicker { font-size: 30px; }
+  #chart-heatmap svg .hm-col-head { font-size: 9px; font-weight: 600; }
+  #chart-heatmap svg .hm-row-label { font-size: 9.5px; font-family: var(--font-mono); letter-spacing: 0.02em; }
+  #chart-heatmap svg .hm-scale-tick { font-size: 8px; }
+  /* On phone the kicker-sub caption + unit label + the two leftmost rotated
+     headers all collide in one ~40 px band. Drop the redundant sub-caption and
+     unit text (the ramp + step copy already say "greens calm / reds bad") so the
+     year kicker, ramp and headers each get clear air. */
+  #chart-heatmap svg .year-kicker-sub { display: none; }
+  #chart-heatmap svg .hm-scale-unit { display: none; }
+  /* [FULL-SITE AUDIT · heatmap] 27 rows need real vertical room. The default
+     72dvh panel + 4-line subtitle left the chart-body only ~189 px, which the
+     viewBox (336×420) then shrank to fit — letterboxing the board to ~150 px
+     wide with ~5 px rows. Give this chapter a taller panel and a tighter,
+     clamped header so the flex body fills ~70 % of the panel (≈ 480 px → ISO
+     rows ~15 px). The SVG size() now matches the box exactly, so no shrink. */
+  .scroller__chart[data-chart-mount="heatmap"] { block-size: 88dvh; }
+  .scroller__chart[data-chart-mount="heatmap"] .chart-subtitle {
+    font-size: 11px;
+    line-height: 1.32;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .scroller__chart[data-chart-mount="heatmap"] .chart-source { font-size: 9.5px; }
+
+  /* [R2·1e] Chart 2 — SmallMultiples: 8 panels must stay legible inside the
+     ~56dvh sticky area that clears the bottom step-dock. The body is 1fr after
+     the header + 2-line subtitle + source (~200px of chrome) — leaving the eight
+     panels only ~34px each (busy, hard to read line shapes). We CANNOT grow the
+     panel past ~56dvh without sliding the bottom rows under the fixed dock, so
+     instead we claw vertical room back from the chrome: clamp the subtitle to one
+     line and tighten the header/source. That lifts the flex body ≈ +80px so each
+     panel gets ~45px — enough to read each curve's shape. Mirrors the heatmap
+     pattern above (chart-scoped, no shared-layout change). */
+  .scroller__chart[data-chart-mount="smallMultiples"] .chart-subtitle {
+    font-size: 11px;
+    line-height: 1.3;
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .scroller__chart[data-chart-mount="smallMultiples"] h3 { font-size: var(--fs-300); }
+  .scroller__chart[data-chart-mount="smallMultiples"] .chart-source { font-size: 9px; }
+
+  /* Chart 8 — DivergingBar: compact header (set in JS) + tighter labels on phone */
+  #chart-divergingBar svg .db-name { font-size: 9px; }
+  #chart-divergingBar svg .db-val { font-size: 9.5px; }
+  #chart-divergingBar svg .db-head-c { font-size: 19px; }
+  #chart-divergingBar svg .db-head-cl { font-size: 10px; }
+
+  /* Chart 9 — Waffle is already square; kicker tightened */
+  #chart-waffle svg .year-kicker { font-size: 44px; }
+
+  /* Chart 10 — ConnectedScatter. The in-SVG kicker is suppressed in JS on phone
+     (it overprinted the HTML header); x-ticks drop to ~4 and the named set to 4.
+     The diagonal's own "break-even" label collides with the top-left country
+     cluster at ~250 px wide — hide it on phone (the step copy + the line itself
+     carry the meaning). */
+  #chart-connectedScatter svg .year-kicker { font-size: 32px; }
+  #chart-connectedScatter svg .cs-end-label { font-size: 9px; }
+  #chart-connectedScatter svg .cs-diagonal-label { display: none; }
+  #chart-connectedScatter svg .cs-axis-label { font-size: 8.5px; }
+
+  /* Chart 11 — BumpChart. On phone the JS switches to rank-number-only gutters
+     and slim margins (see BumpChart._layout) so the 6-year x-span survives. Names
+     are suppressed in rankOnly already; here we tighten the spotlight so the one
+     story line stays self-describing above the step-dock: protagonist name-tags
+     stay (small), the field's are hidden, and the inline rank+name carries it. */
+  #chart-bump svg .year-kicker { font-size: 32px; }
+  #chart-bump svg g.bump:not(.bump--up):not(.bump--down):not(.is-focus) .bump-name { display: none; }
+  #chart-bump svg .bump-name { font-size: 10px; }
+  #chart-bump svg .bump-delta { font-size: 9px; }
+  /* Hint sits right under the kicker; on the slim phone header they overlap, and
+     the kicker copy ("rank 1 = most expensive") already carries the direction. */
+  #chart-bump svg .bump-axis-hint { display: none; }
+
+  /* Chart 12 — BoxPlot */
+  #chart-boxplot svg .year-kicker { font-size: 32px; }
+  #chart-boxplot svg .bp-annotation { font-size: 10px; }
+  /* [R2·12] Shrink the kicker sub-line so the step captions fit the 390px band
+     without clipping at the right edge (chart-scoped — boxplot only). */
+  #chart-boxplot svg .year-kicker-sub { font-size: 11px; }
+  /* [Morph-v2 · Task 9] Mobile overrides for the bar morph layer */
+  .bars-textbox--top { max-inline-size: 90vw; }
+  .bars-textbox__title { font-size: 18px; }
+  .bars-textbox__eyebrow { font-size: 9px; letter-spacing: 0.18em; }
+  /* Note + legend are hidden ≤1100px (see the morph de-crowd block below); on phone the
+     title + the centred EU-27 tag under the zero line carry the deviation framing. Drop the
+     verbose directional cues too — the tag alone is the reference on the narrowest screens. */
+  .choro-bars-svg .bars-axis-dir { display: none; }
+  .choro-bars-svg .bar-spark,
+  .choro-bars-svg .bar-spark-line,
+  .choro-bars-svg .bar-spark-dot,
+  .choro-bars-svg .bar-spark-event { display: none; }
 
   .chart-figure { padding: var(--space-4); }
   .theme-toggle { padding: 2px; }
@@ -110,4 +309,96 @@
 @media (min-width: 1400px) {
   .scroller { gap: var(--space-9); }
   .scroller__step { max-inline-size: 42ch; }
+}
+
+/* ============================================================
+   [FULL-SITE AUDIT · G3 fix] Mobile sticky-graphic scrollytelling.
+   PROBLEM: at <=1024px the single-column .scroller placed .scroller__chart
+   (sticky) AFTER .scroller__text in source order, so on phones/tablets the
+   chart only appeared at the very END of each chapter — the scroll-driven
+   narrative (the whole point of the essay) was invisible on mobile for ALL
+   12 charts. Verified in pixels: phone frames 00-06 showed only text cards.
+   FIX: overlay chart + text in the SAME grid cell so the chart is sticky at
+   the top of the viewport while the text steps scroll over its lower edge —
+   the standard NYT / Pudding mobile pattern. Appended last so it authoritatively
+   overrides the earlier <=1024 / <=768 / <=480 .scroller rules.
+   ============================================================ */
+@media (max-width: 1024px) {
+  .scroller {
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-rows: auto;
+    gap: 0;
+  }
+  .scroller__chart,
+  .scroller__text { grid-column: 1; grid-row: 1; }   /* stack in one cell */
+  .scroller__chart {
+    position: sticky;
+    inset-block-start: calc(var(--header-h) + var(--space-2));
+    block-size: 60dvh;
+    align-self: start;            /* pin to the top of the tall cell */
+    z-index: 1;
+    pointer-events: none;         /* base layer; re-enable interactive children below */
+    padding-block: 0;
+    border-radius: 0;
+  }
+  .scroller__chart > * { pointer-events: auto; }
+  .scroller__text {
+    z-index: 2;
+    align-self: start;
+    /* first step clears the sticky chart; later steps scroll over its lower edge */
+    padding-block-start: 62dvh;
+    padding-block-end: 18dvh;
+    pointer-events: none;         /* let taps fall through the gaps to the chart */
+  }
+  /* [R2 · 1b] Mobile step-docking. Steps stay in-flow as INVISIBLE scroll-spacers (scrollama reads
+     their positions to advance the chart); ScrollController mirrors the ACTIVE step's content into
+     a single fixed bottom DOCK below — so exactly one card shows, pinned beneath the sticky chart,
+     never covering the chart's top (kicker / key marks). One element → no pile-up (round-1's bug). */
+  .scroller__step { opacity: 0 !important; pointer-events: none; }
+}
+.mobile-step-dock { display: none; }
+@media (max-width: 1024px) {
+  .mobile-step-dock {
+    display: block;
+    position: fixed;
+    left: var(--space-4); right: var(--space-4);
+    inset-block-end: var(--space-4);
+    z-index: 40;
+    max-block-size: 44dvh; overflow-y: auto;
+    padding: var(--space-4) var(--space-5);
+    background: var(--bg-elev);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-2);
+    box-shadow: 0 -2px 28px rgba(0, 0, 0, .14);
+    opacity: 0; transform: translateY(14px); pointer-events: none;
+    transition: opacity var(--dur-3, 280ms) var(--ease-out), transform var(--dur-3, 280ms) var(--ease-out);
+  }
+  .mobile-step-dock.is-shown { opacity: 1; transform: none; pointer-events: auto; }
+  .mobile-step-dock .step-eyebrow { display: block; font-size: var(--fs-100); letter-spacing: .18em; text-transform: uppercase; color: var(--accent-text); margin-block-end: var(--space-2); }
+  .mobile-step-dock h3 { font-family: var(--font-display); font-size: var(--fs-400); line-height: var(--lh-snug); margin-block-end: var(--space-2); }
+  .mobile-step-dock p { font-size: var(--fs-300); line-height: var(--lh-relaxed); color: var(--ink-soft); margin: 0; }
+  .mobile-step-dock strong { color: var(--ink); }
+}
+@media (max-width: 480px) {
+  .scroller__chart { block-size: 56dvh; }
+  .scroller__text { padding-block-start: 58dvh; }
+}
+
+/* ============================================================
+   [R2-elevate · choropleth morph de-crowd] At intermediate widths (≤1100px,
+   i.e. small laptops + tablets) the morph's secondary text — the top NOTE line
+   and the top-right LEGEND — crowded the 27 dense bars + sparklines and overlapped
+   them (pixel-confirmed laptop-06 / tablet-06). The title ("…above or below the
+   EU-27 average…"), the centred EU-27 tag and the ←cooler/hotter→ axis cues already
+   carry the deviation framing, so the note + legend are redundant here. Scoped to
+   morph-only classes — no sibling chart uses them. Phone (≤480) already hides these
+   via the earlier block; this fills the 481–1100 gap.
+   ============================================================ */
+@media (max-width: 1100px) {
+  .bars-textbox__note { display: none; }
+  .bars-legend { display: none; }
+  /* The closing prose restates what the bars + title + axis tag already show; bottom-anchored
+     over 27 dense bars it overlapped the lowest rows at these widths (tablet-06). Drop it ≤1100. */
+  .bars-textbox--bottom { display: none; }
 }

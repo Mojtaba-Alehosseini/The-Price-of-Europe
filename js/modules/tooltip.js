@@ -7,6 +7,10 @@ export class Tooltip {
     this.el = document.createElement("div");
     this.el.className = "tooltip";
     this.el.setAttribute("role", "tooltip");
+    // [FULL-SITE AUDIT a11y] The empty tooltip has role="tooltip" with no accessible
+    // name (Lighthouse aria-tooltip-name fail). It's a visual hover aid that duplicates
+    // data already exposed in the chart, so hide it from the a11y tree until shown.
+    this.el.setAttribute("aria-hidden", "true");
     document.body.appendChild(this.el);
     this.visible = false;
   }
@@ -14,6 +18,7 @@ export class Tooltip {
   show(html, x, y) {
     this.el.innerHTML = html;
     this.el.classList.add("visible");
+    this.el.setAttribute("aria-hidden", "false");
     this.visible = true;
     this.move(x, y);
   }
@@ -33,6 +38,7 @@ export class Tooltip {
 
   hide() {
     this.el.classList.remove("visible");
+    this.el.setAttribute("aria-hidden", "true");
     this.visible = false;
   }
 
