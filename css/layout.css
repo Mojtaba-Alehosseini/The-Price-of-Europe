@@ -9,60 +9,41 @@
 .container-wide   { max-width: var(--w-wide); }
 .container-full   { max-width: var(--w-full); }
 
-/* ---------- Header (sticky, glass) ---------- */
+/* ---------- Header — NOT a bar ----------
+   No fixed bar, no background/blur/border. The site name + theme toggle simply sit on the paper at the
+   top of the page in normal flow and scroll away with it. (--header-h is kept only for chart sticky offsets.) */
 .site-header {
-  position: fixed;
-  inset-inline: 0;
-  inset-block-start: 0;
-  height: var(--header-h);
+  position: relative;
   z-index: var(--z-header);
-  background: var(--bg-veil);
-  backdrop-filter: saturate(160%) blur(10px);
-  -webkit-backdrop-filter: saturate(160%) blur(10px);
-  border-block-end: 1px solid transparent;
-  transition: border-color var(--dur-3) var(--ease-out);
 }
-.site-header[data-scrolled="true"] { border-block-end-color: var(--rule); }
-/* Solid-enough fallback where backdrop-filter is unsupported — keeps the glass nav legible without blur. */
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .site-header { background: color-mix(in srgb, var(--bg) 94%, transparent); }
+/* Desktop: float the header (out of flow, no layout height) so the hero pin centres in the FULL viewport
+   and the flower can be large without the in-flow header nudging it down / clipping it at the top. On
+   mobile the header stays in flow — there the disc stacks on top and the header must not overlay it. */
+@media (min-width: 861px) {
+  .site-header { position: absolute; inset-inline: 0; inset-block-start: 0; }
 }
+/* Minimal header — site name centred, theme toggle right (empty 1fr left balances the toggle). */
 .site-header .container {
-  display: flex; align-items: center; justify-content: space-between;
-  height: 100%; max-width: var(--w-full);
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  padding-block: var(--space-4);
+  max-width: var(--w-full);
 }
 .brand {
+  grid-column: 2;
+  justify-self: center;
   font-family: var(--font-display);
   font-weight: 600;
   font-size: var(--fs-400);
   letter-spacing: -0.01em;
   color: var(--ink);
-}
-.brand .brand-mark {
-  display: inline-block;
-  inline-size: 0.75ch;
-  block-size: 0.75ch;
-  background: var(--accent);
-  border-radius: 50%;
-  margin-inline-end: 0.5ch;
-  vertical-align: 0.05em;
-}
-.nav-pills { display: flex; gap: var(--space-2); align-items: center; }
-.nav-pills a {
-  font-size: var(--fs-200);
-  color: var(--ink-soft);
-  padding: var(--space-1) var(--space-3);
-  border-radius: 999px;
   text-decoration: none;
-  transition: background-color var(--dur-2) var(--ease-out), color var(--dur-2) var(--ease-out);
 }
-.nav-pills a:hover, .nav-pills a[aria-current="true"] {
-  background: var(--bg-sunken);
-  color: var(--ink);
-}
-
 /* Theme toggle */
 .theme-toggle {
+  grid-column: 3;
+  justify-self: end;
   display: inline-flex; gap: 2px; align-items: center;
   padding: 3px;
   background: var(--bg-sunken);
@@ -84,188 +65,227 @@
 }
 .theme-toggle svg { inline-size: 14px; block-size: 14px; }
 
-/* ---------- Hero ---------- */
+/* ---------- Hero — "a coin made of coins": 100 × €1 = €100 of Jan 2019 (owner STEP-1) ----------
+   Asymmetric editorial split: the finding text sits LEFT, the sunflower disc of 100 real €1-coin
+   images sits RIGHT (~two-thirds). The section is a tall track; the inner .hero__pin is sticky, so
+   the PAGE DOES NOT MOVE while the reader scrolls — Hero.js scrubs the count €100→€77 and drifts the
+   outer 23 coins out. On phone the disc stacks ON TOP, the text below (flex column-reverse). */
 .hero {
   position: relative;
-  padding-block: clamp(var(--space-10), 14vh, var(--space-12));
-  padding-block-end: var(--space-11);
-  min-block-size: 92dvh;
-  display: flex; align-items: center;
+  height: 300vh;                 /* ~2 screens of scroll across the 7 year-stops (2019→2025) */
+  margin: 0;
+}
+.hero__pin {
+  position: sticky;
+  inset-block-start: 0;
+  block-size: 100vh; block-size: 100dvh;
+  display: flex; align-items: center; justify-content: center;
+  gap: clamp(var(--space-5), 6vw, var(--space-10));
+  padding-inline: clamp(var(--space-5), 7vw, var(--space-11));
+  padding-block: var(--space-6);
   overflow: hidden;
-  isolation: isolate;
 }
-.hero .container { max-width: var(--w-wide); }
-.hero-kicker {
-  font-family: var(--font-body);
-  font-size: var(--fs-200);
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--accent);
-  margin-block-end: var(--space-4);
+/* LEFT — the finding text: eyebrow, struck €100, big upright counting number, label, scroll cue. */
+.hero__text {
+  flex: 1 1 30%;
+  max-inline-size: 42ch;
+  min-inline-size: 0;
+  display: flex; flex-direction: column; align-items: flex-start;
+  gap: var(--space-2);
+  text-align: start;
 }
-.hero h1 {
-  max-inline-size: 18ch;
-  font-size: clamp(var(--fs-800), 7vw, var(--fs-max));
+.hero__big { margin: 0; line-height: 1; }
+#hero-bignum {
+  font-family: var(--font-display);
+  font-style: normal;                 /* UPRIGHT — owner override, not faint italic */
   font-weight: 700;
-  font-variation-settings: "opsz" 144, "SOFT" 40;
-}
-.hero h1 em {
-  font-style: italic;
+  font-size: clamp(64px, 9vw, 116px);
+  line-height: 1;
+  letter-spacing: -0.015em;
   color: var(--accent);
-  font-variation-settings: "opsz" 144, "SOFT" 80;
+  font-variant-numeric: tabular-nums;
+  display: inline-block;
 }
-.hero-sub {
-  max-inline-size: 50ch;
-  margin-block-start: var(--space-6);
-  font-size: var(--fs-500);
-  color: var(--ink);
-  line-height: var(--lh-normal);
+/* Lead-in above the number, and the synced YEAR below — together "€100 of 2019 is worth €X in {year}". */
+.hero__lead {
+  font-family: var(--font-ui); font-size: var(--fs-300); color: var(--ink-soft);
+  margin: 0; max-inline-size: 30ch;
 }
-.hero-meta {
-  margin-block-start: var(--space-7);
-  display: flex; gap: var(--space-6); flex-wrap: wrap;
+.hero__year {
+  font-family: var(--font-ui); font-size: var(--fs-400); color: var(--ink-soft); margin: 0;
+}
+.hero__year span { font-weight: 600; color: var(--ink-strong); font-variant-numeric: tabular-nums; }
+/* RIGHT — the disc: a square box holding 100 absolutely-positioned €1-coin <img> tiles (Hero.js). */
+.hero__stage {
+  flex: 1 1 64%; margin: 0;
+  display: flex; justify-content: center; align-items: center;
+  min-inline-size: 0;
+}
+.hero-coins {
+  position: relative;
+  inline-size: min(100%, 92vh, 960px);
+  aspect-ratio: 1 / 1;
+  margin: 0;
+}
+.hero-coin {
+  position: absolute;
+  border-radius: 50%;                 /* clip the coin image to a clean circle */
+  object-fit: cover;
+  transform: translate(-50%, -50%);
+  /* Coins snap to a year-stop (Hero.js); THIS transition IS the drift-out animation, so its duration
+     sets how slowly coins glide away as each year ticks. base.css zeroes it under prefers-reduced-motion. */
+  transition: transform 1100ms var(--ease-out), opacity 1100ms var(--ease-out);
+  will-change: transform, opacity;
+  -webkit-user-drag: none;
+  filter: drop-shadow(0 1px 1.5px rgba(60,42,12,.30));
+}
+
+/* Phone / narrow — stack with the DISC ON TOP, text below (column-reverse: figure is 2nd in the DOM). */
+@media (max-width: 860px) {
+  .hero__pin { flex-direction: column-reverse; gap: var(--space-6); }
+  .hero__text { flex-basis: auto; max-inline-size: 100%; align-items: center; text-align: center; }
+  .hero__lead { max-inline-size: 32ch; }
+  .hero__stage { flex-basis: auto; }
+  .hero-coins { inline-size: min(90vw, 56vh, 540px); }
+}
+
+/* Reduced-motion (or .hero--static set by Hero.js): no pin, no dead scroll track — one static
+   screen at the resolved end-state (EUR77, rim already drifted out). */
+.hero--static { height: auto; min-block-size: 100vh; }
+.hero--static .hero__pin { position: static; block-size: auto; min-block-size: 100vh; }
+@media (prefers-reduced-motion: reduce) {
+  .hero { height: auto; min-block-size: 100vh; }
+  .hero__pin { position: static; block-size: auto; min-block-size: 100vh; }
+}
+
+/* Perf (owner STEP-1) — keep the footer (below the fold, static) out of the initial render budget.
+   Scoped to the footer only; chart chapters need live getBoundingClientRect sizing + scroll motion. */
+.site-footer { content-visibility: auto; contain-intrinsic-size: 0 420px; }
+
+/* Standfirst byline (lives below the hero, inside #story) */
+.standfirst-byline {
+  font-family: var(--font-ui);
   font-size: var(--fs-200);
   color: var(--ink-soft);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  line-height: var(--lh-snug);
+  border-block-start: 1px solid var(--rule);
+  padding-block-start: var(--space-3);
+  margin-block-start: var(--space-6);
+  max-inline-size: var(--w-prose);
 }
-.hero-meta strong { color: var(--ink); font-weight: 600; }
-.hero video.hero-video,
-.hero img#hero-image {
-  position: absolute;
-  inset: 0;
-  inline-size: 100%;
-  block-size: 100%;
-  object-fit: cover;
-  z-index: -2;
-  opacity: 0.62;
-  filter: saturate(0.88) brightness(0.72) contrast(1.04);
-}
-/* If video present it sits on top of img, hiding it; if video fails JS hides it */
-.hero video.hero-video { z-index: -2; transition: opacity 0ms; }
-.hero video.hero-video[data-active="false"] { opacity: 0; pointer-events: none; }
-.hero img#hero-image { z-index: -3; }
+.standfirst-byline b { color: var(--ink); font-weight: 600; }
+.standfirst-byline .standfirst-src { display: block; color: var(--ink-faint); font-size: var(--fs-100); margin-block-start: var(--space-2); }
 
+/* About section (right after the hero) — centred credit block + one short inflation paragraph (owner review PART C). */
+.section-about { text-align: center; }
+.about-credit { margin-block: var(--space-7) var(--space-7); }
+.about-credit__by {                       /* minimal — not big/bold (owner request) */
+  font-family: var(--font-ui); font-weight: 500; font-size: var(--fs-300);
+  color: var(--ink); letter-spacing: 0; margin: 0;
+}
+.about-credit__role {
+  font-family: var(--font-ui); font-size: var(--fs-200); color: var(--ink-soft);
+  margin: var(--space-1) 0 0;
+}
+.about-credit__meta {
+  font-family: var(--font-ui); font-size: var(--fs-200); color: var(--ink-soft);
+  margin: var(--space-1) 0 0;
+}
+.about-credit__logo {
+  display: block; margin: var(--space-5) auto 0;
+  inline-size: clamp(190px, 24vw, 280px); block-size: auto;   /* transparent SVG — no frame; real proportions */
+}
+.about-lede {
+  font-family: var(--font-body); font-size: var(--fs-400); color: var(--ink);
+  line-height: var(--lh-relaxed); max-inline-size: 56ch; margin-inline: auto; text-wrap: pretty;
+}
+
+/* Reveal-on-scroll (owner request) — credit lines + logo + lede fade/rise in when scrolled into view.
+   A generic IntersectionObserver in main.js adds .is-in. Reduced-motion: shown immediately, no transition. */
+.reveal-up {
+  opacity: 0; transform: translateY(18px);
+  transition: opacity var(--dur-5) var(--ease-out), transform var(--dur-5) var(--ease-out);
+}
+.reveal-up.is-in { opacity: 1; transform: none; }
+.about-credit .reveal-up:nth-child(2) { transition-delay: 90ms; }
+.about-credit .reveal-up:nth-child(3) { transition-delay: 180ms; }
+.about-credit .reveal-up:nth-child(4) { transition-delay: 270ms; }
 @media (prefers-reduced-motion: reduce) {
-  .hero video.hero-video { display: none; }
+  .reveal-up { opacity: 1; transform: none; transition: none; }
 }
-@media (prefers-reduced-data: reduce) {
-  .hero video.hero-video { display: none; }
+
+/* Very short screens — keep the pinned disc + number within one viewport. */
+@media (max-height: 640px) {
+  .hero-coins { inline-size: min(52vh, 80vw, 420px); }
+  #hero-bignum { font-size: clamp(40px, 7vw, 64px); }
+  .hero__pin { gap: var(--space-4); }
 }
-.hero::after {
-  /* readable gradient over photo */
-  content: "";
-  position: absolute; inset: 0; z-index: -1;
-  background:
-    linear-gradient(180deg, var(--bg) 0%, transparent 22%, transparent 70%, var(--bg) 100%),
-    linear-gradient(90deg, var(--bg) 0%, transparent 45%, transparent 100%);
-}
-.hero canvas#hero-sequence {
-  position: absolute;
-  inset: 0;
-  inline-size: 100%;
-  block-size: 100%;
-  z-index: -1;
-  opacity: 0.32;
-  mix-blend-mode: multiply;
-  mask-image: radial-gradient(closest-side at 70% 50%, #000 30%, transparent 90%);
-}
-[data-theme="dark"] .hero canvas#hero-sequence { mix-blend-mode: screen; opacity: 0.45; }
-[data-theme="dark"] .hero img#hero-image { opacity: 0.55; filter: saturate(0.85) brightness(0.7); }
 
 
-/* ---------- Act intro panel ---------- */
-.act-intro {
-  position: relative;
-  padding-block: var(--space-12);
-  isolation: isolate;
-}
-.act-intro::before {
-  content: "";
-  position: absolute; inset: 0; z-index: -1;
-  background: linear-gradient(180deg, transparent 0%, var(--bg-sunken) 50%, transparent 100%);
-}
-.act-intro .container { max-width: var(--w-content); position: relative; }
-
-/* Photographic divider (placeholder until images generated) */
+/* ---------- Act divider — the coin-glyph "page turn" (MASTER-PLAN PART 8.11/8.12) ----------
+   Replaces the retired photographic dividers + act-intro panels. One hand-made world: the hero's
+   coin, aging (tarnishing) act by act, on the paper ground. Inline SVG only — zero image bytes. */
 .act-divider {
   position: relative;
-  margin-block: 0;
-  block-size: clamp(40dvh, 60vw, 80dvh);
-  overflow: hidden;
-  background: var(--bg-sunken);
-  isolation: isolate;              /* self-contained stacking for the photo / scrim / caption layers */
-  content-visibility: auto;        /* skip rendering the heavy full-bleed photo while off-screen */
-  contain-intrinsic-size: auto 600px;   /* size already fixed by block-size, so this is just a fallback — no reflow jump */
-}
-/* Editorial scrim: soft top shade + transparent middle + stronger bottom (gives the photo depth
-   and lets the caption read). Sits above the image (z 1) and below the caption (z 2). */
-.act-divider::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  pointer-events: none;
-  background: linear-gradient(180deg, rgba(0,0,0,0.12) 0%, transparent 30%, transparent 58%, rgba(0,0,0,0.40) 100%);
-}
-.act-divider img {
-  inline-size: 100%; block-size: 100%;
-  object-fit: cover;
-  filter: saturate(0.9) contrast(1.02);
-  transform: scale(1.02);
-  transition: transform var(--dur-6) var(--ease-out);
-}
-.act-divider[data-in-view="true"] img { transform: scale(1.0); }
-.act-divider figcaption {
-  position: absolute;
-  z-index: 2;                      /* above the ::after scrim */
-  inset-block-end: var(--space-5);
-  inset-inline-start: var(--space-6);
-  font-size: var(--fs-100);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--ink-invert);
-  background: rgba(0,0,0,0.66);   /* [R2·1e] darker scrim → caption clears WCAG AA over any photo */
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-1);
-  backdrop-filter: blur(4px);
-}
-.act-divider--placeholder {
-  display: grid; place-items: center;
-  background: repeating-linear-gradient(
-    45deg,
-    var(--bg-sunken) 0px, var(--bg-sunken) 12px,
-    var(--rule-soft) 12px, var(--rule-soft) 24px
-  );
-  color: var(--ink-faint);
-}
-.act-divider--placeholder p {
-  font-family: var(--font-display);
-  font-size: var(--fs-300);
-  color: var(--ink-faint);
-  max-inline-size: 30ch;
+  min-block-size: clamp(52dvh, 64vh, 72dvh);
+  display: grid;
+  place-items: center;
   text-align: center;
-  background: var(--bg-elev);
-  padding: var(--space-4) var(--space-6);
-  border-radius: var(--radius-2);
+  padding-block: var(--space-10);
+  border-block: 1px solid var(--rule-soft);
+  isolation: isolate;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 600px;
 }
+/* Very low-opacity per-act severity wash — the era breathing behind the coin (kept subtle). */
+.act-divider::before {
+  content: "";
+  position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background: var(--act-wash, transparent);
+}
+.act-divider--2 { --act-wash: radial-gradient(58% 78% at 50% 42%, var(--event-energy), transparent 74%); }
+.act-divider--3 { --act-wash: radial-gradient(60% 80% at 50% 42%, var(--event-energy), transparent 72%); }
+.act-divider--4 { --act-wash: radial-gradient(58% 78% at 50% 42%, var(--event-policy), transparent 76%); }
+.act-divider--5 { --act-wash: radial-gradient(56% 76% at 50% 42%, var(--event-policy), transparent 78%); }
+.act-divider__inner {
+  display: flex; flex-direction: column; align-items: center;
+  gap: var(--space-4);
+  max-inline-size: 54ch;
+  padding-inline: var(--space-5);
+}
+.act-divider__coin {
+  inline-size: clamp(112px, 13vw, 152px);
+  aspect-ratio: 1;
+  margin-block-end: var(--space-3);
+  opacity: 0;
+  transform: scale(0.92);
+  transition: opacity var(--motion-slow) var(--ease-emphasized),
+              transform var(--motion-slow) var(--ease-emphasized);
+}
+.act-divider[data-in-view="true"] .act-divider__coin { opacity: 1; transform: scale(1); }
+.act-divider__coin svg { inline-size: 100%; height: auto; display: block; overflow: visible; }
+@media (prefers-reduced-motion: reduce) {
+  .act-divider__coin { opacity: 1; transform: none; transition: none; }
+}
+
 .act-num {
-  font-family: var(--font-display);
+  font-family: var(--font-ui);
   font-size: var(--fs-100);
-  letter-spacing: 0.4em;
+  font-weight: 600;
+  letter-spacing: 0.28em;
   text-transform: uppercase;
   color: var(--accent);
-  font-feature-settings: "smcp";
+  margin: 0;
 }
 .act-title {
   font-size: clamp(var(--fs-700), 5vw, var(--fs-900));
-  margin-block-start: var(--space-4);
-  margin-block-end: var(--space-6);
+  margin: 0;
 }
 .act-lede {
-  font-size: var(--fs-500);
+  font-size: var(--fs-400);
   color: var(--ink-soft);
-  max-inline-size: 56ch;
+  max-inline-size: 46ch;
+  margin: 0;
 }
 
 /* ---------- Generic prose section ---------- */
@@ -347,8 +367,7 @@
   font-size: clamp(var(--fs-800), 5vw, var(--fs-max));
   font-weight: 600;
   letter-spacing: -0.02em;
-  color: var(--ink);
-  font-variation-settings: "opsz" 144;
+  color: var(--ink-strong);
 }
 .stat .num.up   { color: var(--seq-4); }
 .stat .num.down { color: var(--seq-1); }
@@ -371,5 +390,4 @@
   font-size: clamp(var(--fs-600), 3.4vw, var(--fs-800));
   font-style: italic;
   color: var(--ink);
-  font-variation-settings: "opsz" 96, "SOFT" 60;
 }

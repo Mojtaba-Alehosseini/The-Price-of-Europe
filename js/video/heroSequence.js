@@ -98,12 +98,12 @@ export class HeroSequence {
     const year = this.years[yi];
 
     c.fillStyle = col.faint;
-    c.font = `500 0.78rem "Inter", system-ui`;
+    c.font = `500 0.78rem "Schibsted Grotesk", system-ui`;
     c.textAlign = "right";
     c.fillText("2019 — 2025", w - 24, 28);
 
     c.fillStyle = col.ink;
-    c.font = `600 clamp(48px, 8vw, 110px) "Fraunces", serif`;
+    c.font = `600 clamp(48px, 8vw, 110px) "Source Serif 4", serif`;
     c.textAlign = "right";
     c.globalAlpha = 0.10;
     c.fillText(String(year), w - 18, h - 28);

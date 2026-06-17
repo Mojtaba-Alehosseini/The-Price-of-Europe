@@ -107,6 +107,16 @@ export class WaffleChart extends BaseChart {
     hatch.append("rect").attr("class", "waffle-hatch-bg").attr("width", 5).attr("height", 5);
     hatch.append("line").attr("class", "waffle-hatch-line")
       .attr("x1", 0).attr("y1", 0).attr("x2", 0).attr("y2", 5);
+    // [R5·P12] "Sphere treatment" for survivor cells (PART 8.8) — a per-cell radial gradient so
+    // each surviving euro reads as a lit, slightly-domed tile. Stays a SQUARE (DESIGN-REVIEW #16:
+    // the coin trick belongs to the hero; this is the analytical register). Resolved to HEX
+    // (d3.rgb brighter/darker) so no oklch()/color-mix reaches d3 (D15-safe).
+    const accHex = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#990F3D";
+    const sgrad = defs.append("radialGradient").attr("id", "waffle-survivor-grad")
+      .attr("cx", "38%").attr("cy", "34%").attr("r", "72%");
+    sgrad.append("stop").attr("offset", "0%").attr("stop-color", d3.rgb(accHex).brighter(0.6));
+    sgrad.append("stop").attr("offset", "62%").attr("stop-color", accHex);
+    sgrad.append("stop").attr("offset", "100%").attr("stop-color", d3.rgb(accHex).darker(0.7));
 
     // ---- hero block: kicker + accent loss-delta + stamp sentence -----
     this.hero = this.g.append("g").attr("class", "waffle-hero").attr("pointer-events", "none");
@@ -213,11 +223,11 @@ export class WaffleChart extends BaseChart {
     const fillN = euro == null ? 0 : Math.round(euro);
     const lostN = 100 - fillN;
 
-    // palette read at draw time (tokens only). Survivors hold the chart's
-    // signature terracotta; severity is encoded by HOW MANY cells erode, so we
-    // keep the accent constant (accent restraint) rather than ramping fills.
+    // palette read at draw time (tokens only). Survivors hold the chart's signature terracotta —
+    // now as the lit radial "sphere treatment" (waffle-survivor-grad); severity is encoded by HOW
+    // MANY cells erode, so the accent stays constant (accent restraint) rather than ramping fills.
     const css = getComputedStyle(document.documentElement);
-    const onCol = css.getPropertyValue("--accent").trim();
+    const onFill = "url(#waffle-survivor-grad)";
 
     // mark cells on/off against the NEW waterline
     this.cellSel.each(function (d) { d._on = d.idx < fillN; });
@@ -226,7 +236,7 @@ export class WaffleChart extends BaseChart {
     const waterline = fillN;   // cells crossing this line animate
     const sz = this._geo.size;
 
-    const applyOn  = (sel) => sel.attr("class", "waffle-cell waffle-cell--on").style("fill", onCol).attr("fill", onCol);
+    const applyOn  = (sel) => sel.attr("class", "waffle-cell waffle-cell--on").style("fill", onFill).attr("fill", onFill);
     const applyOff = (sel) => sel.attr("class", "waffle-cell waffle-cell--off").style("fill", null).attr("fill", "url(#waffle-erode-hatch)");
 
     if (firstPaint && this._firstReveal && !reduced) {

@@ -423,6 +423,7 @@ export class Choropleth extends BaseChart {
     this.controlsEl.innerHTML = `
       <div class="map-timeline-wrap">
         <svg class="map-timeline" viewBox="0 0 600 80" preserveAspectRatio="none" aria-hidden="true"></svg>
+        <div class="map-timeline-years" aria-hidden="true"></div>
         <input type="range" id="chor-slider" class="vis-hidden" min="${this.years[0]}" max="${this.years.at(-1)}" step="1" value="${this.year}" aria-label="Year">
       </div>
       <div class="map-timeline-foot">
@@ -437,7 +438,6 @@ export class Choropleth extends BaseChart {
             <svg viewBox="0 0 14 14" width="12" height="12" aria-hidden="true"><path d="M3 7 H11 M7 3 V11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/></svg>
           </button>
         </span>
-        <span class="ctrl-hint">Click timeline or hit ▶</span>
         <span class="ctrl-src">Source · Eurostat HICP (prc_hicp_manr) · annual rates</span>
       </div>`;
     this.sl = this.controlsEl.querySelector("#chor-slider");
@@ -492,12 +492,16 @@ export class Choropleth extends BaseChart {
     const line = d3.line().x(d => x(d.timeNum)).y(d => y(d.value || 0)).curve(d3.curveMonotoneX);
     svg.append("path").attr("class", "tl-area").attr("d", area(monthly));
     svg.append("path").attr("class", "tl-line").attr("d", line(monthly));
-    this.years.forEach(yr => {
-      const isMajor = yr % 2 === 0 || yr === this.years.at(-1) || yr === this.years[0];
-      svg.append("text").attr("class", isMajor ? "tl-tick tl-tick--major" : "tl-tick")
-        .attr("x", x(yr)).attr("y", H - 4).attr("text-anchor", "middle")
-        .text(isMajor ? yr : "·");
-    });
+    // [owner review D1] Year labels are HTML (positioned by %), NOT stretched SVG <text>: the
+    // timeline SVG uses preserveAspectRatio="none", which squished/distorted SVG text. HTML stays crisp.
+    const yearsDiv = this.controlsEl && this.controlsEl.querySelector(".map-timeline-years");
+    if (yearsDiv) {
+      yearsDiv.innerHTML = this.years.map(yr => {
+        const isMajor = yr % 2 === 0 || yr === this.years.at(-1) || yr === this.years[0];
+        const left = (x(yr) / W * 100).toFixed(2);
+        return `<span class="map-timeline-year${isMajor ? " map-timeline-year--major" : ""}" style="left:${left}%">${isMajor ? yr : "·"}</span>`;
+      }).join("");
+    }
     const ph = svg.append("g").attr("class", "tl-playhead");
     ph.append("line").attr("class", "tl-playhead-line").attr("y1", padT - 12).attr("y2", H - padB);
     ph.append("circle").attr("class", "tl-playhead-dot").attr("r", 6).attr("cy", H - padB);
@@ -1250,6 +1254,9 @@ export class Choropleth extends BaseChart {
     ) ?? 25;
 
     const monthsFrom2019 = months.filter(t => t >= start && t <= latest);
+    // [owner review D1 4b] EU-27 index series over the same months — overlaid on the hover mini-chart.
+    const euIdxSeries = data.hicpIndex[eu]?.CP00 || data.hicpIndex["EA"]?.CP00 || {};
+    const euSeries = monthsFrom2019.map(t => euIdxSeries[t] ?? null);
     const codes = data.euCodes();
     const barRows = codes.map(code => {
       const iso = data.topoToIso(code).toLowerCase();
@@ -1264,7 +1271,7 @@ export class Choropleth extends BaseChart {
     }).filter(r => Number.isFinite(r.cumPct));
     barRows.sort((a, b) => (b.cumPct - euVal) - (a.cumPct - euVal));
 
-    const xExt = Math.max(1, d3.max(barRows, r => Math.abs(r.cumPct - euVal)) || 1) * 1.1;
+    const xExt = Math.max(1, d3.max(barRows, r => Math.abs(r.cumPct - euVal)) || 1) * 1.05;  // [owner D1 4b] tighter pad → fuller bars, smaller gap
 
     // --- FULL-CHAPTER overlay (covers both grid columns, sticky to viewport) ---
     // The wrap is sticky inside the chapter so as the user scrolls into the morph
@@ -1296,8 +1303,8 @@ export class Choropleth extends BaseChart {
     // is hidden ≤1100px (responsive.css) since the title + axis tag carry the framing on small
     // screens, so 156 (not 176) cleanly clears the 3-line title without orphan whitespace.
     const m = isMobile
-      ? { top: 156, right: 18, bottom: 108, left: 92 }
-      : { top: 156, right: 150, bottom: 140, left: 200 };
+      ? { top: 156, right: 50, bottom: 108, left: 72 }    // [owner D1 4b] left 92->72: tighter label→bar gutter
+      : { top: 156, right: 150, bottom: 140, left: 150 };  // [owner D1 4b] left 200->150: tighter label→bar gutter
     const iw = W - m.left - m.right;
     const ih = H - m.top - m.bottom;
     const yBand = d3.scaleBand().domain(barRows.map(r => r.code)).range([0, ih]).padding(0.18);
@@ -1327,9 +1334,8 @@ export class Choropleth extends BaseChart {
     // anchor the absolute figure so the two framings can't be confused.
     const euTitle = Number.isFinite(euVal) ? `+${euVal.toFixed(1)} %` : "the EU-27 average";
     textbox.innerHTML = `
-      <div class="bars-textbox__eyebrow">HOW FAR HAS EACH COUNTRY RUN?</div>
-      <div class="bars-textbox__title">How far each country ran <em>above or below</em><br>the EU-27 average since January 2019.</div>
-      <div class="bars-textbox__note">EU-27 cumulative inflation over the period: <strong>${euTitle}</strong>. Bars show each country's gap from that line.</div>`;
+      <div class="bars-textbox__title">How far above or below the <em>EU-27 average</em></div>
+      <div class="bars-textbox__note">Each bar is a country's gap from the EU-27 average since 2019 (${euTitle}).</div>`;
     stage.appendChild(textbox);
     this._bars_textbox = textbox;
 
@@ -1347,28 +1353,10 @@ export class Choropleth extends BaseChart {
     // fully revealed, gives the reader a moment to absorb the chart with a data insight
     // computed from the same barRows. Positioned bottom-center of the stage.
     // Compute extremes (highest and lowest deviation) for the insight text.
-    const sortedRows = [...barRows].sort((a, b) => (a.cumPct - euVal) - (b.cumPct - euVal));
-    const lowest = sortedRows[0];
-    const highest = sortedRows[sortedRows.length - 1];
-    const totalSpread = highest && lowest ? (highest.cumPct - lowest.cumPct).toFixed(0) : "—";
-    const closing = document.createElement("div");
-    closing.className = "bars-textbox bars-textbox--bottom";
-    // [R2-elevate] Anchor the ABSOLUTE rise next to the deviation so the two framings bridge:
-    // "+64 % (that's +34 points above the EU-27)". This is the line that disambiguates the bars.
-    const hiAbs  = highest ? highest.cumPct.toFixed(0) : "—";
-    const hiDev  = highest ? (highest.cumPct - euVal).toFixed(0) : "—";
-    const loAbs  = lowest ? lowest.cumPct.toFixed(0) : "—";
-    closing.innerHTML = `
-      <div class="bars-textbox__title bars-textbox__title--small">
-        ${highest?.name || "—"}'s prices rose <strong>${hiAbs}&thinsp;%</strong> since 2019 — about
-        ${hiDev} points above the EU-27. ${lowest?.name || "—"}'s rose just <strong>${loAbs}&thinsp;%</strong>.
-      </div>
-      <div class="bars-textbox__caption">
-        Inside one currency union, a ${totalSpread}-point gap between
-        the country that ran hottest and the one that held coolest.
-      </div>`;
-    stage.appendChild(closing);
-    this._bars_closing = closing;
+    // [owner review D1] The closing analysis paragraph below the chart was DELETED (owner: "delete
+    // the analysis paragraph below the chart … shorten the texts"). The top note carries the one-line
+    // framing; the bar lengths + axis cues tell the rest. Null keeps the _tickMorph guard happy.
+    this._bars_closing = null;
 
     // [R4 fix · Reuters/Professor] In-overlay source attribution. The morph wrap is
     // fixed-position fullscreen, so a reader who anchor-jumps in may never see the
@@ -1472,7 +1460,7 @@ export class Choropleth extends BaseChart {
         .attr("y", flagY + 4)
         .attr("text-anchor", dev >= 0 ? "start" : "end")
         .attr("x", dev >= 0 ? xDev + 6 : xDev - 6)
-        .attr("fill", dev >= 0 ? "var(--seq-4)" : "var(--seq-1)")
+        .attr("fill", "var(--ink-soft)")   /* readable neutral — bar colour carries sign/heat; --seq-1 negatives were near-invisible */
         .style("opacity", 0)
         .text(`${dev >= 0 ? "+" : ""}${dev.toFixed(1)}%`);
 
@@ -1503,6 +1491,16 @@ export class Choropleth extends BaseChart {
             .attr("r", 1.8).attr("fill", "var(--accent)");
         }
       }
+
+      // [owner review D1 4b] full-row hover target → highlight this row + enlarged 2-line mini-chart
+      // (the country's 2019→now index vs the EU-27 average) in the shared tooltip. Appended last.
+      g.append("rect").attr("class", "bar-hit")
+        .attr("x", -m.left + 4).attr("y", 0)
+        .attr("width", Math.max(0, m.left + iw + m.right - 8)).attr("height", rowH)
+        .attr("fill", "transparent").style("cursor", "pointer")
+        .on("mouseenter", (e) => this._barRowHover(e, d))
+        .on("mousemove", (e) => this.ctx.tooltip.move(e.clientX, e.clientY))
+        .on("mouseleave", () => this._barRowHoverOut());
     });
 
     // Markers — separate group at root level (no row transform).
@@ -1559,6 +1557,7 @@ export class Choropleth extends BaseChart {
     this._bars = {
       wrap, svg, root, markersG, barRows, yBand, xLin, euVal, iw, ih, rowH,
       W, H, margin: m,
+      euSeries, barColor,                       // [owner review D1 4b] hover mini-chart needs these
       clones: clonesData ? clonesData.clones : []
     };
 
@@ -1691,6 +1690,52 @@ export class Choropleth extends BaseChart {
       ]);
     });
     return out;
+  }
+
+  // [owner review D1 4b] Hover a bar row → dim the others + show an enlarged 2-line mini-chart
+  // (the country's 2019→now index vs the EU-27 average) in the shared singleton tooltip.
+  _barRowHover(event, d) {
+    if (!this._bars) return;
+    this._bars.root.selectAll("g.bar-row").style("opacity", r => (r.code === d.code ? 1 : 0.3));
+    this.ctx.tooltip.show(this._barMiniChart(d), event.clientX, event.clientY);
+  }
+  _barRowHoverOut() {
+    if (this._bars) this._applyBarSpotlight(this._spotlightCodes);   // restore the scroll-highlight state
+    this.ctx.tooltip.hide();
+  }
+  /** Spotlight a set of bar rows (others dimmed to 0.28); null/empty → all visible. Shared by the
+   *  scroll-highlight sequence and by hover-out restore so the two never fight. */
+  _applyBarSpotlight(codes) {
+    if (!this._bars) return;
+    const set = codes && codes.length ? new Set(codes) : null;
+    this._bars.root.selectAll("g.bar-row").style("opacity", r => (!set || set.has(r.code)) ? 1 : 0.28);
+  }
+  /** Tooltip HTML: country name + an inline 2-line SVG (country vs EU-27, both indexed to 100 at
+   *  Jan-2019 so they're comparable) + the two cumulative figures. Enlarged vs the inline sparkline. */
+  _barMiniChart(d) {
+    const eu = this._bars?.euSeries || [];
+    const cs = d.series || [];
+    const n = Math.max(cs.length, eu.length);
+    const base = cs.find(v => v != null) || 100;
+    const euBase = eu.find(v => v != null) || 100;
+    const cN = cs.map(v => (v == null ? null : v / base * 100));
+    const eN = eu.map(v => (v == null ? null : v / euBase * 100));
+    const W = 248, H = 92, P = 8;
+    const all = cN.concat(eN).filter(v => v != null);
+    const lo = all.length ? Math.min(...all) : 100;
+    const hi = all.length ? Math.max(...all) : 100;
+    const X = i => P + (n <= 1 ? 0 : i / (n - 1) * (W - 2 * P));
+    const Y = v => H - P - (hi === lo ? 0 : (v - lo) / (hi - lo) * (H - 2 * P));
+    const toPath = arr => { let s = "", pen = false; arr.forEach((v, i) => { if (v == null) { pen = false; return; } s += (pen ? "L" : "M") + X(i).toFixed(1) + "," + Y(v).toFixed(1) + " "; pen = true; }); return s; };
+    const col = this._bars.barColor(d.cumPct - this._bars.euVal);
+    const cum = d.cumPct, euCum = this._bars.euVal;
+    return `<h5>${d.name}</h5>
+      <svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="display:block;margin:2px 0 5px">
+        <path d="${toPath(eN)}" fill="none" stroke="var(--ink-faint)" stroke-width="1.4" stroke-dasharray="3 3"/>
+        <path d="${toPath(cN)}" fill="none" stroke="${col}" stroke-width="2"/>
+      </svg>
+      <div class="row"><span class="key">${d.name} · since 2019</span><span class="val">${cum >= 0 ? "+" : ""}${cum.toFixed(0)}%</span></div>
+      <div class="row"><span class="key">EU-27 average</span><span class="val">${euCum >= 0 ? "+" : ""}${euCum.toFixed(0)}%</span></div>`;
   }
 
   // ============================================================
@@ -1840,7 +1885,10 @@ export class Choropleth extends BaseChart {
     // to apply a per-tick offset to align the path's start position with the country's
     // current on-screen position.
     clones.forEach(c => {
-      const opacity = Math.max(0, rise * (1 - trail * 0.65));
+      // [owner review D1] clones FULLY fade once the flag lands (was floored at 0.35, which left a
+      // faint colour square behind every flag — the "extra squares" the owner flagged). The flag +
+      // the bar now carry the colour; the morph clone is gone at the end-state.
+      const opacity = Math.max(0, rise * (1 - trail));
       const scale = 1 + rise * 0.08;
       const liftY = -6 * rise;
       // Per-tick screen-alignment offset for the START position (where the country IS on
@@ -1889,6 +1937,26 @@ export class Choropleth extends BaseChart {
       if (!path.empty()) tracePath(path, trail);
     });
     root.selectAll("circle.bar-spark-dot").attr("opacity", trail * trail);
+
+    // ===== [owner review D1 4b] Scroll-highlight sequence =====
+    // Once the bars have formed, the dwell scroll spotlights, in turn: the highest country, then the
+    // two middle (around the EU-27 line, ≈ +small & ≈ −small), then the lowest — then releases to all.
+    // Hover overrides this; hover-out restores it (via _applyBarSpotlight(this._spotlightCodes)).
+    let spotCodes = null;
+    if (p >= 0.92 && p < 0.985 && barRows.length > 3) {
+      const dev = r => r.cumPct - this._bars.euVal;
+      let zc = barRows.findIndex(r => dev(r) < 0);          // first row below the EU line
+      if (zc < 1) zc = Math.floor(barRows.length / 2);
+      const stages = [
+        [barRows[0].code],                                  // highest above EU
+        [barRows[zc - 1].code, barRows[zc].code],           // the two middle, straddling the EU line
+        [barRows[barRows.length - 1].code],                 // lowest below EU
+      ];
+      const dp = (p - 0.92) / 0.065;
+      spotCodes = stages[Math.max(0, Math.min(stages.length - 1, Math.floor(dp * stages.length)))];
+    }
+    this._spotlightCodes = spotCodes;
+    this._applyBarSpotlight(spotCodes);
 
     // ===== Hide the old circle markers (v1 leftover) =====
     if (this._bars.markersG) {

@@ -5,23 +5,22 @@
 
 import { ThemeManager }    from "./modules/ThemeManager.js";
 import { MotionManager }   from "./modules/MotionManager.js";
-import { DataManager }     from "./modules/dataManager.js";
+import { DataManager }     from "./modules/DataManager.js";
 import { ScrollController }from "./modules/ScrollController.js";
-import { Tooltip }         from "./modules/tooltip.js";
-import { Navigation }      from "./modules/navigation.js";
-import { HeroSequence }    from "./video/heroSequence.js";
+import { Tooltip }         from "./modules/Tooltip.js";
+import { Navigation }      from "./modules/Navigation.js";
+import { CoinHero, buildCoinGlyph } from "./charts/Hero.js";
 
 import { Choropleth }         from "./charts/Choropleth.js";
+import { CompareMap }         from "./charts/CompareMap.js";
 import { SmallMultiplesLine } from "./charts/SmallMultiplesLine.js";
 import { AnnotatedLine }      from "./charts/AnnotatedLine.js";
 import { Ridgeline }          from "./charts/Ridgeline.js";
 import { StackedArea }        from "./charts/StackedArea.js";
-import { SlopeChart }         from "./charts/SlopeChart.js";
 import { Heatmap }            from "./charts/Heatmap.js";
 import { DivergingBar }       from "./charts/DivergingBar.js";
 import { WaffleChart }        from "./charts/WaffleChart.js";
 import { ConnectedScatter }   from "./charts/ConnectedScatter.js";
-import { BumpChart }          from "./charts/BumpChart.js";
 import { BoxPlot }            from "./charts/BoxPlot.js";
 
 // --- Wait for global D3 + libs to be parsed before booting -----------
@@ -41,44 +40,38 @@ async function boot() {
   const nav    = new Navigation();
   const ctx    = { theme, motion, tooltip: tip, nav };
 
-  // 2. hero canvas background (non-blocking)
-  const heroCanvas = document.getElementById("hero-sequence");
-  if (heroCanvas) new HeroSequence(heroCanvas, ctx);
+  // 2. hero — "a coin made of coins" sunflower medallion (MASTER-PLAN PART 7). Flat DOM/SVG,
+  //    always-on above the fold, so it is instantiated directly here (not scroll-mounted). The
+  //    old hero video + canvas (heroSequence.js / hero.mp4) are retired — kept on disk, dereferenced.
+  new CoinHero("#hero-coins", ctx);
 
-  // 2b. hero video — ping-pong via pre-encoded reverse twin.
-  // Two stacked <video>s: forward + hero_reversed.mp4. On each `ended` we swap which
-  // one is visible+playing. Last frame of one = first frame of the other → no seam.
-  // Reduced-motion: keep the forward video looping natively.
-  const heroFwd = document.getElementById("hero-video");
-  const heroRev = document.getElementById("hero-video-rev");
-  if (heroFwd && heroRev && !motion.reduced) {
-    heroFwd.playbackRate = 0.5;
-    heroRev.playbackRate = 0.5;
-    const swap = (hide, show) => {
-      show.currentTime = 0;
-      show.playbackRate = 0.5;
-      show.dataset.active = "true";
-      hide.dataset.active = "false";
-      const p = show.play();
-      if (p && p.catch) p.catch(() => {});
-      hide.pause();
-    };
-    heroFwd.addEventListener("ended", () => swap(heroFwd, heroRev));
-    heroRev.addEventListener("ended", () => swap(heroRev, heroFwd));
-    // [R2 perf] Videos are preload="none" with no autoplay; start the ambient loop on the
-    // FIRST user interaction (not idle) so its ~1 MB never downloads during the initial paint —
-    // the 175 KB poster carries the hero until then. Reduced-motion users get the static poster.
-    let started = false;
-    const startHero = () => {
-      if (started) return; started = true;
-      removeEventListener("scroll", startHero); removeEventListener("pointerdown", startHero);
-      const p = heroFwd.play(); if (p && p.catch) p.catch(() => {});
-    };
-    addEventListener("scroll", startHero, { passive: true });
-    addEventListener("pointerdown", startHero);
-  } else if (heroFwd && motion.reduced) {
-    heroFwd.setAttribute("loop", "");                          // native loop for reduced-motion
-    heroFwd.playbackRate = 0.5;                                // BUG-6 — keep the calmer 0.5x like the default
+  // 2b. Act-divider coin glyphs (PART 8.11/8.12) — the hero's coin, aging across the essay via a
+  //     per-act tarnish level (data-tarnish). Inline SVG (reuses buildCoinGlyph; zero image bytes).
+  //     Each coin settles in on scroll (data-in-view -> CSS fade+scale); reduced-motion = end-state.
+  document.querySelectorAll(".act-divider__coin").forEach(el => {
+    el.appendChild(buildCoinGlyph(parseFloat(el.dataset.tarnish || "0")));
+  });
+  const dividers = document.querySelectorAll(".act-divider");
+  if (!motion.reduced && "IntersectionObserver" in window) {
+    const dividerIO = new IntersectionObserver((entries) => {
+      entries.forEach(e => { if (e.isIntersecting) { e.target.dataset.inView = "true"; dividerIO.unobserve(e.target); } });
+    }, { threshold: 0.3 });
+    dividers.forEach(d => dividerIO.observe(d));
+  } else {
+    dividers.forEach(d => { d.dataset.inView = "true"; });
+  }
+
+  // 2c. Reveal-on-scroll for [.reveal-up] (the about credit block + UniGe logo + lede): fade/rise in
+  //     when scrolled into view. Generic + reusable; CSS owns the transition + the stagger. Reduced-motion
+  //     (or no IO) shows them immediately.
+  const reveals = document.querySelectorAll(".reveal-up");
+  if (!motion.reduced && "IntersectionObserver" in window) {
+    const revealIO = new IntersectionObserver((entries) => {
+      entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add("is-in"); revealIO.unobserve(e.target); } });
+    }, { threshold: 0.2 });
+    reveals.forEach(el => revealIO.observe(el));
+  } else {
+    reveals.forEach(el => el.classList.add("is-in"));
   }
 
   // 3. data — single Promise.all
@@ -100,16 +93,15 @@ async function boot() {
   const charts = {};   // key -> live instance, filled on mount
   const chartFactories = {
     choropleth        : () => new Choropleth        ("#chart-choropleth",        data, ctx),
+    compareMap        : () => new CompareMap        ("#chart-compareMap",        data, ctx),
     smallMultiples    : () => new SmallMultiplesLine("#chart-smallMultiples",    data, ctx),
     annotatedLine     : () => new AnnotatedLine     ("#chart-annotatedLine",     data, ctx),
     ridgeline         : () => new Ridgeline         ("#chart-ridgeline",         data, ctx),
     stackedArea       : () => new StackedArea       ("#chart-stackedArea",       data, ctx),
-    slope             : () => new SlopeChart        ("#chart-slope",             data, ctx),
     heatmap           : () => new Heatmap           ("#chart-heatmap",           data, ctx),
     divergingBar      : () => new DivergingBar      ("#chart-divergingBar",      data, ctx),
     waffle            : () => new WaffleChart       ("#chart-waffle",            data, ctx),
     connectedScatter  : () => new ConnectedScatter  ("#chart-connectedScatter",  data, ctx),
-    bump              : () => new BumpChart         ("#chart-bump",              data, ctx),
     boxplot           : () => new BoxPlot           ("#chart-boxplot",           data, ctx),
   };
 

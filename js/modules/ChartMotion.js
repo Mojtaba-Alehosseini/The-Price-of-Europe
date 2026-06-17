@@ -62,6 +62,17 @@ export function tracePath(pathSel, t) {
   });
 }
 
+/** One-shot draw-on for step-enter / onceVisible (the continuous, scroll-tied draw-on is
+ *  tracePath above). Reduced-motion: jump straight to the drawn end-state, no animation. */
+export function drawOnPlay(pathSel, motion, dur = 900) {
+  pathSel.each(function() {
+    const L = this.getTotalLength ? this.getTotalLength() : 0;
+    const s = d3.select(this).attr("stroke-dasharray", `${L} ${L}`).attr("stroke-dashoffset", L);
+    if (motion && motion.reduced) { s.attr("stroke-dashoffset", 0); return; }
+    s.transition().duration(dur).ease(d3.easeCubicInOut).attr("stroke-dashoffset", 0);
+  });
+}
+
 /** Build a one-shot Intersection Observer that fires `fn` once when `el` enters viewport. */
 export function onceVisible(el, fn, opts = {}) {
   if (!el) return;

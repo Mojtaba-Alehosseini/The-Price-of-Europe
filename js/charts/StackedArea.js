@@ -2,12 +2,13 @@
    StackedArea — contributions to headline HICP: energy, food, services, other
    Depth:
      1. computation — uses CP045 (energy) + CP01 (food) + remainder for services
-     2. interaction — mode toggle: absolute / share / streamgraph
+     2. interaction — mode toggle: absolute / share  (streamgraph CUT — DESIGN-REVIEW #3)
      3. annotation — peak energy label, hand-off arrow energy→food
      4. encoding   — stacked area w/ smooth stack offset
    ============================================================ */
 
 import { BaseChart } from "./BaseChart.js";
+import { watchChapterProgress, smooth } from "../modules/ChartMotion.js";
 
 // Step → focused band. Idle = null (all visible).
 const STEP_CONFIG = [
@@ -43,7 +44,7 @@ const BAND_META = {
 export class StackedArea extends BaseChart {
   constructor(sel, data, ctx) {
     super(sel, data, ctx, { margin: { top: 96, right: 50, bottom: 36, left: 60 }, aspect: 1.55 });
-    this.mode = "absolute";   // absolute | share | stream
+    this.mode = "absolute";   // absolute | share  (streamgraph CUT — DESIGN-REVIEW #3)
     this.controlsEl = document.getElementById("chart-stackedArea-controls");
     this._focusBand = null;
     this._stepCaption = null;
@@ -147,21 +148,12 @@ export class StackedArea extends BaseChart {
     this._xScale = x;
     this._innerH = ih;
 
-    const stackByMode = () => {
-      if (this.mode === "share") {
-        return d3.stack().keys(KEYS).offset(d3.stackOffsetExpand)(rows);
-      } else if (this.mode === "stream") {
-        return d3.stack().keys(KEYS).offset(d3.stackOffsetWiggle)(rows);
-      }
-      return d3.stack().keys(KEYS)(rows);
-    };
-
-    const series = stackByMode();
-    const yDom = this.mode === "share"
-      ? [0, 1]
-      : (this.mode === "stream"
-        ? [d3.min(series, s => d3.min(s, d => d[0])), d3.max(series, s => d3.max(s, d => d[1]))]
-        : [0, d3.max(rows, d => d.total) * 1.05]);
+    // [R5·P8] Two modes only (streamgraph CUT — DESIGN-REVIEW #3: a centred baseline hides
+    // magnitude). absolute = stacked YoY pts; share = expanded to 100% of headline.
+    const series = this.mode === "share"
+      ? d3.stack().keys(KEYS).offset(d3.stackOffsetExpand)(rows)
+      : d3.stack().keys(KEYS)(rows);
+    const yDom = this.mode === "share" ? [0, 1] : [0, d3.max(rows, d => d.total) * 1.05];
     const y = d3.scaleLinear().domain(yDom).range([ih, 0]).nice();
 
     // curveMonotoneX passes through the data and never overshoots — important in
@@ -184,8 +176,7 @@ export class StackedArea extends BaseChart {
 
     // Top-right unit cap. [R2 ELEVATE] Mode-honest label: in stream mode the y-axis
     // is a wiggle offset, not "YoY %", so name it neutrally rather than mislabel it.
-    const unitCap = this.mode === "share" ? "% OF HEADLINE"
-      : (this.mode === "stream" ? "CONTRIBUTION · STACKED" : "MONTHLY YoY %");
+    const unitCap = this.mode === "share" ? "% OF HEADLINE" : "MONTHLY YoY %";
     const lgRight = this.svg.append("g").attr("class", "anno-legend")
       .attr("transform", `translate(${width - this.opts.margin.right}, ${kickerY})`);
     lgRight.append("text").attr("class", "legend-title")
@@ -233,10 +224,21 @@ export class StackedArea extends BaseChart {
         .attr("x", 4).attr("y", y(2) - 4).text("ECB target · 2%");
     }
 
-    // paths — the full stacked composition (the stable substrate).
+    // [R5·P8] Reveal clip — the "orange wall" BUILDS FROM THE BASELINE UP as the reader scrolls
+    // into the chapter (energy is the bottom band, so it rises first; the signature motion). The
+    // clip-rect grows upward from y=ih; latched (max-progress) so reverse never un-builds.
+    // watchChapterProgress drives it (deferred init at the end of render); reduced = full at once.
+    const revealId = `sa-reveal-${this.selector.replace(/[^\w]/g, "")}`;
+    const saDefs = this.svg.select("defs").empty() ? this.svg.append("defs") : this.svg.select("defs");
+    this._revealRect = saDefs.append("clipPath").attr("id", revealId)
+      .append("rect").attr("x", 0).attr("y", ih).attr("width", iw).attr("height", 0);
+    this._ihRef = ih;
+    this._stackClipG = this.g.append("g").attr("clip-path", `url(#${revealId})`);
+
+    // paths — the full stacked composition (the stable substrate), inside the reveal clip.
     // [R2 ELEVATE] Thin band separators: stroke each area in the page background so
     // the four bands read as discrete even where adjacent colours are close.
-    this.layers = this.g.selectAll("path.area").data(series, d => d.key).join("path")
+    this.layers = this._stackClipG.selectAll("path.area").data(series, d => d.key).join("path")
       .attr("class", d => `area series--${d.key} stacked-band stacked-band--${d.key}`)
       .attr("data-key", d => d.key)
       .attr("fill", d => colors[d.key])
@@ -276,6 +278,28 @@ export class StackedArea extends BaseChart {
 
     this._renderControls();
     this._applyBandFocus();
+
+    // [R5·P8] Reveal init — reduced shows the full wall; otherwise the scroll watcher drives the
+    // latched baseline-up build. compute() fires immediately, so a toggle re-render (reader already
+    // deep in the chapter) lands the wall at ~full at once rather than re-building from zero.
+    this._drawnP = 0;
+    if (this.ctx.motion.reduced) this._revealTo(1);
+    else this._wireScroll();
+  }
+
+  _wireScroll() {
+    if (this._unwatch) this._unwatch();
+    const chapter = this.container.closest(".chapter");
+    this._unwatch = watchChapterProgress(chapter, p => this._onProgress(p));
+  }
+  _onProgress(p) {
+    const target = smooth(Math.max(0, Math.min(1, (p - 0.05) / 0.55)));
+    if (target > (this._drawnP || 0)) this._revealTo(target);
+  }
+  _revealTo(np) {
+    this._drawnP = Math.max(this._drawnP || 0, np);
+    const ih = this._ihRef || this._innerH || 0;
+    if (this._revealRect) this._revealRect.attr("y", ih * (1 - this._drawnP)).attr("height", ih * this._drawnP);
   }
 
   // [R2 ELEVATE] Compute a band's headline-share to feature in the stamp. energy &
@@ -306,13 +330,17 @@ export class StackedArea extends BaseChart {
       return;
     }
     c.dataset.wired = "1";
-    c.innerHTML = ["absolute", "share", "stream"].map(m =>
+    c.innerHTML = ["absolute", "share"].map(m =>   // streamgraph CUT (DESIGN-REVIEW #3: centered baseline hides magnitude)
       `<button class="btn btn--ghost" data-mode="${m}" aria-pressed="${m === this.mode}">${m}</button>`
     ).join("");
     c.querySelectorAll("button").forEach(b => b.addEventListener("click", () => {
       this.mode = b.dataset.mode;
       c.querySelectorAll("button").forEach(bb => bb.setAttribute("aria-pressed", bb.dataset.mode === this.mode));
       this.render();
+      // [R5·P8] A deliberate toggle means the reader has engaged — reveal the full stack (latched).
+      // Without this the baseline-up clip-wipe (reset by render) would clip share mode (which always
+      // fills 0–100%) to a thin bottom slice.
+      this._revealTo(1);
     }));
   }
 
@@ -381,6 +409,14 @@ export class StackedArea extends BaseChart {
       this._overlayG.append("circle").attr("class", "sa-focus-dot")
         .attr("cx", x(peak.date)).attr("cy", y(peak[focus])).attr("r", 3.4)
         .attr("fill", col);
+      // [R5·P8 / Burn-Murdoch] peak-band callout: the band's value in pts + its month, ON the data
+      // (this block is absolute-only, so "pts" is meaningful). e.g. "8.6 pts · Oct 2022".
+      const iwNow = this._xScale.range()[1];
+      const late = x(peak.date) > iwNow - 120;
+      this._overlayG.append("text").attr("class", "sa-focus-peaklabel")
+        .attr("x", x(peak.date) + (late ? -8 : 8)).attr("y", y(peak[focus]) - 8)
+        .attr("text-anchor", late ? "end" : "start").attr("fill", col)
+        .text(`${peak[focus].toFixed(1)} pts · ${d3.timeFormat("%b %Y")(peak.date)}`);
     }
     // Latest-value dot (right edge) — anchors the "where it ends up" reading.
     const last = rows[rows.length - 1];
@@ -455,6 +491,11 @@ export class StackedArea extends BaseChart {
     this._focusBand = cfg.focus;
     this._stepCaption = cfg.caption;
     this._applyBandFocus();
+  }
+
+  destroy() {
+    if (this._unwatch) this._unwatch();
+    super.destroy();
   }
 
   onThemeChange() { this.render(); }

@@ -38,7 +38,13 @@ export class BaseChart {
   innerSize() {
     const { width, height } = this.size();
     const m = this.opts.margin;
-    return { width: width - m.left - m.right, height: height - m.top - m.bottom };
+    // Clamp to >=0. During a transient relayout (e.g. a browser fullPage capture, or an
+    // orientation flip mid-transition) the sticky panel can momentarily measure a few px wide,
+    // which would make width-margins NEGATIVE → charts then set <rect width="-33"> and the
+    // browser logs an invalid-attribute console error. max(0,...) is a no-op in every normal
+    // case (width >> margins); in the degenerate frame the chart draws harmless 0-size marks and
+    // the next (settled) resize re-renders it correctly. Keeps zero_console_errors honest.
+    return { width: Math.max(0, width - m.left - m.right), height: Math.max(0, height - m.top - m.bottom) };
   }
 
   // -- svg scaffold ----------------------------------------------------

@@ -5,8 +5,6 @@
 
 /* ---------- Tablet (≤ 1024 px) ---------- */
 @media (max-width: 1024px) {
-  .hero h1 { font-size: clamp(var(--fs-700), 8vw, var(--fs-900)); }
-  .hero-sub { font-size: var(--fs-400); }
   .scroller { grid-template-columns: 1fr; }
   .scroller__chart {
     position: sticky;
@@ -19,13 +17,6 @@
 
 /* ---------- Tablet portrait (≤ 768 px) ---------- */
 @media (max-width: 768px) {
-  .hero { min-block-size: 80dvh; padding-block: var(--space-9); }
-  .hero h1 { font-size: clamp(var(--fs-700), 10vw, var(--fs-800)); }
-  .hero-sub { font-size: var(--fs-400); max-inline-size: 90vw; }
-  .hero-meta { gap: var(--space-3); font-size: var(--fs-100); }
-
-  .nav-pills a:not(.brand) { display: none; }   /* collapse nav links; keep brand + theme */
-
   .scroller__text { gap: 55dvh; padding-block: 8dvh; }
   .scroller__step {
     max-inline-size: 100%;
@@ -47,7 +38,6 @@
   .chart-svg .flag-glyph { width: 11px; height: 7px; }
   .chart-svg .country-name { font-size: 11px; }
 
-  .act-intro { padding-block: var(--space-9); }
   .act-title { font-size: clamp(var(--fs-700), 9vw, var(--fs-800)); }
   .act-lede { font-size: var(--fs-400); }
 
@@ -58,13 +48,9 @@
 /* ---------- Phone (≤ 480 px) ---------- */
 @media (max-width: 480px) {
   :root { --header-h: 48px; }
+  .brand { font-size: var(--fs-300); }   /* shorter bar; keeps the centred name clear of the right-aligned theme toggle */
 
   .container { padding-inline: var(--space-4); }
-  .hero { padding-block: var(--space-8) var(--space-9); }
-  .hero-kicker { font-size: 0.68rem; }
-  .hero h1 { font-size: clamp(var(--fs-600), 12vw, var(--fs-800)); }
-  .hero-sub { font-size: var(--fs-300); }
-  .hero-meta { display: none; }
 
   .scroller { gap: var(--space-5); padding-inline: var(--space-4); }
   .scroller__text { gap: 65dvh; }
@@ -280,29 +266,12 @@
   .site-footer .legal { flex-direction: column; gap: var(--space-2); font-size: 0.7rem; }
 }
 
-/* ---------- Act-divider responsive ---------- */
+/* ---------- Act-divider (coin glyph) responsive — the band shrinks; the coin stays touch-legible ---------- */
 @media (max-width: 768px) {
-  .act-divider { block-size: clamp(28dvh, 50vw, 50dvh); }
-  .act-divider figcaption {
-    inset-block-end: var(--space-3);
-    inset-inline-start: var(--space-3);
-    font-size: 0.62rem;
-  }
-  .act-divider--placeholder p {
-    font-size: var(--fs-200);
-    padding: var(--space-3) var(--space-4);
-  }
+  .act-divider { min-block-size: clamp(46dvh, 56vh, 60dvh); padding-block: var(--space-9); }
 }
 @media (max-width: 480px) {
-  .act-divider { block-size: clamp(24dvh, 60vw, 40dvh); }
-}
-
-/* ---------- Prefer reduced data (slow networks) ---------- */
-@media (prefers-reduced-data: reduce) {
-  .hero canvas#hero-sequence { display: none; }
-  .hero img#hero-image { display: none; }
-  .act-divider picture { display: none; }
-  .act-divider { background: var(--bg-sunken); display: none; }
+  .act-divider { min-block-size: 48dvh; }
 }
 
 /* ---------- Wide screens ---------- */

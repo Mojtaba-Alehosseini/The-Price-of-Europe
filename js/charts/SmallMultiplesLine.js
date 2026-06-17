@@ -8,16 +8,24 @@
    ============================================================ */
 
 import { BaseChart } from "./BaseChart.js";
-import { KEY_CATEGORIES } from "../modules/dataManager.js";
+import { KEY_CATEGORIES } from "../modules/DataManager.js";
+import { sphereGradient } from "../modules/CraftFX.js";
+import { drawOnPlay } from "../modules/ChartMotion.js";
 
 // Focus codes MUST match entries in KEY_CATEGORIES (see DataManager.js).
 // "FOOD" / "SERV" are aggregate codes in Eurostat but KEY_CATEGORIES uses CP01 for food
 // and SERV for services, so the focus codes here are kept aligned with the actual panels.
+// [R5·P5] Focus codes drive both the dimming and the hero enlarge. Step 1 now focuses the
+// ACTUAL fuse — CP045 (electricity, gas & fuels), the protagonist, the ~54% spike — not the
+// broad CP04 housing aggregate, so the chart's enlarge matches its own title ("Energy lit the
+// fuse"). Captions carry the VERIFIED take-off leads (EU27_2020, first sustained ≥5% YoY from
+// the 2020-06 trough): energy Apr-2021 → headline Nov-2021 = 7 months; → food Feb-2022 = 10
+// months; → services Sep-2022 = 17 months. The earlier "six months" was unverified (D18).
 const STEP_CONFIG = [
   { focus: null,    caption: null },
-  { focus: "CP04",  caption: "Housing, water & electricity peeled off in mid-2021 — six months before the rest." },
-  { focus: "CP01",  caption: "Food followed energy with a six-month lag, peaking above 15 % in early 2023." },
-  { focus: "SERV",  caption: "Services never spiked but climb steadily — and refuse to come back down." },
+  { focus: "CP045", caption: "Energy crossed 5% in April 2021 — seven months before the headline rate, the first category to move." },
+  { focus: "CP01",  caption: "Food did not cross 5% until February 2022 — ten months after energy — then peaked near 19% a year later." },
+  { focus: "SERV",  caption: "Services never spiked, but crossed 5% in late 2022 and refused to fall — costs moving into wages and rents." },
 ];
 
 const CAT_CLASS = {
@@ -127,6 +135,8 @@ export class SmallMultiplesLine extends BaseChart {
       : this.opts.margin;
     const iw = width - m.left - m.right;
     const ih = height - m.top - m.bottom;
+    // [R5·P5] Stash margins + plot box so the focus-mode hero layer can size itself.
+    this._m = m; this._plotW = iw; this._plotH = ih;
 
     // 2 columns x 4 rows
     // [S3-3] On narrow viewports (≤ 480px), keep 2-col layout but use TIGHTER gaps so
@@ -166,16 +176,11 @@ export class SmallMultiplesLine extends BaseChart {
     const yMaxR = Math.ceil((yMax * 1.05) / 5) * 5;
     this.y = d3.scaleLinear().domain([-2, Math.max(12, yMaxR)]).range([this.cellH, 0]);
 
-    // <defs>
+    // <defs> — the focus-mode emphasis is now the hero enlarge (gradient fill + sphere dot +
+    // multiply blend), so the old per-panel blur glow is gone; defs holds the clip only.
     const defs = this.svg.append("defs");
     defs.append("clipPath").attr("id", "smlm-clip")
       .append("rect").attr("x", 0).attr("y", 0).attr("width", this.cellW).attr("height", this.cellH);
-    const glow = defs.append("filter").attr("id", "sml-focus-glow")
-      .attr("x", "-30%").attr("y", "-30%").attr("width", "160%").attr("height", "160%");
-    glow.append("feGaussianBlur").attr("stdDeviation", "1.2").attr("result", "b");
-    const mg = glow.append("feMerge");
-    mg.append("feMergeNode").attr("in", "b");
-    mg.append("feMergeNode").attr("in", "SourceGraphic");
 
     // Kicker (top-left). On phone the band is shorter, so raise the baselines.
     const kY = isPhone ? 26 : 50;
@@ -187,19 +192,10 @@ export class SmallMultiplesLine extends BaseChart {
       .attr("x", m.left + 3).attr("y", kSubY);
     this._setKicker(null);
 
-    // Legend (top-right). [audit-CH2 P1] On phone the kicker spans most of the
-    // width, so a top-right legend at the same y collides with it. Drop the
-    // legend on phone — the subtitle above the SVG already states the unit and
-    // span ("monthly YoY %", "eight categories"), so it is redundant there.
-    if (!isPhone) {
-      const lg = this.svg.append("g").attr("class", "map-legend sml-legend")
-        .attr("transform", `translate(${width - m.right}, 38)`);
-      lg.append("text").attr("class", "legend-title")
-        .attr("x", 0).attr("y", 0).attr("text-anchor", "end").text("MONTHLY YoY %");
-      lg.append("text").attr("class", "legend-tick")
-        .attr("x", 0).attr("y", 16).attr("text-anchor", "end")
-        .text("Euro area · 8 categories · 2015–2025");
-    }
+    // [R5·P5 / DESIGN-REVIEW Burn-Murdoch] No legend. The unit lives in the subtitle
+    // above the SVG ("annual % change") and the focus kicker; the lines are labelled
+    // directly (panel last-value tags + the hero's end-of-line label). A legend here
+    // was redundant chrome competing with the kicker.
 
     // Inner panel group (margin-translated)
     this.g.attr("transform", `translate(${m.left},${m.top})`);
@@ -227,8 +223,14 @@ export class SmallMultiplesLine extends BaseChart {
     // crisp at full opacity even during a focus step.
     this.cursorG = this.svg.append("g").attr("class", "sml-cursor-layer").attr("pointer-events", "none");
 
-    // Stamp layer (above everything)
-    this.stampG = this.svg.append("g").attr("class", "stamp-layer").attr("pointer-events", "none");
+    // [R5·P5] Hero layer (topmost) — the focus-mode "enlarge". When a step focuses a
+    // category, this holds a scrim that dims the small-multiples grid to calm context +
+    // a big redrawn hero panel of that category (its own scales, gradient fill, accent
+    // line drawn on, sphere dot, the verified lead-marker) + the caption in the freed
+    // space. Cleared on return to the overview. Replaces the old in-grid stamp card —
+    // a single panel was too small to annotate in place (Bremer: "pointing at a tiny
+    // panel is weak; the focused panel should grow into reclaimed space").
+    this.heroG = this.svg.append("g").attr("class", "sml-hero-layer");
 
     // Initial reveal
     this._initialReveal();
@@ -574,206 +576,320 @@ export class SmallMultiplesLine extends BaseChart {
     this._stepCaption = cfg.caption;
     this._applyFocus();
     this._setKicker(cfg.focus);
-    this._renderStamp();
     this._appliedFocus = cfg.focus;
   }
 
   _applyFocus() {
     const focus = this._focusCat;
+    // [R5·P5] Focus mode is an OVERLAY: the small-multiples grid stays drawn and untouched;
+    // the hero layer scrims it to calm context and lifts a big hero panel of the focused
+    // category above it. Overview (focus=null) simply removes that layer. Keeping the grid
+    // code (and its boundary-jitter + rAF-stall fixes) untouched makes reverse-scroll trivially
+    // safe — add a layer / remove a layer — and avoids the non-uniform SVG-text distortion a
+    // scale-relayout of the grid would cause (see docs/design_decisions.md D21).
+    this._clearHero();
     const reduced = this.ctx.motion.reduced;
-    this.panelGs.forEach((cell, cat) => {
-      const d = cell.datum() || {};
-      const isFocus = !focus || cat === focus;
-      // [R2·1c] Raised the dimmed level 0.22 → 0.30 so the receding panels keep
-      // legible AA contrast (round-1 "remaining lever": dim to recede, not to
-      // illegibility). Still a clear hierarchy step below the focused panel's 1.0.
-      const target = isFocus ? 1 : 0.3;
-      if (reduced) cell.style("opacity", target);
-      else cell.transition("focus").duration(440).ease(d3.easeCubicOut).style("opacity", target);
-
-      // [R2·1a] Line colour is state-driven so terracotta marks exactly ONE thing:
-      //  • a panel is focused  → THAT panel's line is accent (the focused element);
-      //    every other line (including the protagonist) recedes to ink.
-      //  • nothing is focused  → only the protagonist (CP045) is accent; rest ink.
-      const line = cell.select(".sml-line");
-      let stroke, width;
-      if (focus && cat === focus) { stroke = "var(--accent)"; width = 2.4; }
-      else if (!focus && d.isProtagonist) { stroke = "var(--accent)"; width = 2; }
-      else { stroke = getCSS("var(--ink-soft)"); width = 1.6; }
-      if (reduced) line.attr("stroke", stroke).attr("stroke-width", width);
-      else line.transition("focus-color").duration(440).ease(d3.easeCubicOut)
-        .attr("stroke", stroke).attr("stroke-width", width);
-      line.attr("filter", (focus && cat === focus) ? "url(#sml-focus-glow)" : null);
-
-      // Area fill: lift the focused panel's category tint a touch so the panel
-      // reads as a filled region under its accent line; others stay whisper-faint.
-      const areaOp = (focus && cat === focus) ? 0.16 : 0.1;
-      const area = cell.select(".sml-area");
-      if (reduced) area.attr("opacity", areaOp);
-      else area.transition("focus-area").duration(440).attr("opacity", areaOp);
-
-      // Peak dot tracks the same accent logic (focused or protagonist → accent).
-      const dotAccent = (focus && cat === focus) || (!focus && d.isProtagonist);
-      cell.select(".sml-peak-dot").attr("fill", dotAccent ? "var(--accent)" : "var(--ink-soft)");
-
-      // [CH2-R2] Hide peak tag on the focused panel — stamp already announces the peak.
-      // Restore visibility on non-focused panels.
-      const tag = cell.select(".sml-peak-tag");
-      if (!tag.empty()) tag.style("display", (focus && cat === focus) ? "none" : null);
-
-      // [R4·P5] Also hide the focused panel's own small title — the big italic kicker
-      // already names the focused category, so the in-panel title is a redundant echo.
-      const ttl = cell.select(".sml-title");
-      if (!ttl.empty()) ttl.style("display", (focus && cat === focus) ? "none" : null);
-    });
-    if (focus) this.panelGs.get(focus)?.raise();
-    // [CH2-W2] rAF-stall safety net — force the focus opacity if transitions don't run
-    if (this._focusSafety) clearTimeout(this._focusSafety);
-    this._focusSafety = setTimeout(() => {
-      this.panelGs.forEach((cell, cat) => {
-        const isFocus = !focus || cat === focus;
-        const target = isFocus ? "1" : "0.3";
-        if (cell.style("opacity") !== target) cell.interrupt("focus").style("opacity", target);
-      });
-    }, 480);
+    if (!focus) {
+      if (reduced) this.g.style("opacity", 1);
+      else this.g.transition("grid-fade").duration(360).style("opacity", 1);
+      if (this.overlay) this.overlay.style("pointer-events", "all");
+      return;
+    }
+    // Fade the WHOLE grid group (panels + titles + ticks all live inside this.g, so they dim
+    // uniformly — no poke-through) to a faint ghost: "the others recede to calm context". The
+    // hero draws on an opaque paper plate above it. Mute the grid's hover cursor (it would fire
+    // under the ghost — invisible playhead, confusing tooltip); the hero has its own hover.
+    if (reduced) this.g.style("opacity", 0.08);
+    else this.g.transition("grid-fade").duration(360).style("opacity", 0.08);
+    if (this.overlay) this.overlay.style("pointer-events", "none");
+    this.ctx.tooltip.hide();
+    this._drawHero(focus);
   }
 
-  _renderStamp() {
-    if (!this.stampG) return;
-    this.stampG.selectAll("*").remove();
-    const focus = this._focusCat;
-    if (!focus) return;
-    // [audit-CH2 P0] On phone the 240x152 stamp cannot fit beside a ~150px panel
-    // in a 336x274 viewBox without overlapping the cramped grid. Suppress it:
-    // the kicker (top-left) already updates to the focused category + its peak
-    // ("peaked at 23.2% in Oct 2022"), the focused panel keeps its glow + peak
-    // dot, and the scrolling text step carries the prose. So no information is
-    // lost — only the colliding card is removed.
-    if (this.isPhone) return;
-    const m = this.opts.margin;
-    const idx = this.cats.indexOf(focus);
-    if (idx < 0) return;
-    const col = idx % this.cols, row = Math.floor(idx / this.cols);
-    const panelLeft = m.left + col * (this.cellW + this.gapX);
-    const panelTop  = m.top  + row * (this.cellH + this.gapY);
-    const panelRight = panelLeft + this.cellW;
-    const panelBottom = panelTop + this.cellH;
-    const panelCx = (panelLeft + panelRight) / 2;
-    const panelCy = (panelTop + panelBottom) / 2;
+  // ── Focus-mode hero enlarge (R5·P5) ───────────────────────────────────────────
+  _clearHero() {
+    if (this._heroFade)       { clearTimeout(this._heroFade); this._heroFade = null; }
+    if (this._heroLineSafety) { clearTimeout(this._heroLineSafety); this._heroLineSafety = null; }
+    if (this.heroG) this.heroG.selectAll("*").remove();
+    this._heroX = this._heroY = this._heroRect = this._heroSeries = this._heroFocus = null;
+  }
 
-    const series = this.seriesMap.get(focus) || [];
-    const peak = d3.greatest(series, d => d.v);
-    if (!peak) return;
+  // First sustained crossing of `thr`% from the 2020-06 trough (the take-off). Window-guarded
+  // so a volatile pre-2021 reading can't masquerade as the take-off (verified: none exists).
+  _firstCross(cat, thr) {
+    const s = this.seriesMap.get(cat) || [];
+    for (const p of s) { if (p.time >= "2020-06" && Number.isFinite(p.v) && p.v >= thr) return p; }
+    return null;
+  }
+  _monthsBetween(a, b) {
+    const [ay, am] = a.split("-").map(Number), [by, bm] = b.split("-").map(Number);
+    return Math.abs((by * 12 + bm) - (ay * 12 + am));
+  }
+  // The verified lead (months) the focused category ran ahead of / behind its reference, at 5%.
+  _leadFor(focus) {
+    const map = { CP045: { other: "CP00", phrase: "before the headline" },
+                  CP01:  { other: "CP045", phrase: "after energy" } };
+    const cfg = map[focus]; if (!cfg) return null;
+    const a = this._firstCross(focus, 5), b = this._firstCross(cfg.other, 5);
+    if (!a || !b) return null;
+    return { gap: this._monthsBetween(a.time, b.time), phrase: cfg.phrase };
+  }
 
-    // [R2·1b] Place the stamp inside the focused panel's OWN COLUMN, in the
-    // vertical space of the rows above or below it (whichever has more room),
-    // with a SHORT mostly-vertical leader anchored on the panel's peak point.
-    // This fixes the round-1 P2 where a right-column focus (Food / Services)
-    // threw a long diagonal leader clear across the grid: a right-column stamp
-    // used to be forced to the far left because a 232px card can't fit to the
-    // right of the right column. Staying in-column keeps the leader tidy.
-    const stampW = 232, stampH = 150;
-    const W = this.W, H = this.H;
-    const peakX = panelLeft + this.x(peak.t);
-    const peakY = panelTop  + this.y(peak.v);
-    // Stamp X: left-align to the panel, clamped to the canvas so it never bleeds.
-    let stampX = Math.max(14, Math.min(W - stampW - 14, panelLeft));
-    // Choose above vs below by available room between the panel and the chart
-    // edges. Prefer below unless the panel is in the bottom half.
-    const roomBelow = (H - m.bottom) - panelBottom;
-    const roomAbove = panelTop - m.top;
-    const placeBelow = roomBelow >= roomAbove;
-    let stampY = placeBelow
-      ? Math.min(H - stampH - 14, panelBottom + 22)
-      : Math.max(m.top + 6, panelTop - 22 - stampH);
+  _drawHero(focus) {
+    if (!this.heroG) return;
+    const reduced = this.ctx.motion.reduced;
+    const m = this._m, plotW = this._plotW, plotH = this._plotH;
+    const series = (this.seriesMap.get(focus) || []).filter(d => Number.isFinite(d.v));
+    if (!series.length) return;
+    const isPhone = this.isPhone;
 
-    // Leader: from the peak point straight to the nearest stamp edge.
-    const leaderX = peakX;
-    const leaderY = peakY;
-    const lineEndX = Math.max(stampX + 8, Math.min(stampX + stampW - 8, peakX));
-    const lineEndY = placeBelow ? stampY - 4 : stampY + stampH + 4;
+    // (The grid is faded to a faint ghost by _applyFocus — see there. The hero draws on an
+    // opaque paper plate above it, with its caption in the freed space.)
 
-    const g = this.stampG.append("g").attr("class", "stamp");
-    const lp = g.append("path").attr("class", "stamp-line")
-      .attr("d", `M ${leaderX} ${leaderY} L ${lineEndX} ${lineEndY}`)
-      .attr("fill", "none").attr("stroke", "var(--ink)").attr("stroke-width", 0.8);
-    const len = lp.node().getTotalLength();
-    lp.attr("stroke-dasharray", len).attr("stroke-dashoffset", len)
-      .transition().duration(540).ease(d3.easeCubicOut).attr("stroke-dashoffset", 0);
-    g.append("circle").attr("cx", leaderX).attr("cy", leaderY).attr("r", 0)
-      .attr("fill", "var(--accent)")
-      .transition().delay(450).duration(260).attr("r", 4);
-
-    const sg = g.append("g").attr("transform", `translate(${stampX}, ${stampY})`).style("opacity", 0);
-    sg.append("rect").attr("class", "stamp-plate sml-stamp-plate")
-      .attr("x", -10).attr("y", -10).attr("width", stampW + 20).attr("height", stampH + 20);
-    // [R2·1b] Editorial eyebrow: human category name + the dated peak — never the
-    // raw COICOP code ("CP04 · PEAK" was database jargon leaking into the graphic).
-    const peakLabel = (SHORT_LABEL[focus] || this.data.categoryLabel(focus)).toUpperCase();
-    sg.append("text").attr("class", "stamp-eyebrow")
-      .attr("x", 0).attr("y", 0)
-      .text(`${peakLabel} · PEAKED ${d3.timeFormat("%b %Y")(peak.t).toUpperCase()}`);
-    sg.append("text").attr("class", "stamp-num")
-      .attr("x", 0).attr("y", 32)
-      .text(`${peak.v.toFixed(1)}%`);
-
-    // [CH2-R1] Comparison to the all-items rate at the same month — adds story
-    // density. Skip when focus IS overall (CP00) or the gap is < 1 pt. [R2·1b]
-    // Reworded from "vs overall (11.5%)" to a human "above the all-items rate".
-    const overallSeries = this.seriesMap.get("CP00");
-    const overallAtPeak = overallSeries?.find(d => d.time === peak.time);
-    const delta = (focus !== "CP00" && overallAtPeak) ? (peak.v - overallAtPeak.v) : null;
-    if (delta != null && Math.abs(delta) >= 1) {
-      sg.append("text").attr("class", "stamp-compare")
-        .attr("x", 0).attr("y", 48)
-        .text(`${delta >= 0 ? "+" : "−"}${Math.abs(delta).toFixed(1)} pts ${delta >= 0 ? "above" : "below"} the all-items rate`);
+    // layout: hero panel + caption in the freed space (never below a shrunken chart)
+    let hero, capRect;
+    if (isPhone) {
+      hero    = { x: m.left, y: m.top + 2, w: plotW, h: Math.round(plotH * 0.52) };
+      capRect = { x: m.left, y: hero.y + hero.h + 16, w: plotW, h: plotH - hero.h - 20 };
+    } else {
+      // [owner review D2] descriptions on the LEFT, the enlarged chart on the RIGHT.
+      const hw = Math.round(plotW * 0.60);
+      const capW = plotW - hw - 30;
+      capRect = { x: m.left, y: m.top + 12, w: capW, h: plotH - 24 };
+      hero    = { x: m.left + capW + 30, y: m.top + 6, w: hw, h: plotH - 12 };
     }
 
-    const sentence = this._stepCaption || `Peaked in ${d3.timeFormat("%B %Y")(peak.t)}.`;
-    const words = sentence.split(" ");
-    let lineN = 0, buf = "";
-    const maxChars = 30;
-    const sentenceG = sg.append("g").attr("transform", `translate(0, ${delta != null && Math.abs(delta) >= 1 ? 68 : 52})`);
-    words.forEach(w => {
-      if ((buf + " " + w).trim().length > maxChars) {
-        sentenceG.append("text").attr("class", "stamp-sentence")
-          .attr("x", 0).attr("y", lineN * 16).text(buf.trim());
-        buf = w; lineN++;
-      } else { buf += " " + w; }
+    const g = this.heroG.append("g").attr("class", "sml-hero").style("opacity", reduced ? 1 : 0);
+    this._drawHeroPanel(g, hero, focus, series, reduced);
+    this._drawHeroCaption(g, capRect, focus, series, isPhone);
+
+    if (!reduced) {
+      g.transition().duration(280).ease(d3.easeCubicOut).style("opacity", 1);
+      this._heroFade = setTimeout(() => { if (!g.empty()) g.interrupt().style("opacity", 1); }, 360);
+    }
+  }
+
+  _heroAreaGradient(cls) {
+    const id = `sml-hero-grad-${cls}`;
+    const defs = this.svg.select("defs");
+    if (!defs.empty() && defs.select(`#${id}`).empty()) {
+      const hue = getCSS(`var(--cat-${cls})`);
+      const lg = defs.append("linearGradient").attr("id", id)
+        .attr("x1", 0).attr("y1", 0).attr("x2", 0).attr("y2", 1);
+      lg.append("stop").attr("offset", "0%").attr("stop-color", hue).attr("stop-opacity", 0.34);
+      lg.append("stop").attr("offset", "100%").attr("stop-color", hue).attr("stop-opacity", 0.02);
+    }
+    return id;
+  }
+
+  _drawHeroPanel(g, rect, focus, series, reduced) {
+    const parse = this.parse;
+    const cls = CAT_CLASS[focus] || "other";
+    // .craft-blend → the accent line carries multiply (via .series-line) so it sits into the
+    // paper + the gradient area; on phone it falls back to opacity (charts.css).
+    const panel = g.append("g").attr("class", "sml-hero-panel craft-blend")
+      .attr("transform", `translate(${rect.x},${rect.y})`);
+
+    // solid paper backing so the hero reads crisply over the scrimmed ghost grid
+    panel.append("rect").attr("class", "sml-hero-plate")
+      .attr("x", -6).attr("y", -6).attr("width", rect.w + 12).attr("height", rect.h + 12);
+
+    // scales: time across the full span; y to THIS category's own peak (the hero is about it)
+    const xs = d3.scaleTime().domain(this.x.domain()).range([0, rect.w]);
+    const vmax = d3.max(series, d => d.v) || 10;
+    const vmin = Math.min(0, d3.min(series, d => d.v) || 0);
+    const ys = d3.scaleLinear().domain([vmin, Math.ceil((vmax * 1.08) / 5) * 5]).range([rect.h, 0]).nice();
+    this._heroX = xs; this._heroY = ys; this._heroRect = rect; this._heroSeries = series; this._heroFocus = focus;
+
+    // event bands
+    [["covid", COVID_BAND], ["energy", ENERGY_BAND]].forEach(([k, band]) => {
+      panel.append("rect").attr("class", `sml-band event-band--${k}`)
+        .attr("x", xs(parse(band[0]))).attr("y", 0)
+        .attr("width", Math.max(2, xs(parse(band[1])) - xs(parse(band[0])))).attr("height", rect.h);
     });
-    if (buf.trim()) sentenceG.append("text").attr("class", "stamp-sentence")
-      .attr("x", 0).attr("y", lineN * 16).text(buf.trim());
 
-    const arr = series.slice(-72).map(d => ({ value: d.v }));
-    if (arr.length > 12) {
-      const sw2 = stampW, sh = 28;
-      const sp = sparkPath(arr, sw2, sh);
-      const skg = sg.append("g").attr("transform", `translate(0, ${stampH - sh - 4})`);
-      skg.append("path").attr("d", sp.d).attr("fill", "none")
-        .attr("stroke", "var(--accent)").attr("stroke-width", 1.4)
-        .attr("stroke-dasharray", sp.length).attr("stroke-dashoffset", sp.length)
-        .transition().delay(700).duration(900).ease(d3.easeCubicOut).attr("stroke-dashoffset", 0);
-      skg.append("circle").attr("cx", sp.lastX).attr("cy", sp.lastY).attr("r", 0)
-        .attr("fill", "var(--accent)")
-        .transition().delay(1500).duration(260).attr("r", 2.5);
+    // gridlines + y ticks (zero line emphasised)
+    ys.ticks(5).forEach(t => {
+      const yy = ys(t);
+      panel.append("line").attr("class", t === 0 ? "sml-zero" : "sml-gridline")
+        .attr("x1", 0).attr("x2", rect.w).attr("y1", yy).attr("y2", yy);
+      panel.append("text").attr("class", "sml-ytick").attr("x", -8).attr("y", yy + 3)
+        .attr("text-anchor", "end").text(`${t}%`);
+    });
+    // x ticks (years)
+    ["2016", "2018", "2020", "2022", "2024"].forEach(yr => {
+      panel.append("text").attr("class", "sml-xtick").attr("x", xs(parse(`${yr}-01`))).attr("y", rect.h + 16)
+        .attr("text-anchor", "middle").text(yr);
+    });
+
+    // 5% reference line — the threshold the lead-marker measures against
+    const y5 = ys(5);
+    if (y5 > 6 && y5 < rect.h - 6) {
+      panel.append("line").attr("class", "sml-hero-ref")
+        .attr("x1", 0).attr("x2", rect.w).attr("y1", y5).attr("y2", y5);
+      panel.append("text").attr("class", "sml-hero-ref-label").attr("x", rect.w - 3).attr("y", y5 - 4)
+        .attr("text-anchor", "end").text("5% threshold");
     }
 
-    sg.transition().delay(380).duration(420).style("opacity", 1);
-    // [CH2-W1] Safety net — force stamp opacity 1 even if transitions don't tick.
-    if (this._stampSafety) clearTimeout(this._stampSafety);
-    this._stampSafety = setTimeout(() => {
-      if (!sg.empty() && sg.style("opacity") !== "1") sg.interrupt().style("opacity", 1);
-      // Also force the sparkline trace to land (if present)
-      g.selectAll("path[stroke-dasharray]").each(function () {
-        const sel = d3.select(this);
-        const off = +sel.attr("stroke-dashoffset");
-        if (Number.isFinite(off) && off > 1) sel.interrupt().attr("stroke-dashoffset", 0);
-      });
-      g.selectAll("circle[r='0']").each(function () {
-        const sel = d3.select(this);
-        if (+sel.attr("r") === 0) sel.interrupt().attr("r", 2.5);
-      });
-    }, 1700);
+    // gradient area (category hue) + accent line drawn on
+    const gradId = this._heroAreaGradient(cls);
+    const area = d3.area().x(d => xs(d.t)).y0(ys(0)).y1(d => ys(d.v)).curve(d3.curveMonotoneX);
+    panel.append("path").datum(series).attr("class", "sml-hero-area").attr("d", area).attr("fill", `url(#${gradId})`);
+
+    const line = d3.line().x(d => xs(d.t)).y(d => ys(d.v)).curve(d3.curveMonotoneX);
+    const lp = panel.append("path").datum(series).attr("class", "sml-hero-line series-line")
+      .attr("d", line).attr("fill", "none").attr("stroke", "var(--accent)").attr("stroke-width", 2.6)
+      .attr("stroke-linejoin", "round").attr("stroke-linecap", "round");
+    drawOnPlay(lp, this.ctx.motion, 1000);
+    if (!reduced) {
+      this._heroLineSafety = setTimeout(() => {
+        const off = +lp.attr("stroke-dashoffset");
+        if (Number.isFinite(off) && off > 1) lp.interrupt().attr("stroke-dashoffset", 0);
+      }, 1150);
+    }
+
+    // peak — sphere dot + label
+    const peak = d3.greatest(series, d => d.v);
+    if (peak) {
+      const px = xs(peak.t), py = ys(peak.v), late = (rect.w - px) < 70;
+      const dot = panel.append("circle").attr("class", "sml-hero-dot").attr("cx", px).attr("cy", py)
+        .attr("r", reduced ? 5 : 0).attr("fill", sphereGradient(this.svg, `hero-${cls}`, getCSS("var(--accent)")));
+      if (!reduced) dot.transition().delay(720).duration(300).attr("r", 5);
+      panel.append("text").attr("class", "sml-peak-tag sml-peak-tag--lead")
+        .attr("x", px + (late ? -9 : 9)).attr("y", py - 8).attr("text-anchor", late ? "end" : "start")
+        .text(`peak ${peak.v.toFixed(1)}%`);
+    }
+
+    // last value — a direct end-of-line label (Burn-Murdoch: label the line, no legend)
+    const last = series[series.length - 1];
+    if (last) {
+      const lx = xs(last.t), ly = ys(last.v);
+      panel.append("circle").attr("class", "sml-hero-lastdot").attr("cx", lx).attr("cy", ly).attr("r", 3);
+      panel.append("text").attr("class", "sml-last-tag").attr("x", lx - 6).attr("y", ly - 8)
+        .attr("text-anchor", "end").attr("opacity", 1)
+        .text(`${last.v >= 0 ? "+" : ""}${last.v.toFixed(1)}% now`);
+    }
+
+    // the EVIDENCE — verified lead-marker (#8)
+    this._drawLeadMarker(panel, rect, xs, focus);
+    // tactile hover for focus mode
+    this._buildHeroHover(panel, rect, xs, ys);
+  }
+
+  // DESIGN-REVIEW #8 — two vertical markers at the take-off crossings + the gap labelled with
+  // the VERIFIED lead (computed at runtime from the data). This is the proof of the title; the
+  // enlarge is only the mechanic.
+  _drawLeadMarker(panel, rect, xs, focus) {
+    const map = { CP045: "CP00", CP01: "CP045" };
+    const other = map[focus]; if (!other) return;
+    const a = this._firstCross(focus, 5), b = this._firstCross(other, 5);
+    if (!a || !b) return;
+    const early = (a.time <= b.time) ? a : b;
+    const late  = (a.time <= b.time) ? b : a;
+    const gap = this._monthsBetween(early.time, late.time);
+    const xe = xs(early.t), xl = xs(late.t), topY = 4, by = topY + 9;
+
+    [xe, xl].forEach(x => panel.append("line").attr("class", "sml-lead-mark")
+      .attr("x1", x).attr("x2", x).attr("y1", topY).attr("y2", rect.h));
+    panel.append("path").attr("class", "sml-lead-bracket").attr("fill", "none")
+      .attr("d", `M ${xe} ${by} L ${xl} ${by}`);
+    panel.append("text").attr("class", "sml-lead-num").attr("x", (xe + xl) / 2).attr("y", by - 6)
+      .attr("text-anchor", "middle").text(`${gap} months`);
+    // Splay the month tags OUTWARD from their markers (the two crossings are only ~7–10 months
+    // apart on a 10-year axis, so same-side tags would collide): earlier tag to the left, later
+    // tag to the right.
+    panel.append("text").attr("class", "sml-lead-tag").attr("x", xe - 3).attr("y", rect.h - 5)
+      .attr("text-anchor", "end").text(d3.timeFormat("%b ’%y")(early.t));
+    panel.append("text").attr("class", "sml-lead-tag").attr("x", xl + 3).attr("y", rect.h - 5)
+      .attr("text-anchor", "start").text(d3.timeFormat("%b ’%y")(late.t));
+  }
+
+  _drawHeroCaption(g, rect, focus, series, isPhone) {
+    const cap = g.append("g").attr("class", "sml-hero-caption").attr("transform", `translate(${rect.x},${rect.y})`);
+    const peak = d3.greatest(series, d => d.v);
+    const name = (SHORT_LABEL[focus] || this.data.categoryLabel(focus));
+    let y = 6;
+    cap.append("text").attr("class", "stamp-eyebrow").attr("x", 0).attr("y", y).text(name.toUpperCase());
+
+    // headline number = the LEAD (months) when there is one — that is the chapter's evidence;
+    // otherwise the category peak.
+    const lead = this._leadFor(focus);
+    y += isPhone ? 30 : 46;
+    if (lead) {
+      cap.append("text").attr("class", "stamp-num").attr("x", -1).attr("y", y).text(lead.gap);
+      cap.append("text").attr("class", "stamp-compare").attr("x", 0).attr("y", y + (isPhone ? 16 : 19))
+        .text(`months ${lead.phrase}`);
+    } else if (peak) {
+      cap.append("text").attr("class", "stamp-num").attr("x", -1).attr("y", y)
+        .text(`${peak.v >= 0 ? "+" : ""}${peak.v.toFixed(1)}%`);
+      cap.append("text").attr("class", "stamp-compare").attr("x", 0).attr("y", y + (isPhone ? 16 : 19))
+        .text(`peak · ${d3.timeFormat("%b %Y")(peak.t)}`);
+    }
+    y += isPhone ? 34 : 42;
+
+    // sentence (word-wrapped)
+    const sentence = this._stepCaption || "";
+    if (sentence) {
+      const maxChars = isPhone ? 44 : 27;
+      const words = sentence.split(" ");
+      let buf = "", lineN = 0;
+      const sg = cap.append("g").attr("transform", `translate(0, ${y})`);
+      const emit = (txt) => sg.append("text").attr("class", "stamp-sentence").attr("x", 0).attr("y", lineN++ * 17).text(txt);
+      words.forEach(w => { if ((buf + " " + w).trim().length > maxChars) { emit(buf.trim()); buf = w; } else buf += " " + w; });
+      if (buf.trim()) emit(buf.trim());
+      y += lineN * 17;
+    }
+
+    // mini sparkline (last 72 mo) — desktop only (phone is tight)
+    if (!isPhone) {
+      const arr = series.slice(-72).map(d => ({ value: d.v }));
+      if (arr.length > 12) {
+        const sw = Math.min(rect.w, 200), sh = 30;
+        const sp = sparkPath(arr, sw, sh);
+        const skg = cap.append("g").attr("transform", `translate(0, ${Math.min(rect.h - sh - 2, y + 18)})`);
+        skg.append("path").attr("d", sp.d).attr("fill", "none").attr("stroke", "var(--accent)").attr("stroke-width", 1.4);
+        skg.append("circle").attr("cx", sp.lastX).attr("cy", sp.lastY).attr("r", 2.4).attr("fill", "var(--accent)");
+      }
+    }
+  }
+
+  _buildHeroHover(panel, rect, xs, ys) {
+    const series = this._heroSeries;
+    const cur = panel.append("g").attr("class", "sml-hero-cursor").attr("pointer-events", "none").style("opacity", 0);
+    const ph  = cur.append("line").attr("class", "cursor-line").attr("y1", 0).attr("y2", rect.h);
+    const dot = cur.append("circle").attr("class", "sml-hero-curdot").attr("r", 4);
+    const lbl = cur.append("text").attr("class", "sml-cursor-month").attr("y", -4);
+    const read = (clientX, evt) => {
+      const r = this.svg.node().getBoundingClientRect();
+      const vb = this.svg.attr("viewBox").split(/\s+/).map(Number);
+      const svgX = ((clientX - r.left) / r.width) * vb[2];
+      const t = xs.invert(Math.max(0, Math.min(rect.w, svgX - rect.x)));
+      const monthKey = d3.timeFormat("%Y-%m")(t);
+      const rec = series.find(p => p.time === monthKey);
+      if (!rec) { cur.style("opacity", 0); this.ctx.tooltip.hide(); return; }
+      const cx = xs(rec.t);
+      cur.style("opacity", 1);
+      ph.attr("x1", cx).attr("x2", cx);
+      dot.attr("cx", cx).attr("cy", ys(rec.v));
+      lbl.attr("x", cx).attr("text-anchor", cx > rect.w - 56 ? "end" : "start").text(d3.timeFormat("%b %Y")(rec.t));
+      if (evt) {
+        const items = this.cats.map(c => {
+          const v = this.data.hicpMonthly[this.eu]?.[c]?.[monthKey];
+          const l = SHORT_LABEL[c] || this.data.categoryLabel(c);
+          return `<div class="row"><span class="key">${l}</span><span class="val">${v == null ? "—" : (v >= 0 ? "+" : "") + v.toFixed(1) + "%"}</span></div>`;
+        }).join("");
+        this.ctx.tooltip.show(`<h5>${d3.timeFormat("%b %Y")(t)}</h5>${items}`, evt.clientX, evt.clientY);
+      }
+    };
+    const hit = panel.append("rect").attr("class", "sml-hero-hit")
+      .attr("x", 0).attr("y", 0).attr("width", rect.w).attr("height", rect.h)
+      .attr("fill", "transparent").style("cursor", "crosshair");
+    hit.on("mousemove", (e) => read(e.clientX, e))
+       .on("mouseleave", () => { cur.style("opacity", 0); this.ctx.tooltip.hide(); });
+    hit.node().addEventListener("touchstart", (e) => {
+      if (!e.touches || !e.touches.length) return;
+      const t = e.touches[0]; read(t.clientX, { clientX: t.clientX, clientY: t.clientY });
+    }, { passive: true });
   }
 
   onThemeChange() { this.render(); }

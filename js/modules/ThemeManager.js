@@ -19,9 +19,7 @@ export class ThemeManager {
     document.querySelectorAll("[data-theme-set]").forEach(btn => {
       btn.addEventListener("click", () => this.set(btn.dataset.themeSet));
     });
-    this.updateToggleUI();
-
-    // React to OS changes when in 'system'
+    // React to OS changes when in 'system' (the default auto state — no 'system' button shown)
     matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
       if (this.choice === "system") this.applyEffective();
     });
@@ -41,7 +39,6 @@ export class ThemeManager {
     } else {
       this.applyEffective();
     }
-    this.updateToggleUI();
   }
 
   applyEffective() {
@@ -55,12 +52,16 @@ export class ThemeManager {
     document.querySelectorAll('meta[name="theme-color"]').forEach(m => m.setAttribute("content", c));
 
     this.effective = eff;
+    this.updateToggleUI();   // highlight the active light/dark button — called here so it always runs
+                             // with the FRESH effective, incl. inside the async startViewTransition callback
     this.listeners.forEach(fn => fn(eff));
   }
 
   updateToggleUI() {
+    // Two buttons (light/dark): highlight whichever matches the EFFECTIVE theme, so in the default
+    // auto/system state the OS-resolved theme reads as active (there is no separate 'system' button).
     document.querySelectorAll("[data-theme-set]").forEach(btn => {
-      btn.setAttribute("aria-pressed", btn.dataset.themeSet === this.choice ? "true" : "false");
+      btn.setAttribute("aria-pressed", btn.dataset.themeSet === this.effective ? "true" : "false");
     });
   }
 

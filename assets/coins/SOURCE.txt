@@ -1,0 +1,14 @@
+Euro coin images — COMMON (European) side.
+Source: Wikimedia / Wikipedia "Euro coins" (en.wikipedia.org/wiki/Euro_coins), downloaded 2026-06-15.
+Reproduction of the COMMON side of euro coins is authorized (per ECB / EU rules; see the search
+result snippet "Reproduction of the common side of euro coins is authorized"). Used here as the hero
+medallion tiles for a non-commercial student data-visualization project (University of Genova).
+
+ACTIVE HERO IMAGE (owner STEP-1):
+  euro-1.png  ← the ONE €1 common-side image repeated across all 100 hero tiles (100 × €1 = €100).
+  It is currently a copy of coin-1e.png (a real €1 common side) used as a placeholder.
+  >>> OWNER: drop your own cleared €1 common-side PNG at assets/coins/euro-1.png to replace it.
+      No code change needed — js/charts/Hero.js (COIN_IMG) points at exactly that path.
+
+The other denomination files (coin-1c.png … coin-2e.jpg) are the earlier 8-denomination set; they are
+now UNUSED by the hero (kept on disk only). The optional national-side flip was dropped (owner override).

@@ -9,6 +9,9 @@
    ============================================================ */
 
 import { BaseChart } from "./BaseChart.js";
+import { sphereGradient } from "../modules/CraftFX.js";
+
+function getCSS(name) { const m = String(name).match(/var\((--[^)]+)\)/); const n = m ? m[1] : name; return getComputedStyle(document.documentElement).getPropertyValue(n).trim() || "#888"; }
 
 // Step focus: null (all), "pos" (winners), "neg" (losers).
 // The headline framing ("N gained / N lost") is rendered as a two-camp header in the
@@ -178,8 +181,47 @@ export class DivergingBar extends BaseChart {
     .on("mousemove", e => this.ctx.tooltip.move(e.clientX, e.clientY))
     .on("mouseleave", (e) => { d3.select(e.currentTarget).classed("is-hover", false); this.ctx.tooltip.hide(); });
 
+    // [R5·P11] Median reference line (Burn-Murdoch style-fix) — the TYPICAL country's real change,
+    // distinct from the bold zero spine. Most countries gained, so the median sits right of zero.
+    const med = d3.median(rows, r => r.real);
+    const medG = this.g.append("g").attr("class", "db-median").attr("pointer-events", "none");
+    medG.append("line").attr("x1", x(med)).attr("x2", x(med)).attr("y1", -4).attr("y2", ih + 2);
+    if (!cmp) medG.append("text").attr("class", "db-median-label").attr("x", x(med)).attr("y", -10)
+      .attr("text-anchor", "middle").text(`median ${fmtSigned(med)}`);
+
+    // [R5·P11] Sphere dots on the two bookends (widest gain / deepest cut) — Bremer craft.
+    // Grown on reveal (see _initialReveal); placed at each extreme bar's value end.
+    this._extremeDots = [];
+    [this._summary.best, this._summary.worst].forEach(d => {
+      if (!d) return;
+      const col = d.real >= 0 ? getCSS("--cat-wages") : getCSS("--accent");
+      this._extremeDots.push(this.g.append("circle").attr("class", "db-extreme-sphere")
+        .attr("cx", x(d.real)).attr("cy", yScale(d.code) + bw / 2).attr("r", 0)
+        .attr("fill", sphereGradient(this.svg, `db-${d._extreme}`, col)));
+    });
+
     this._initialReveal();
     this._applyFocus();
+  }
+
+  // [R5·P11] Two-camp scoreboard count-up on enter (Bremer). Reduced-motion: numbers are already
+  // rendered at their final value by _drawHeader, so this no-ops.
+  _countUpHeader() {
+    if (this.ctx.motion.reduced || !this.headerG) return;
+    const { nPos, nNeg } = this._summary;
+    const tween = (sel, target) => sel.each(function () {
+      const t = d3.select(this);
+      t.transition().duration(820).ease(d3.easeCubicOut).tween("n", () => {
+        const i = d3.interpolateRound(0, target); return s => t.text(i(s));
+      });
+    });
+    if (this.compact) {
+      tween(this.headerG.selectAll(".db-head-c--pos"), nPos);
+      tween(this.headerG.selectAll(".db-head-c--neg"), nNeg);
+    } else {
+      tween(this.headerG.selectAll(".db-head-num--pos"), nPos);
+      tween(this.headerG.selectAll(".db-head-num--neg"), nNeg);
+    }
   }
 
   /** Two-camp scoreboard in the kicker zone — the win/loss divide as the headline.
@@ -229,6 +271,7 @@ export class DivergingBar extends BaseChart {
       this.bars.select("rect").attr("width", d => Math.abs(x(d.real) - x(0)));
       this.bars.select(".db-val").attr("opacity", 1);
       this.bars.select(".db-extreme-eyebrow").attr("opacity", 1);
+      if (this._extremeDots) this._extremeDots.forEach(dt => dt.attr("r", 5));
       return;
     }
     this.bars.each(function (d, i) {
@@ -239,6 +282,9 @@ export class DivergingBar extends BaseChart {
       sel.select(".db-val").transition().delay(i * 22 + 460).duration(260).attr("opacity", 1);
       sel.select(".db-extreme-eyebrow").transition().delay(i * 22 + 640).duration(300).attr("opacity", 1);
     });
+    // sphere dots pop after their bar has grown; scoreboard counts up on enter
+    if (this._extremeDots) this._extremeDots.forEach((dt, k) => dt.transition().delay(360 + k * 70).duration(320).ease(d3.easeBackOut).attr("r", 5));
+    this._countUpHeader();
     if (this._revealSafety) clearTimeout(this._revealSafety);
     const n = this.bars.size();
     this._revealSafety = setTimeout(() => {

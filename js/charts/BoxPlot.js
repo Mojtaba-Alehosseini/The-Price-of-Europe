@@ -15,6 +15,8 @@
    ============================================================ */
 
 import { BaseChart } from "./BaseChart.js";
+import { sphereGradient } from "../modules/CraftFX.js";
+import { buildCoinGlyph } from "./Hero.js";
 
 // [R2·12] The narrative protagonist. This whole chapter — the last chart in the
 // essay — exists to show that in 2022 a tight, uniform inflation distribution
@@ -192,6 +194,11 @@ export class BoxPlot extends BaseChart {
     this.boxes.append("line").attr("class", "box-median")
       .attr("x1", 0).attr("x2", w)
       .attr("y1", d => y(d.med)).attr("y2", d => y(d.med));
+
+    // [R5·P14] sphereGradient median dot on the protagonist (2022) box — the finale's lit pivot.
+    this.boxes.filter(d => d.year === PROTAGONIST).append("circle").attr("class", "bp-median-sphere")
+      .attr("cx", w / 2).attr("cy", d => y(d.med)).attr("r", 4.5)
+      .attr("fill", sphereGradient(this.svg, "bp-median", getCSS("--accent")));
 
     // [Style v95 · Priority 1] Jitter strip — show EVERY country's actual value as a
     // small faint dot, jittered horizontally, so the reader sees the real distribution
@@ -436,6 +443,20 @@ export class BoxPlot extends BaseChart {
       "But every box now floats above the line it began on —",
       "the spread came back; the prices did not."
     ].forEach((ln, i) => sent.append("tspan").attr("x", 0).attr("dy", i === 0 ? 0 : 17).text(ln));
+
+    // [R5·P14 / DESIGN-REVIEW #12 · PART 2 S1] THE BOOKEND — the essay opened on the hero coin; the
+    // finale closes on it, now tarnished, looping back to where it began. Reuse buildCoinGlyph (DRY)
+    // as a nested SVG at the Act-V tarnish level; "Five years on, your €100 is now €77."
+    const coinY = 104, coinS = 50;
+    const coin = buildCoinGlyph(0.95);
+    coin.setAttribute("x", 0); coin.setAttribute("y", coinY);
+    coin.setAttribute("width", coinS); coin.setAttribute("height", coinS);
+    coin.setAttribute("aria-hidden", "true");
+    this.stampG.node().appendChild(coin);
+    const bk = this.stampG.append("text").attr("class", "bp-stamp__bookend").attr("x", coinS + 14).attr("y", coinY + 22);
+    bk.append("tspan").attr("x", coinS + 14).text("Five years on, your");
+    bk.append("tspan").attr("x", coinS + 14).attr("dy", 19).text("€100 is now ");
+    bk.append("tspan").attr("class", "bp-stamp__bookend-num").text("€77.");
 
     if (reduced) this.stampG.style("opacity", 1);
     else this.stampG.style("opacity", 0).transition().duration(420).style("opacity", 1);

@@ -26,6 +26,7 @@ const DEFERRED_PATHS = {
 // (ridgeline, heatmap, boxplot) need only CRITICAL data and render immediately.
 const CHART_NEEDS = {
   choropleth: ["hicpMonthly", "hicpIndex"],
+  compareMap: [],   // annual HICP + topology are boot-loaded (like ridgeline/heatmap)
   smallMultiples: ["hicpMonthly"],
   annotatedLine: ["hicpMonthly"],
   ridgeline: [],

@@ -8,6 +8,8 @@
    ============================================================ */
 
 import { BaseChart } from "./BaseChart.js";
+import { watchChapterProgress, smooth } from "../modules/ChartMotion.js";
+import { ensureGlow } from "../modules/CraftFX.js";
 
 // onStep wires the narrative copy in index.html to band/anchor highlights.
 // Anchor date is the editorial peak/inflection point for the step.
@@ -217,53 +219,37 @@ export class AnnotatedLine extends BaseChart {
         .attr("pointer-events", "none");
     }
 
-    // path -----------------------------------------------------------
+    // path + over-target fill -------------------------------------------
+    // [R5·P6] Both live inside a REVEAL group whose clip-rect wipes left→right with scroll —
+    // the chapter's ONE signature motion (Bremer: the reader draws the line with their scroll,
+    // `watchChapterProgress` → `_revealTo`). The wipe is LATCHED (max-progress) so scrolling
+    // back never un-draws or re-traces it (DESIGN-REVIEW #18: nothing loops, no re-trace on
+    // reverse). Reduced-motion reveals it in full at once (deferred init at the end of render).
+    const revealId = `anno-reveal-${this.selector.replace(/[^\w]/g, "")}`;
+    this._revealRect = this.svg.select("defs").append("clipPath").attr("id", revealId)
+      .append("rect").attr("x", 0).attr("y", 0).attr("width", 0).attr("height", ih);
+    const drawG = this.g.append("g").attr("clip-path", `url(#${revealId})`);
+    this._drawG = drawG;
+
+    // Over-target fill — the wedge between the line and the ECB 2% target, ONLY where the line
+    // is above 2% (the "overshoot"). Fills mandarin and SETTLES once as part of the latched
+    // reveal — never an animated loop (DESIGN-REVIEW #2; `flowGradient` stays uncalled).
+    const overGrad = this._overshootGradient();
+    const overArea = d3.area().x(d => x(d.t)).y0(y(2)).y1(d => y(Math.max(d.v, 2))).curve(d3.curveMonotoneX);
+    drawG.append("path").datum(all).attr("class", "anno-overshoot")
+      .attr("d", overArea).attr("fill", `url(#${overGrad})`)
+      .attr("clip-path", this._clipUrl).attr("pointer-events", "none");
+
+    // The protagonist — one claret line over the grey country-spread envelope. fill:none is
+    // mandatory (the SVG root is .chart-svg, so the global `.chart .line{fill:none}` never
+    // matches here → a black blob without it).
     const line = d3.line().x(d => x(d.t)).y(d => y(d.v)).curve(d3.curveMonotoneX);
-    const linePath = this.g.append("path")
+    drawG.append("path")
       .datum(all).attr("class", "line anno-line series--overall")
-      // fill:none is mandatory — the SVG root is .chart-svg, so the global
-      // `.chart .line { fill:none }` / `.chart .series--overall { fill }` rules
-      // never match here. Without this the path defaults to a solid black fill
-      // and the "line" reads as a filled area chart (which the rationale
-      // explicitly rejects). Set on the element so no stylesheet scope is needed.
-      .attr("fill", "none")
-      .attr("clip-path", this._clipUrl)
+      .attr("fill", "none").attr("clip-path", this._clipUrl)
       .attr("stroke", "var(--accent)").attr("stroke-width", 2.2)
       .attr("d", line);
-
-    // animate path on first render. The trace BUILDS the story: the wiggly flat
-    // decade carries most of the path's arc-length so a constant-speed dashoffset
-    // reveal already dwells there, then races up the near-vertical 2021→2022 climb
-    // — the eye watches the line "discover" the bend. We hold the peak callout +
-    // its dot hidden until the trace arrives, then pop them in (a punctuation on
-    // the climax) and fire the pulse. Reduced-motion shows the static end-state.
-    if (!this.ctx.motion.reduced) {
-      // peak callout waits offstage until the line reaches it
-      if (this._peakG) this._peakG.style("opacity", 0);
-      const len = linePath.node().getTotalLength();
-      const TRACE_MS = 1900;
-      linePath.attr("stroke-dasharray", `${len} ${len}`).attr("stroke-dashoffset", len)
-        .transition().duration(TRACE_MS).ease(d3.easeCubicInOut)
-        .attr("stroke-dashoffset", 0)
-        .on("end", () => {
-          linePath.attr("stroke-dasharray", null);
-          if (this._peakG) {
-            this._peakG.transition().duration(360).ease(d3.easeCubicOut).style("opacity", 1);
-            const dot = this._peakG.select(".anno-peak-dot");
-            dot.attr("r", 0).transition().delay(120).duration(420).ease(d3.easeBackOut).attr("r", 4);
-          }
-        });
-      // [CH3-C1] rAF-stall safety net — force final state if transition doesn't tick.
-      // Also un-hide the peak callout so a stalled trace can't leave it invisible.
-      if (this._lineSafety) clearTimeout(this._lineSafety);
-      this._lineSafety = setTimeout(() => {
-        const off = +linePath.attr("stroke-dashoffset");
-        if (Number.isFinite(off) && off > 1) {
-          linePath.interrupt().attr("stroke-dasharray", null).attr("stroke-dashoffset", null);
-          if (this._peakG) { this._peakG.interrupt().style("opacity", 1); this._peakG.select(".anno-peak-dot").interrupt().attr("r", 4); }
-        }
-      }, TRACE_MS + 400);
-    }
+    this._drawnP = 0;
 
     // event dots (from events.json)
     const focusedEvents = this.data.events.filter(e => e.date.length >= 7);
@@ -317,10 +303,9 @@ export class AnnotatedLine extends BaseChart {
     const peak = d3.greatest(all, d => d.v);
     this._peak = peak;
     if (peak) {
-      const pg = this.g.append("g").attr("class", "anno-peak-g").attr("clip-path", this._clipUrl);
+      // Starts hidden; the scroll reveal (_revealTo) pops it in once the draw reaches the peak.
+      const pg = this.g.append("g").attr("class", "anno-peak-g").attr("clip-path", this._clipUrl).style("opacity", 0);
       this._peakG = pg;
-      // pulse-ring host (rings injected on the peak/energy step, removed on leave)
-      this._peakPulseG = pg.append("g").attr("class", "anno-peak-pulse").attr("pointer-events", "none");
       // leader line — anchored later by _layoutPeak() so it tracks the zoom domain
       pg.append("line").attr("class", "anno-peak-leader");
       pg.append("circle").attr("class", "anno-peak-dot")
@@ -388,8 +373,59 @@ export class AnnotatedLine extends BaseChart {
       yearSel.addEventListener("change", (e) => this._zoomToYear(e.target.value));
     }
 
+    // [R5·P6] Reveal init — reduced-motion shows the full line + over-target fill + peak callout
+    // at once; otherwise the scroll watcher drives the latched left→right draw (its compute fires
+    // immediately, so a deep-link mid-chapter lands at the right progress, not at zero).
+    this._zoomed = false;
+    if (this.ctx.motion.reduced) this._revealTo(1);
+    else this._wireScroll();
+
     // Apply current step state (in case onStep fired before render)
     this._applyFocus();
+  }
+
+  // [R5·P6] Subscribe the latched scroll-draw to the chapter's progress. Returns an unsubscribe
+  // (stored for destroy). watchChapterProgress fires compute() immediately on wire.
+  _wireScroll() {
+    if (this._unwatch) this._unwatch();
+    const chapter = this.container.closest(".chapter");
+    this._unwatch = watchChapterProgress(chapter, p => this._onProgress(p));
+  }
+
+  // Map chapter scroll (0..1) → a latched draw fraction. The line should be fully drawn by ~70%
+  // of the chapter scroll (around the peak/policy steps), then hold. A year-zoom owns the full
+  // line, so ignore scroll-draw while zoomed.
+  _onProgress(p) {
+    if (this._zoomed) return;
+    const target = smooth(Math.max(0, Math.min(1, (p - 0.05) / 0.6)));
+    if (target > (this._drawnP || 0)) this._revealTo(target);
+  }
+
+  // Latched reveal: widen the clip-rect to drawnP·iw (never narrower → no un-draw / re-trace),
+  // and pop the peak callout once the draw reaches the peak's x.
+  _revealTo(np) {
+    this._drawnP = Math.max(this._drawnP || 0, np);
+    if (this._revealRect) this._revealRect.attr("width", Math.max(0, this._drawnP * this._iw));
+    if (this._peakG && this._peak && this._x) {
+      if (this._drawnP * this._iw >= this._x(this._peak.t) - 1) {
+        this._peakG.interrupt().style("opacity", 1);
+        this._peakG.select(".anno-peak-dot").attr("r", 4);
+      }
+    }
+  }
+
+  // Vertical mandarin gradient for the over-target wedge: strong at the line, fading to the 2%
+  // target. stop-color is a hex token (var() resolves in CSS) so no d3 colour-parse (D15-safe).
+  _overshootGradient() {
+    const id = `anno-overshoot-${this.selector.replace(/[^\w]/g, "")}`;
+    const defs = this.svg.select("defs");
+    if (!defs.empty() && defs.select(`#${id}`).empty()) {
+      const lg = defs.append("linearGradient").attr("id", id)
+        .attr("x1", 0).attr("y1", 0).attr("x2", 0).attr("y2", 1);
+      lg.append("stop").attr("offset", "0%").attr("stop-color", "var(--cat-energy)").attr("stop-opacity", 0.30);
+      lg.append("stop").attr("offset", "100%").attr("stop-color", "var(--cat-energy)").attr("stop-opacity", 0.04);
+    }
+    return id;
   }
 
   // [R3 fix 2] Zoom the x-domain to the chosen year (or restore all). Uses a
@@ -398,6 +434,10 @@ export class AnnotatedLine extends BaseChart {
   _zoomToYear(yearStr) {
     if (!this._x || !this._all) return;
     const x = this._x;
+    // Any zoom interaction means the reader has engaged — reveal the full line (latched) and let
+    // the year-domain own it; _onProgress then ignores scroll-draw while zoomed.
+    this._zoomed = (yearStr !== "all");
+    this._revealTo(1);
     if (yearStr === "all") {
       x.domain(d3.extent(this._all, d => d.t));
     } else {
@@ -453,8 +493,8 @@ export class AnnotatedLine extends BaseChart {
       this._layoutPeak(x);
       const inDom = this._inDomain(this._peak.t);
       this._peakG.interrupt().transition(t).style("opacity", inDom ? 1 : 0);
-      // pulse only ever lives on the overview/step view; never during a year-zoom
-      this._peakPulse(false);
+      // glow only lives on the overview/step view; never during a year-zoom
+      this._peakGlow(false);
     }
 
     // Kicker + zoom chip reflect the new state. When zoomed, the kicker shows the
@@ -511,7 +551,6 @@ export class AnnotatedLine extends BaseChart {
     const lx = px - 14;             // text right-edge, just left of the dot column
     const blockTop = py + 26;       // eyebrow baseline
     this._peakG.select(".anno-peak-dot").attr("cx", px).attr("cy", py);
-    this._peakG.select(".anno-peak-pulse").attr("transform", `translate(${px},${py})`);
     this._peakG.select(".anno-peak-eyebrow").attr("x", lx).attr("y", blockTop).attr("text-anchor", "end");
     this._peakG.select(".anno-peak-num").attr("x", lx).attr("y", blockTop + 30).attr("text-anchor", "end");
     this._peakG.select(".anno-peak-date").attr("x", lx).attr("y", blockTop + 46).attr("text-anchor", "end");
@@ -520,31 +559,16 @@ export class AnnotatedLine extends BaseChart {
       .attr("x1", px - 4).attr("y1", py + 5).attr("x2", lx + 3).attr("y2", blockTop + 10);
   }
 
-  // Emit three concentric expanding rings from the peak dot (the §5.7 "capital-dot
-  // pulse"). Self-cleaning via .remove() on transition end; guarded by the
-  // reduced-motion gate and by a flag so scrolling back and forth can't stack
-  // intervals. This is the chart's one "wow" — reserved for the peak/energy step.
-  _peakPulse(on) {
-    if (!this._peakPulseG || this.ctx.motion.reduced) return;
-    if (on && !this._pulseOn) {
-      this._pulseOn = true;
-      const fire = () => {
-        if (!this._pulseOn || !this._peakPulseG.node()?.isConnected) return;
-        this._peakPulseG.append("circle")
-          .attr("class", "anno-peak-ring").attr("r", 4).attr("fill", "none")
-          .attr("stroke", "var(--accent)").attr("stroke-width", 1.5)
-          .style("opacity", 0.9)
-          .transition().duration(1600).ease(d3.easeCubicOut)
-          .attr("r", 26).attr("stroke-width", 0.2).style("opacity", 0)
-          .remove();
-      };
-      fire();
-      this._pulseTimer = setInterval(fire, 900);
-    } else if (!on && this._pulseOn) {
-      this._pulseOn = false;
-      clearInterval(this._pulseTimer);
-      this._peakPulseG.selectAll("circle.anno-peak-ring").interrupt().remove();
-    }
+  // [R5·P6] Peak emphasis = a STATIC glow on the Oct-2022 peak dot, toggled on step-enter (the
+  // energy/policy steps) — NOT an animated loop. The old setInterval pulse looped forever while
+  // the step was active, which DESIGN-REVIEW #2/#18 forbid (nothing loops). ensureGlow appends a
+  // single blur filter to <defs> (idempotent). Reduced-motion: the glow is static, so it stays.
+  _peakGlow(on) {
+    if (!this._peakG) return;
+    const dot = this._peakG.select(".anno-peak-dot");
+    if (dot.empty()) return;
+    if (on) dot.attr("filter", ensureGlow(this.svg, "anno-peak-glow", 3)).attr("r", 5);
+    else dot.attr("filter", null).attr("r", 4);
   }
 
   onStep(index, el) {
@@ -589,10 +613,10 @@ export class AnnotatedLine extends BaseChart {
         this.kickerSub.text("monthly inflation, 2010 → 2025");
       }
     }
-    // Peak pulse — the one "wow". Fire it the moment the line goes vertical (the
-    // energy step) and hold it through the policy step where the peak actually
-    // lands; kill it everywhere else so it stays a punctuation, not decoration.
-    this._peakPulse(focus === "energy" || focus === "policy");
+    // Peak glow — the one emphasis. Light it on the energy step (where the line goes vertical)
+    // and hold it through the policy step where the peak lands; off everywhere else so it stays
+    // a punctuation, not decoration. Static (no loop) — DESIGN-REVIEW #18.
+    this._peakGlow(focus === "energy" || focus === "policy");
     // Focused-event inline label
     this._layoutEventLabel();
     // Anchor highlight (vertical accent + dot at the value on that date)
@@ -665,7 +689,7 @@ export class AnnotatedLine extends BaseChart {
   }
 
   destroy() {
-    this._peakPulse(false);
+    if (this._unwatch) this._unwatch();
     if (this._lineSafety) clearTimeout(this._lineSafety);
     super.destroy();
   }

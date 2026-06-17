@@ -200,6 +200,12 @@
   pointer-events: none;
 }
 .chart-svg .sa-focus-dot { stroke: var(--bg); stroke-width: 1.4; pointer-events: none; }
+/* [R5·P8] peak-band callout: the focused band's value in pts + month, on the data. */
+.chart-svg .sa-focus-peaklabel {
+  font-family: var(--font-mono); font-size: 10.5px; font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em; paint-order: stroke; stroke: var(--bg); stroke-width: 3px;
+  stroke-linejoin: round; pointer-events: none;
+}
 
 /* Editorial share stamp (eyebrow + big italic Fraunces % + insight sentence) */
 .chart-svg .sa-stamp__eyebrow {
@@ -207,10 +213,9 @@
   fill: var(--ink-faint); letter-spacing: 0.24em; font-weight: 600;
 }
 .chart-svg .sa-stamp__num {
-  font-family: var(--font-display); font-style: italic;
-  font-size: 38px; fill: var(--accent-text);
-  font-variation-settings: "opsz" 144;
-  font-weight: 380; letter-spacing: -0.03em;
+  font-family: var(--font-display); font-style: normal;   /* owner override: upright, not faint italic */
+  font-size: 34px; fill: var(--accent-text);
+  font-weight: 600; letter-spacing: -0.01em;
   font-variant-numeric: tabular-nums;
   paint-order: stroke; stroke: var(--bg); stroke-width: 5px; stroke-linejoin: round;
 }
@@ -220,16 +225,32 @@
 .chart-svg .sa-stamp__num--services { fill: var(--cat-services); }
 .chart-svg .sa-stamp__num--other    { fill: var(--cat-other); }
 .chart-svg .sa-stamp__sentence {
-  font-family: var(--font-display); font-style: italic;
+  font-family: var(--font-display); font-style: normal;
   font-size: 13px; fill: var(--ink);
-  font-variation-settings: "opsz" 100;
-  letter-spacing: -0.005em;
+  letter-spacing: 0;
   paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round;
 }
 /* Compact (phone) stamp — smaller so it doesn't swamp the short plot. */
 .chart-svg .sa-stamp--compact .sa-stamp__eyebrow { font-size: 8px; letter-spacing: 0.18em; }
 .chart-svg .sa-stamp--compact .sa-stamp__num { font-size: 27px; stroke-width: 4px; }
 .chart-svg .sa-stamp--compact .sa-stamp__sentence { font-size: 10.5px; }
+
+/* [owner review D5] StackedArea absolute/share toggle — match the site controls (Schibsted,
+   hairline --rule, teal active) instead of the claret-hover ghost buttons that clashed. */
+#chart-stackedArea-controls { display: flex; gap: var(--space-2); justify-content: center; align-items: center; }
+#chart-stackedArea-controls .btn {
+  font-family: var(--font-ui); font-size: var(--fs-100); font-weight: 600;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 5px 14px; border-radius: var(--radius-2);
+  background: var(--bg-elev); color: var(--ink-soft);
+  border: 1px solid var(--rule); transform: none;
+}
+#chart-stackedArea-controls .btn:hover {
+  background: var(--bg-elev); color: var(--ink); border-color: var(--link); transform: none;
+}
+#chart-stackedArea-controls .btn[aria-pressed="true"] {
+  background: var(--link); color: var(--bg-elev); border-color: var(--link);
+}
 
 /* Tooltip share badge (mono, muted) next to each pts value */
 .tooltip .sa-tip-share {
@@ -406,24 +427,33 @@
 .chart-svg .db-rect {
   transition: width var(--dur-4, 420ms) var(--ease-out), fill var(--dur-2, 180ms) var(--ease-out);
 }
-/* Diverging fill: winners (sage) right of zero, losers (terra) left.
-   Scoped to .db-rect so the dead global `.chart .bar--pos/neg` rules are not relied on. */
-.chart-svg .db-rect.bar--pos { fill: var(--seq-1); }
-.chart-svg .db-rect.bar--neg { fill: var(--seq-4); }
+/* [R5·P11] Diverging fill: winners (jade --cat-wages) right of zero, losers (claret --accent)
+   left — pay-beat-prices reads as a gain, fell-behind as the alarming loss. (Round-1/Phase-1 used
+   pale --seq-1 cream for the winners, which read as near-invisible on the paper.) */
+.chart-svg .db-rect.bar--pos { fill: var(--cat-wages); }
+.chart-svg .db-rect.bar--neg { fill: var(--accent); }
 .chart-svg .db-bar.is-hover .db-rect { stroke: var(--ink); stroke-width: 1.4; }
 /* Bookends (widest gain / deepest cut) get a thin ink outline — emphasis via craft,
    not a 3rd colour, so the two-camp encoding stays pure. */
 .chart-svg .db-rect--extreme { stroke: var(--ink); stroke-width: 1; stroke-opacity: 0.55; }
+/* [R5·P11] median reference line (the typical country) — dashed + faint so it never competes
+   with the bold ink zero spine; + sphere dots on the two bookends. */
+.chart-svg .db-median line { stroke: var(--ink-faint); stroke-width: 1; stroke-dasharray: 3 3; opacity: 0.7; }
+.chart-svg .db-median-label {
+  font-family: var(--font-mono); font-size: 10.5px; fill: var(--ink-soft); letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums; paint-order: stroke; stroke: var(--bg); stroke-width: 2.5px; stroke-linejoin: round;
+}
+.chart-svg .db-extreme-sphere { stroke: var(--bg); stroke-width: 1.2; pointer-events: none; }
 .chart-svg .db-name {
-  font-family: var(--font-body);
-  font-size: 11px;
-  font-weight: 500;
+  font-family: var(--font-ui);          /* [owner D7] Schibsted + larger = legible country labels */
+  font-size: 12.5px;
+  font-weight: 600;
   fill: var(--ink-soft);
 }
 .chart-svg .db-name--extreme { font-weight: 700; fill: var(--ink); }
 .chart-svg .db-val {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   paint-order: stroke;
@@ -447,16 +477,16 @@
 
 /* Two-camp scoreboard (kicker zone) — the headline divide */
 .chart-svg .db-head-num {
-  font-family: var(--font-display); font-style: italic; font-weight: 380;
-  font-size: 40px; font-variation-settings: "opsz" 144;
-  letter-spacing: -0.03em;
+  font-family: var(--font-display); font-style: normal; font-weight: 700;   /* owner override: upright scoreboard */
+  font-size: 36px;
+  letter-spacing: -0.01em;
   paint-order: stroke; stroke: var(--bg); stroke-width: 5px; stroke-linejoin: round;
 }
-.chart-svg .db-head-num--pos { fill: var(--seq-1); }
-.chart-svg .db-head-num--neg { fill: var(--seq-4); }
+.chart-svg .db-head-num--pos { fill: var(--cat-wages); }
+.chart-svg .db-head-num--neg { fill: var(--accent); }
 .chart-svg .db-head-label {
-  font-family: var(--font-display); font-style: italic; font-size: 14.5px;
-  font-variation-settings: "opsz" 100; fill: var(--ink); letter-spacing: -0.005em;
+  font-family: var(--font-display); font-style: normal; font-size: 14.5px;
+  fill: var(--ink); letter-spacing: 0;
   paint-order: stroke; stroke: var(--bg); stroke-width: 3.5px; stroke-linejoin: round;
 }
 .chart-svg .db-head-sub {
@@ -468,11 +498,11 @@
 /* Phone: one compact line */
 .chart-svg .db-head-compact { font-family: var(--font-body); }
 .chart-svg .db-head-c {
-  font-family: var(--font-display); font-style: italic; font-weight: 380;
-  font-size: 22px; font-variation-settings: "opsz" 144;
+  font-family: var(--font-display); font-style: normal; font-weight: 700;   /* owner override: upright */
+  font-size: 22px;
 }
-.chart-svg .db-head-c--pos { fill: var(--seq-1); }
-.chart-svg .db-head-c--neg { fill: var(--seq-4); }
+.chart-svg .db-head-c--pos { fill: var(--cat-wages); }
+.chart-svg .db-head-c--neg { fill: var(--accent); }
 .chart-svg .db-head-cl { font-size: 11px; fill: var(--ink-soft); font-weight: 600; }
 .chart-svg .db-head-dot { fill: var(--ink-fainter); }
 
@@ -596,7 +626,12 @@
   stroke-width: 1.6;
   stroke-linejoin: round; stroke-linecap: round;
   transition: stroke var(--dur-3) var(--ease-out), stroke-opacity var(--dur-3) var(--ease-out), stroke-width var(--dur-3) var(--ease-out);
+  /* [R5·P13] context paths multiply-blend so the overlapping field reads as depth (PART 8.9).
+     Light-only: multiply on the dark slate would crush the faint context to black. */
+  mix-blend-mode: multiply;
 }
+[data-theme="dark"] .chart-svg .cs-path { mix-blend-mode: normal; }
+@media (max-width: 480px) { .chart-svg .cs-path { mix-blend-mode: normal; } }
 .chart-svg .cs-node--start { fill: var(--ink-faint); }
 .chart-svg .cs-node--end   { fill: var(--ink-soft); stroke: var(--bg-elev); stroke-width: 1; }
 .chart-svg .cs-line.is-dim    { opacity: 0.18; }
@@ -608,11 +643,12 @@
 .chart-svg .cs-line.is-focus .cs-path { stroke: var(--accent); stroke-opacity: 0.95; stroke-width: 2.4; }
 .chart-svg .cs-line.is-focus .cs-node--end { fill: var(--accent); }
 .chart-svg .cs-end-label {
-  font-family: var(--font-body);
-  font-size: 10.5px;
+  font-family: var(--font-ui);          /* [owner D9] legible dark labels (was faint serif) */
+  font-size: 11.5px;
   font-weight: 600;
+  fill: var(--ink-soft);
   paint-order: stroke;
-  stroke: var(--bg); stroke-width: 3px; stroke-linejoin: round;
+  stroke: var(--bg); stroke-width: 3.5px; stroke-linejoin: round;
 }
 /* [FULL-SITE AUDIT · chart 10] The break-even diagonal is the chart's single most
    important reference; at --ink-faint it was the least visible element. Bump it to
@@ -663,12 +699,12 @@
 /* End-label colour variants. Won = sage, lost = neutral ink (NOT accent), active
    = AA-safe deep terracotta + bold. The white halo (base rule) keeps them legible
    over the path cluster. */
-.chart-svg .cs-end-label--won  { fill: var(--seq-1); }
+.chart-svg .cs-end-label--won  { fill: var(--ink-soft); }   /* [owner D9] dark ink, not faint green */
 .chart-svg .cs-end-label--lost { fill: var(--ink-soft); }
 .chart-svg .cs-end-label.is-active { fill: var(--accent-text); font-weight: 800; }
 /* [R4·P13] When a country is focused (hover/step), recede the OTHER named labels to match their
    dimmed paths — so the focused trajectory is the clear figure (grey-down-non-focus). */
-.chart-svg .cs-end-label.is-dim { opacity: 0.4; }
+.chart-svg .cs-end-label.is-dim { opacity: 0.55; }   /* [owner D9] less faint so dimmed labels still read */
 
 /* Leader lines connecting a nudged label back to its true endpoint. */
 .chart-svg .cs-leader {
@@ -692,14 +728,12 @@
 }
 .chart-svg .cs-stamp-num {
   font-family: var(--font-display);
-  font-style: italic;
-  font-weight: 380;
-  font-size: 38px;
-  font-variation-settings: "opsz" 144, "SOFT" 60;
+  font-style: normal; font-weight: 600;   /* owner override: upright, not italic */
+  font-size: 34px;
   font-variant-numeric: tabular-nums;
   paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round;
 }
-.chart-svg .cs-stamp-num.is-won  { fill: var(--seq-1); }
+.chart-svg .cs-stamp-num.is-won  { fill: var(--cat-wages); }
 .chart-svg .cs-stamp-num.is-lost { fill: var(--accent-text); }
 .chart-svg .cs-stamp-line {
   font-family: var(--font-body);
@@ -914,20 +948,27 @@
   fill: var(--ink-faint); letter-spacing: 0.24em; font-weight: 600;
 }
 .chart-svg .bp-stamp__num {
-  font-family: var(--font-display); font-style: italic;
-  font-size: 38px; fill: var(--accent-text);
-  font-variation-settings: "opsz" 144;
-  font-weight: 380; letter-spacing: -0.03em;
+  font-family: var(--font-display); font-style: normal;   /* owner override: upright, not faint italic */
+  font-size: 34px; fill: var(--accent-text);
+  font-weight: 600; letter-spacing: -0.01em;
   font-variant-numeric: tabular-nums;
   paint-order: stroke; stroke: var(--bg); stroke-width: 5px; stroke-linejoin: round;
 }
 .chart-svg .bp-stamp__sentence {
-  font-family: var(--font-display); font-style: italic;
+  font-family: var(--font-display); font-style: normal;
   font-size: 13px; fill: var(--ink);
-  font-variation-settings: "opsz" 100;
-  letter-spacing: -0.005em;
+  letter-spacing: 0;
   paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round;
 }
+/* [R5·P14] sphere median dot on the 2022 protagonist box */
+.chart-svg .bp-median-sphere { stroke: var(--bg); stroke-width: 1.4; pointer-events: none; }
+/* [R5·P14 / #12] the closing bookend — the tarnished hero coin returns + "€100 is now €77" */
+.chart-svg .bp-stamp__bookend {
+  font-family: var(--font-display); font-style: normal; font-size: 15px; fill: var(--ink);
+  letter-spacing: 0;
+  paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round;
+}
+.chart-svg .bp-stamp__bookend-num { fill: var(--accent-text); font-weight: 500; }
 
 /* Box plot */
 .chart .box-rect { fill: var(--bg-elev); stroke: var(--ink); stroke-width: 1; }
@@ -1024,25 +1065,29 @@
   color: var(--ink);
   border: 1px solid var(--rule);
   box-shadow: var(--shadow-2);
-  padding: var(--space-3) var(--space-4);
+  /* [owner review A7] clean compact card: Schibsted text, tight padding, mono numbers (below). */
+  font-family: var(--font-ui);
+  padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-2);
   font-size: var(--fs-200);
-  line-height: 1.4;
-  max-inline-size: 260px;
+  line-height: 1.45;
+  max-inline-size: 248px;
   opacity: 0;
   transition: opacity var(--dur-2) var(--ease-out), transform var(--dur-2) var(--ease-out);
   transform: translateY(4px);
 }
 .tooltip.visible { opacity: 1; transform: translateY(0); }
 .tooltip h5 {
-  font-family: var(--font-display);
-  font-size: var(--fs-300);
-  margin: 0 0 4px;
+  font-family: var(--font-ui);
+  font-weight: 700;
+  font-size: var(--fs-200);
+  letter-spacing: 0.01em;
+  margin: 0 0 5px;
   color: var(--ink);
 }
-.tooltip .row { display: flex; justify-content: space-between; gap: var(--space-3); }
-.tooltip .row .key { color: var(--ink-faint); }
-.tooltip .row .val { font-weight: 600; }
+.tooltip .row { display: flex; justify-content: space-between; gap: var(--space-4); align-items: baseline; }
+.tooltip .row .key { color: var(--ink-soft); }
+.tooltip .row .val { font-family: var(--font-mono); font-weight: 600; font-variant-numeric: tabular-nums; color: var(--ink); }
 /* [AUDIT 03] Event-dot tooltip note line (replaces an inline style= in AnnotatedLine). */
 .tooltip .tip-note { margin: 0; color: var(--ink-soft); max-width: 240px; }
 /* [AUDIT 05] StackedArea tooltip — category-coloured contribution rows
@@ -1069,11 +1114,22 @@
 /* ============================================================
    EDITORIAL CHART LANGUAGE (ported from designer reference)
    ============================================================ */
-.chart-svg { width: 100%; height: 100%; overflow: visible; font-family: var(--font-body); cursor: crosshair; }
-.chart-svg text { fill: var(--ink-soft); font-size: 11.5px; }
+.chart-svg { width: 100%; height: 100%; overflow: visible; font-family: var(--font-ui); cursor: crosshair; }
+/* [owner review A5] in-chart labels were too small/faint — lift the shared baselines for legibility. */
+.chart-svg text { fill: var(--ink-soft); font-size: 12.5px; }
+
+/* ---------- CraftFX shared craft layer (Phase 2 · MASTER-PLAN PART 7-PRE) ---------- */
+/* Bremer multiply layering — overlaps darken on paper; confine to ONE group; drop on phones. */
+.craft-blend { isolation: isolate; }
+.craft-blend .series-line { mix-blend-mode: multiply; }
+@media (max-width: 480px) { .craft-blend .series-line { mix-blend-mode: normal; opacity: .85; } }
+/* Tactile hover: marks lift toward the cursor. transform/opacity ONLY (hover == :focus-visible). */
+.craft-float { transition: transform var(--motion-fast) var(--ease-out); }
+.craft-float:hover, .craft-float:focus-visible { transform: translateY(-2px) scale(1.03); }
+@media (prefers-reduced-motion: reduce) { .craft-float, .craft-float:hover { transition: none; transform: none; } }
 .chart-svg .axis path,
 .chart-svg .axis line { stroke: var(--rule); shape-rendering: crispEdges; }
-.chart-svg .axis text { fill: var(--ink-faint); font-size: 10.5px; }
+.chart-svg .axis text { fill: var(--ink-soft); font-size: 11.5px; }
 .chart-svg .axis-title {
   fill: var(--ink-soft); font-size: 11px;
   letter-spacing: 0.08em; text-transform: uppercase;
@@ -1086,8 +1142,7 @@
    corrects the same latent bug in AnnotatedLine / BoxPlot / ConnectedScatter,
    which use the identical `class="grid"`. */
 .chart-svg .grid line {
-  stroke: var(--rule-soft);
-  stroke-dasharray: 2 4;
+  stroke: var(--rule);
   shape-rendering: crispEdges;
 }
 .chart-svg .grid .domain { display: none; }
@@ -1184,7 +1239,6 @@
   font-family: var(--font-display);
   font-style: italic;
   font-weight: 380;
-  font-variation-settings: "opsz" 144, "SOFT" 80;
   font-size: 64px;
   line-height: 1;
   color: var(--accent);
@@ -1256,24 +1310,26 @@
 }
 .map-detail { position: relative; }
 
+/* [owner review 2026-06-15] Kickers were big faint italic display numbers (58px, weight 200,
+   italic) — the owner found them ugly + distracting. Now: SMALL, UPRIGHT, LEGIBLE Schibsted
+   labels (A: "no faint italic giant numbers anywhere"). Keeps the paper halo for legibility
+   over the chart. Per-chart overrides (waffle hero number, etc.) handled in their own blocks. */
 .chart-svg .year-kicker {
-  font-family: var(--font-display); font-style: italic; font-weight: 200;
-  font-size: 58px;
-  font-variation-settings: "opsz" 144;
+  font-family: var(--font-ui); font-style: normal; font-weight: 700;
+  font-size: 19px;
   fill: var(--ink);
-  letter-spacing: -0.024em;
+  letter-spacing: 0.005em;
   transform-origin: left center;
   line-height: 1;
   paint-order: stroke;
   stroke: var(--bg);
-  stroke-width: 6px;
+  stroke-width: 4px;
   stroke-linejoin: round;
 }
 .chart-svg .year-kicker-sub {
-  font-family: var(--font-display); font-style: italic;
-  font-size: 13px; fill: var(--ink-soft);
-  font-variation-settings: "opsz" 100;
-  letter-spacing: -0.005em;
+  font-family: var(--font-ui); font-style: normal;
+  font-size: 12px; fill: var(--ink-soft);
+  letter-spacing: 0.01em;
   paint-order: stroke;
   stroke: var(--bg);
   stroke-width: 4px;
@@ -1324,7 +1380,7 @@
      viewport BELOW the header band. */
   inset: var(--header-h, 60px) 0 0 0;
   width: 100vw;
-  height: calc(100vh - var(--header-h, 60px));
+  height: calc(100dvh - var(--header-h, 60px));   /* [R5·P15/PART5] dvh — mobile URL-bar-safe */
   pointer-events: none;
   opacity: 0;
   /* [Morph-v2 user-reported fix] visibility hidden when opacity 0 so the fixed overlay
@@ -1592,16 +1648,14 @@
   fill: var(--ink-faint); letter-spacing: 0.26em; font-weight: 500;
 }
 .chart-svg .stamp-num {
-  font-family: var(--font-display); font-style: italic;
-  font-size: 36px; fill: var(--accent);
-  font-variation-settings: "opsz" 144;
-  font-weight: 380; letter-spacing: -0.028em;
+  font-family: var(--font-display); font-style: normal;   /* owner override: upright, not faint italic */
+  font-size: 34px; fill: var(--accent);
+  font-weight: 600; letter-spacing: -0.01em;
 }
 .chart-svg .stamp-sentence {
-  font-family: var(--font-display); font-style: italic;
+  font-family: var(--font-display); font-style: normal;   /* upright for legibility */
   font-size: 13.5px; fill: var(--ink);
-  font-variation-settings: "opsz" 100;
-  letter-spacing: -0.005em; line-height: 1.3;
+  letter-spacing: 0; line-height: 1.32;
 }
 /* [CH2-R1] Comparison-to-overall line — calmer mono numerals so it doesn't
    compete with the italic Fraunces peak number above it. */
@@ -1697,8 +1751,8 @@
 .choro-legend-tick-label {
   position: absolute;
   font-family: var(--font-mono);
-  font-size: 8.5px;
-  color: var(--ink-faint);
+  font-size: 10px;
+  color: var(--ink-soft);
   letter-spacing: 0.02em;
   top: 0;
   white-space: nowrap;
@@ -1724,23 +1778,18 @@
    text can be a long category name like "Electricity, gas, fuels" — at the
    default 58px this would overflow the chart panel right edge. */
 .chart-svg .sml-kicker-text {
-  font-size: 38px;
-  font-variation-settings: "opsz" 144, "SOFT" 60;
-  letter-spacing: -0.015em;
+  font-size: 21px;                /* [owner D2] small upright label (was 38px giant kicker) — frees panel space */
+  letter-spacing: 0;
 }
-.chart-svg .sml-kicker-sub  { font-size: 12.5px; }
+.chart-svg .sml-kicker-sub  { font-size: 11.5px; }
 
 .chart-svg .sml-title {
-  font-family: var(--font-display); font-style: italic;
-  font-size: 12.5px; fill: var(--ink);
-  font-variation-settings: "opsz" 100;
-  font-weight: 420; letter-spacing: -0.005em;
+  font-family: var(--font-ui); font-style: normal;          /* [owner D2] upright + legible panel titles */
+  font-size: 12.5px; fill: var(--ink); font-weight: 600; letter-spacing: 0;
 }
 .chart-svg .sml-last-tag {
-  font-family: var(--font-display); font-style: italic;
-  font-size: 13px; fill: var(--ink-soft);
-  font-variation-settings: "opsz" 100;
-  font-weight: 420; letter-spacing: -0.01em;
+  font-family: var(--font-mono); font-style: normal;
+  font-size: 12px; fill: var(--ink-soft); font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 /* [R2·1a] Only the protagonist panel's last-value reads in terracotta (AA-safe
@@ -1750,8 +1799,8 @@
 .chart-svg .sml-last-tag--neg { fill: var(--ink-soft); }
 .chart-svg .sml-xtick,
 .chart-svg .sml-ytick {
-  font-family: var(--font-mono); font-size: 9.5px;
-  fill: var(--ink-faint); letter-spacing: 0.02em;
+  font-family: var(--font-mono); font-size: 10.5px;        /* [owner D2] legible axis ticks (was 9.5px faint) */
+  fill: var(--ink-soft); letter-spacing: 0.02em;
   font-variant-numeric: tabular-nums;
 }
 .chart-svg .sml-ytick--zero { fill: var(--ink-soft); font-weight: 600; }
@@ -1797,11 +1846,10 @@
   paint-order: stroke; stroke: var(--bg); stroke-width: 3px; stroke-linejoin: round;
 }
 .chart-svg .anno-peak-num {
-  font-family: var(--font-display); font-style: italic; font-weight: 380;
-  font-size: 38px;
-  font-variation-settings: "opsz" 144, "SOFT" 60;
+  font-family: var(--font-display); font-style: normal; font-weight: 600;   /* owner override: upright, not italic */
+  font-size: 34px;
   fill: var(--accent);
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
   font-variant-numeric: tabular-nums;
   paint-order: stroke;
   stroke: var(--bg); stroke-width: 5px; stroke-linejoin: round;
@@ -1817,7 +1865,7 @@
   stroke: var(--accent); stroke-width: 1; stroke-opacity: 0.7; fill: none;
   pointer-events: none;
 }
-.chart-svg .anno-peak-ring { pointer-events: none; }
+.chart-svg .anno-overshoot { pointer-events: none; }
 .chart-svg .anno-anchor__line {
   stroke: var(--accent); stroke-width: 1.4; stroke-opacity: 0.85;
   stroke-dasharray: 2 4;
@@ -1948,6 +1996,36 @@
   pointer-events: none;
 }
 
+/* [R5·P5] SmallMultiples focus-mode hero enlarge. _applyFocus fades the grid group to a faint
+   ghost (calm context); the plate is solid paper so the hero reads crisply over it. Borderless
+   (FT): the bands + claret line + axes define the panel, not a frame. */
+.chart-svg .sml-hero-plate { fill: var(--bg); }
+.chart-svg .sml-hero-area  { pointer-events: none; }
+.chart-svg .sml-hero-line  { pointer-events: none; }
+.chart-svg .sml-hero-ref   { stroke: var(--ink-faint); stroke-width: 0.8; stroke-dasharray: 4 4; opacity: 0.65; }
+.chart-svg .sml-hero-ref-label {
+  font-family: var(--font-mono); font-size: 9.5px; fill: var(--ink-faint);
+  letter-spacing: 0.02em; font-variant-numeric: tabular-nums;
+}
+.chart-svg .sml-hero-dot     { stroke: var(--bg); stroke-width: 1.6; pointer-events: none; }
+.chart-svg .sml-hero-lastdot { fill: var(--accent); stroke: var(--bg); stroke-width: 1.4; pointer-events: none; }
+.chart-svg .sml-hero-curdot  { fill: var(--accent); stroke: var(--bg); stroke-width: 1.5; }
+/* lead-marker (#8) — the evidence for the title */
+.chart-svg .sml-lead-mark    { stroke: var(--ink); stroke-opacity: 0.42; stroke-width: 1; stroke-dasharray: 3 3; pointer-events: none; }
+.chart-svg .sml-lead-bracket { stroke: var(--accent); stroke-width: 1.4; pointer-events: none; }
+.chart-svg .sml-lead-num {
+  font-family: var(--font-display); font-style: italic; font-size: 15px;
+  fill: var(--accent-text); font-weight: 500; letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+  paint-order: stroke; stroke: var(--bg); stroke-width: 3.5px; stroke-linejoin: round; pointer-events: none;
+}
+.chart-svg .sml-lead-tag {
+  font-family: var(--font-mono); font-size: 9px; fill: var(--ink-faint);
+  letter-spacing: 0.01em; font-variant-numeric: tabular-nums;
+  paint-order: stroke; stroke: var(--bg); stroke-width: 2.5px; stroke-linejoin: round; pointer-events: none;
+}
+.chart-svg .sml-hero-hit { pointer-events: all; }
+
 /* Reveal helpers */
 .chart-svg .reveal { opacity: 0; transition: opacity 700ms var(--ease-out); }
 .chart-svg .reveal.is-in { opacity: 1; }
@@ -2042,6 +2120,71 @@
 
 /* Integrated mini-area timeline (Choropleth scrubber) */
 .scroller__chart .map-timeline-wrap { width: 100%; padding: 4px 0 2px; }
+/* [owner review D1] crisp HTML year labels under the timeline (SVG text squished under
+   preserveAspectRatio=none). Positioned by % to match the timeline x-scale. */
+.scroller__chart .map-timeline-years { position: relative; width: 100%; height: 15px; margin-block-start: 1px; pointer-events: none; }
+.map-timeline-year {
+  position: absolute; top: 0; transform: translateX(-50%);
+  font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-soft);
+  letter-spacing: 0.02em; white-space: nowrap; line-height: 1;
+}
+.map-timeline-year--major { color: var(--ink); font-weight: 600; }
+
+/* ============================================================
+   CompareMap — before/after swipe-compare map (owner review D1 stage 5)
+   ============================================================ */
+.chapter--compare { padding-block: var(--space-7); }
+.compare-wrap {
+  max-inline-size: var(--w-wide);
+  margin-inline: auto;
+  padding-inline: var(--space-5);
+  display: flex; flex-direction: column; gap: var(--space-2);
+}
+.compare-header { text-align: center; }
+.compare-header h3 { font-family: var(--font-display); font-size: var(--fs-400); font-weight: 600; color: var(--ink-strong); line-height: var(--lh-snug); margin: 0; }
+.compare-header .chart-subtitle { font-family: var(--font-ui); font-size: var(--fs-200); color: var(--ink-soft); margin: 2px 0 0; }
+#chart-compareMap-controls {
+  display: flex; justify-content: center; align-items: center; flex-wrap: wrap;
+  gap: var(--space-4); margin-block: var(--space-1);
+}
+.cmp-ctrl { display: inline-flex; align-items: center; gap: 4px; font-family: var(--font-ui); font-size: var(--fs-200); color: var(--ink-soft); }
+.cmp-ctrl select {
+  font-family: var(--font-ui); font-size: var(--fs-200); font-weight: 600;
+  color: var(--ink); background: var(--bg-elev);
+  border: 1px solid var(--rule); border-radius: var(--radius-2);
+  padding: 3px 8px; cursor: pointer;
+}
+.cmp-ctrl select:focus-visible { outline: 2px solid var(--link); outline-offset: 1px; }
+.cmp-ctrl select:hover { border-color: var(--link); }
+.cmp-ctrl-vs { font-family: var(--font-ui); font-size: var(--fs-100); color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.12em; }
+#chart-compareMap {
+  position: relative;
+  inline-size: 100%;
+  aspect-ratio: 1.42 / 1;        /* matches the CompareMap BaseChart aspect → no letterbox */
+  margin-inline: auto;
+}
+#chart-compareMap .chart-svg { width: 100%; height: 100%; display: block; }
+.cmp-map .cmp-country { stroke: var(--bg); stroke-width: 0.5; }
+.cmp-map .cmp-country.is-non-eu { fill: var(--rule-soft); opacity: 0.30; }
+.cmp-year-label {
+  font-family: var(--font-ui); font-weight: 700; font-size: 22px;   /* upright, NOT a faint italic giant number (owner override) */
+  fill: var(--ink-strong);
+  paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round;
+}
+.cmp-divider-line { stroke: var(--bg-elev); stroke-width: 3; pointer-events: none; }
+.cmp-handle {
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  inline-size: 34px; block-size: 34px; border-radius: 50%;
+  background: var(--bg-elev); border: 2px solid var(--accent); color: var(--accent);
+  display: grid; place-items: center; cursor: ew-resize;
+  box-shadow: var(--shadow-2); z-index: 3; touch-action: none;
+  font-family: var(--font-ui); font-size: 14px; font-weight: 700; line-height: 1;
+  transition: box-shadow var(--dur-2) var(--ease-out);
+}
+.cmp-handle.is-dragging { box-shadow: var(--shadow-3); }
+.cmp-handle:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
+.cmp-handle__grip { letter-spacing: -2px; }
 .scroller__chart .map-timeline {
   display: block; width: 100%; height: 80px; overflow: visible;
   cursor: pointer; user-select: none;
@@ -2242,9 +2385,16 @@
                                   ridges read through the front ones */
   stroke-opacity: 0.9;
   transition: fill-opacity var(--dur-3, 280ms) var(--ease-out);
+  /* [R5·P7] overlapping ridges blend so the stack of waves reads (PART 8.4). */
+  mix-blend-mode: multiply;
 }
+/* multiply over the dark slate would crush ridges to near-black; dark is deferred (Phase 17). */
+[data-theme="dark"] .chart-svg .ridge-area { mix-blend-mode: normal; }
+@media (max-width: 480px) { .chart-svg .ridge-area { mix-blend-mode: normal; } }
 .chart-svg .ridge-area.is-protagonist { fill-opacity: 0.60; }
 .chart-svg .ridge-area.is-focus       { fill-opacity: 0.90; }
+/* [R5·P7] lit accent sphere on the active ridge's crest (its mode). */
+.chart-svg .rdg-crest-sphere { pointer-events: none; }
 
 /* The 27 real country observations as a faint dot strip on each baseline.
    Resting: quiet ink, small. The focused / protagonist row brightens + grows so

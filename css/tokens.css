@@ -1,79 +1,86 @@
 /* ============================================================
-   tokens.css — design tokens (light + dark) for "The Price of Europe"
-   Pudding-style modern editorial. Light is default.
-   Theme switch happens via [data-theme="dark"] on <html>.
+   tokens.css — design tokens for "The Price of Europe"
+   FT editorial surface x Nadieh Bremer craft. Light is the default.
+
+   ALL colours are HEX. d3 7.9 renders oklch()/color-mix() as BLACK inside
+   a colour scale (this silently broke the Heatmap for ten sessions — see
+   MASTER-PLAN PART 3). palette.js reads these with getComputedStyle().
+   The one color-mix() token (--accent-veil) is CSS-only and never fed to d3.
+   Theme switches via [data-theme="dark"] on <html>.
    ============================================================ */
 
 :root {
-  /* Surface — light theme (default) */
-  --bg              : #f5f1e8;   /* cream paper */
-  --bg-elev         : #fbf7ee;   /* sticky chart panel, card */
-  --bg-sunken       : #ece6d6;   /* sidebar, code */
-  --bg-veil         : rgba(245,241,232,0.86);  /* fixed-header backdrop */
-  --bg-overlay      : rgba(245,241,232,0.96);
+  /* Surface — FT paper system */
+  --bg              : #FFF1E5;   /* FT paper */
+  --bg-elev         : #FFF7EF;   /* raised card / sticky panel (rarely framed) */
+  --bg-sunken       : #F2DFCE;   /* wheat — code / side panels */
+  --bg-veil         : rgba(255,241,229,0.86);   /* fixed-header backdrop */
+  --bg-overlay      : rgba(255,241,229,0.96);
 
-  /* Ink */
-  --ink             : #18181e;
-  --ink-soft        : #4a4a52;
-  --ink-faint       : #8a8682;
-  --ink-fainter     : #b5ad9d;
-  --ink-invert      : #f0ece4;
+  /* Ink — FT black-N over paper */
+  --ink             : #33302E;   /* body, 11.83:1 */
+  --ink-strong      : #000000;   /* h1–h3 + hero numbers only */
+  --ink-soft        : #4D4845;   /* source lines, captions, 8.15:1 */
+  --ink-faint       : #807973;   /* >=18px text or graphics only, 3.87:1 */
+  --ink-fainter     : #B3A9A0;   /* context lines, NEVER text */
+  --ink-invert      : #FFF1E5;
 
-  /* Lines / borders */
-  --rule            : #d8d1c2;
-  --rule-soft       : #e7e1d0;
-  --rule-bold       : #7a7268;
+  /* Lines / gridline */
+  --rule            : #CCC1B7;   /* black-20; doubles as the horizontal gridline */
+  --rule-soft       : #E6D9CE;
+  --rule-bold       : #66605C;
 
-  /* Editorial accent */
-  --accent          : #c8553d;     /* terracotta */
-  --accent-text     : #a8432e;     /* [R2·1e] AA-safe deep terracotta (5.3:1 on cream) for small accent text */
-  --accent-bright   : #e0664a;
-  --accent-soft     : #e6a597;
-  --accent-veil     : color-mix(in srgb, var(--accent) 8%, transparent);
-  --link            : #2b6cb0;
-  --link-hover      : #1a4480;
+  /* Editorial accent — claret is the ONE emphasis colour (focus only) */
+  --accent          : #990F3D;   /* claret, 7.62:1 */
+  --accent-text     : #990F3D;
+  --accent-bright   : #CC1452;   /* hover / bright moments */
+  --accent-rose     : #EB5E8D;   /* FT rose — strokes >=3px or fills ONLY, never text (2.91:1) */
+  --accent-soft     : #D9A4B0;   /* soft claret wash — thin dashed leaders */
+  --accent-veil     : color-mix(in srgb, var(--accent) 8%, transparent); /* CSS-only, never fed to d3 */
+  --link            : #0D7680;   /* FT teal, 4.84:1 — links / controls / focus rings */
+  --link-hover      : #08474D;
 
-  /* Sequential inflation ramp (deflation → extreme) — perceptually evened via oklch reasoning,
-     stored as sRGB hex (oklch source kept in comments). d3 7.9 cannot parse oklch() — it returns
-     null → BLACK in d3 colour scales (this silently broke the Heatmap into accent-or-black); hex
-     is parsed by both d3 and the browser. seq-4 IS the editorial accent (severity-4). See D15. */
-  --seq-1 : #70977a;   /* sage — oklch(.64 .062 152) — < 0 to ECB target */
-  --seq-2 : #9bad71;   /* moss — oklch(.72 .085 122) — near target */
-  --seq-3 : #d2ac48;   /* gold — oklch(.76 .125 88)  — elevated 3–5 % */
-  --seq-4 : var(--accent);   /* terra — high 5–10 % = editorial accent */
-  --seq-5 : #822325;   /* wine — oklch(.41 .130 24)  — extreme >10 % */
-  --seq-target : #2b6cb0;  /* ECB 2 % reference */
+  /* Sequential severity ramp — GREEN -> AMBER -> RED (owner override, 2026-06-15).
+     Low inflation = green (calm/good), high = red (bad). RdYlGn-style, reasonably
+     colour-blind-safe. seq encodes severity; claret encodes focus — DECOUPLED. */
+  --seq-1 : #1A9850;   /* low / sub-target — green */
+  --seq-2 : #A6D96A;   /* near target — lime */
+  --seq-3 : #FEE08B;   /* elevated 3–5% — amber */
+  --seq-4 : #F46D43;   /* high 5–10% — orange-red */
+  --seq-5 : #D73027;   /* extreme >10% — red */
+  --seq-target : #0F5499;   /* ECB 2% reference — FT oxford, 6.90:1 */
 
-  /* Categorical palette (independent series) */
-  --cat-overall   : #1a1a1f;
-  --cat-energy    : #c8553d;
-  --cat-food      : #5b8a72;
-  --cat-housing   : #4a6c8a;
-  --cat-services  : #6b5b95;
-  --cat-wages     : #d4a548;
-  --cat-transport : #b07a3a;
-  --cat-other     : #998877;
+  /* Categorical — FT g-chartcolour. LOCK these; a category keeps its hue in EVERY chart. */
+  --cat-overall   : #33302E;
+  --cat-energy    : #FF8833;   /* mandarin — the "orange wall" */
+  --cat-food      : #9DBF57;
+  --cat-housing   : #208FCE;
+  --cat-services  : #593380;   /* velvet */
+  --cat-wages     : #00994D;   /* jade */
+  --cat-transport : #70DCE6;
+  --cat-other     : #C2B7AF;
 
-  /* Event ribbon tints — color-mix-derived so each band tracks its palette source
-     (energy↔accent, policy↔gold seq-3, food↔sage seq-1, covid↔neutral ink-faint). */
-  --event-covid   : color-mix(in srgb, var(--ink-faint) 18%, transparent);
-  --event-energy  : color-mix(in srgb, var(--accent) 14%, transparent);
-  --event-policy  : color-mix(in srgb, var(--seq-3) 16%, transparent);
-  --event-food    : color-mix(in srgb, var(--seq-1) 14%, transparent);
+  /* Coin metals (hero, PART 7) */
+  --coin-gold-hi    : #F6E4B8;  --coin-gold    : #C8923D;  --coin-gold-lo    : #7A5A22;
+  --coin-tarnish-hi : #D8D2C8;  --coin-tarnish : #B3A9A0;  --coin-tarnish-lo : #857F77;
 
-  /* [R2 elevate · chart 03] Country-spread envelope — a NEUTRAL ink wash so the
-     dispersion band reads as context and never competes with the terracotta line
-     (which previously shared the --accent hue). Edge = a faint defined ceiling. */
-  --anno-spread-fill : rgba(24,24,30,.072);
-  --anno-spread-edge : rgba(24,24,30,.20);
+  /* Event bands — flat FT tints behind line charts (rgba, never color-mix) */
+  --event-covid   : rgba(204,230,255,.30);   /* sky */
+  --event-energy  : rgba(255,136,51,.12);     /* mandarin */
+  --event-policy  : rgba(15,84,153,.10);      /* oxford */
+  --event-food    : rgba(150,204,40,.10);     /* wasabi */
 
-  /* [R4·P4] House grey-down level for non-focused marks — the canonical .is-dim opacity, so the
-     terracotta accent stays reserved for the single focused element. Charts adopt it over P5–P12. */
+  /* Country-spread envelope — neutral ink wash (reads as context; never competes with claret). */
+  --anno-spread-fill : rgba(51,48,46,.072);
+  --anno-spread-edge : rgba(51,48,46,.20);
+
+  /* House grey-down level for non-focused marks (claret stays reserved for the focus). */
   --dim-nonfocus : 0.25;
 
-  /* Typography stack */
-  --font-display  : "Fraunces", "Playfair Display", "Georgia", serif;
-  --font-body     : "Inter", "Inter Fallback", "Source Sans 3", system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* Typography stacks — FT voice: upright, authoritative. (Fraunces/Inter retired.) */
+  --font-display  : "Source Serif 4", Georgia, "Times New Roman", serif;
+  --font-body     : Georgia, "Times New Roman", serif;
+  --font-ui       : "Schibsted Grotesk", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono     : "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
 
   /* Type scale (modular 1.250) */
@@ -115,14 +122,16 @@
   --radius-4 : 24px;
 
   /* Shadows (light-friendly, paper feel) */
-  --shadow-1 : 0 1px 0 rgba(26,26,31,.04), 0 0 1px rgba(26,26,31,.08);
-  --shadow-2 : 0 4px 14px rgba(26,26,31,.06), 0 1px 2px rgba(26,26,31,.05);
-  --shadow-3 : 0 18px 40px rgba(26,26,31,.10), 0 6px 12px rgba(26,26,31,.06);
+  --shadow-1 : 0 1px 0 rgba(51,48,46,.04), 0 0 1px rgba(51,48,46,.08);
+  --shadow-2 : 0 4px 14px rgba(51,48,46,.06), 0 1px 2px rgba(51,48,46,.05);
+  --shadow-3 : 0 18px 40px rgba(51,48,46,.10), 0 6px 12px rgba(51,48,46,.06);
 
-  /* Motion */
-  --ease-out      : cubic-bezier(.2,.7,.2,1);
-  --ease-in-out   : cubic-bezier(.65,0,.35,1);
-  --ease-spring   : cubic-bezier(.3,1.4,.4,1);
+  /* Motion — tokens are the source of truth; never hardcode ms in CSS or JS */
+  --ease-out        : cubic-bezier(.2,.7,.2,1);
+  --ease-in-out     : cubic-bezier(.65,0,.35,1);
+  --ease-spring     : cubic-bezier(.3,1.4,.4,1);
+  --ease-emphasized : cubic-bezier(.05,.7,.1,1);  /* M3 emphasized-decelerate — premium chart-enter */
+  --ease-accel      : cubic-bezier(.3,0,.8,.15);  /* exits — faster than enters */
   --dur-1 : 120ms;
   --dur-2 : 180ms;
   --dur-3 : 280ms;
@@ -130,14 +139,12 @@
   --dur-5 : 640ms;
   --dur-6 : 900ms;
 
-  /* Canonical motion vocabulary (house set) — 3 durations × 2 easings, used for global + new
-     motion so everything reads as one system. The granular --dur-1..6 above stay for the per-chart
-     d3 timings tuned in rounds 2–3. Note: our eases are custom curves (built-in CSS eases are weak). */
-  --motion-fast            : var(--dur-2);   /* 180ms — feedback, hovers, small toggles */
-  --motion-base            : var(--dur-3);   /* 280ms — enters/exits, theme + chart-mode transitions */
-  --motion-slow            : var(--dur-5);   /* 640ms — larger reveals, camera moves */
-  --motion-ease            : var(--ease-out);      /* default — enters / exits / UI feedback */
-  --motion-ease-emphasized : var(--ease-in-out);   /* on-screen movement / morphs */
+  /* Canonical motion vocabulary (house set). The granular --dur-1..6 stay for per-chart d3 timings. */
+  --motion-fast            : 180ms;   /* feedback, hovers, small toggles */
+  --motion-base            : 280ms;   /* enters/exits, theme + chart-mode transitions */
+  --motion-slow            : 640ms;   /* larger reveals, camera moves */
+  --motion-ease            : var(--ease-out);
+  --motion-ease-emphasized : var(--ease-in-out);
 
   /* Layout widths */
   --w-prose    : 38rem;
@@ -155,65 +162,69 @@
 }
 
 /* ============================================================
-   Dark theme — applied via [data-theme="dark"] on <html>
-   Warm dark inspired by Pudding "Banknotes" — no pure black.
+   Dark theme — [data-theme="dark"]. FT slate (warm-dark, no pure black).
+   Kept as an opt-in; CONTRAST-TUNED in Phase 17 after light is perfect.
    ============================================================ */
 
 [data-theme="dark"] {
-  --bg              : #131218;
-  --bg-elev         : #1d1c24;
-  --bg-sunken       : #0e0d12;
-  --bg-veil         : rgba(19,18,24,0.92);
+  --bg              : #262A33;   /* FT slate */
+  --bg-elev         : #2E333D;
+  --bg-sunken       : #1F242C;
+  --bg-veil         : rgba(38,42,51,0.90);
+  --bg-overlay      : rgba(38,42,51,0.96);
 
-  --ink             : #f0ece4;
-  --ink-soft        : #c2bdb4;
-  --ink-faint       : #8a857c;
-  --ink-invert      : #1a1a1f;
+  --ink             : #FFF1E5;   /* 12.98:1 */
+  --ink-strong      : #FFFFFF;
+  --ink-soft        : #D5C9BC;
+  --ink-faint       : #9A938B;
+  --ink-fainter     : #847E76;   /* context lines (never text); 3.58:1 (P17; was #6B6660 = 2.53, sub-AA) */
+  --ink-invert      : #262A33;
 
-  --rule            : #2a2832;
-  --rule-soft       : #21202a;
-  --rule-bold       : #4a4854;
+  --rule            : #3D434E;
+  --rule-soft       : #333842;
+  --rule-bold       : #8A847C;
 
-  --accent          : #e87a5b;
-  --accent-text     : #e87a5b;     /* [R2·1e] bright terracotta is already AA on the warm-dark bg */
-  --accent-soft     : #b06148;
-  --accent-veil     : color-mix(in srgb, var(--accent) 10%, transparent);
-  --link            : #7fb8ff;
-  --link-hover      : #b3d4ff;
+  --accent          : #E22A5C;   /* claret-bright for the slate ground — focus mark, 3.23:1 (P17; was #CC1452 = 2.59, sub-AA) */
+  --accent-text     : #EE6993;   /* rose AS TEXT on slate, 4.84:1 (P17; was #EB5E8D = 4.46, a hair under AA) */
+  --accent-bright   : #EE6993;   /* hover / bright graphic — unified rose */
+  --accent-rose     : #EE6993;   /* strokes >=3px / fills */
+  --accent-soft     : #7A2540;
+  --accent-veil     : color-mix(in srgb, var(--accent) 14%, transparent);
+  --link            : #5BC0C9;
+  --link-hover      : #9BE0E6;
 
-  /* Sequential for dark bg — same hues, lifted L + trimmed C for warm-dark (oklch-evened, stored
-     as hex for d3 7.9 — see D15). seq-4 inherits var(--accent) (the dark terracotta). */
-  --seq-1 : #83b28f;   /* oklch(.72 .072 152) */
-  --seq-2 : #adc17e;   /* oklch(.78 .092 122) */
-  --seq-3 : #e1bc5f;   /* oklch(.81 .120 88)  */
-  --seq-5 : #be4e4f;   /* oklch(.57 .145 22)  */
-  --seq-target : #7fb8ff;
+  /* GREEN -> AMBER -> RED severity ramp (owner override) brightened for the slate ground
+     so every step clears AA non-text contrast on dark (hex — see D15). */
+  --seq-1 : #3CB371;   /* green, lifted off slate */
+  --seq-2 : #B6E07A;   /* lime */
+  --seq-3 : #FEE08B;   /* amber (already bright) */
+  --seq-4 : #FB8C5A;   /* orange-red, lifted */
+  --seq-5 : #F2564B;   /* red, lifted for >=3:1 on slate */
+  --seq-target : #5BA3E0;
 
-  --cat-overall   : #f0ece4;
-  --cat-energy    : #e87a5b;
-  --cat-food      : #6ea688;
-  --cat-housing   : #6a91b8;
-  --cat-services  : #8d7fb8;
-  --cat-wages     : #e0b85a;
-  --cat-transport : #c89762;
-  --cat-other     : #b3a698;
+  --cat-overall   : #FFF1E5;
+  --cat-energy    : #FF9D52;
+  --cat-food      : #B6D36F;
+  --cat-housing   : #4FA9DD;
+  --cat-services  : #8A6DB8;
+  --cat-wages     : #1FB36A;
+  --cat-transport : #8FE6EE;
+  --cat-other     : #C2B7AF;
 
-  --event-covid   : color-mix(in srgb, var(--ink-faint) 30%, transparent);
-  --event-energy  : color-mix(in srgb, var(--accent) 18%, transparent);
-  --event-policy  : color-mix(in srgb, var(--seq-3) 18%, transparent);
-  --event-food    : color-mix(in srgb, var(--seq-1) 18%, transparent);
+  --event-covid   : rgba(120,180,235,.20);
+  --event-energy  : rgba(255,136,51,.18);
+  --event-policy  : rgba(91,163,224,.16);
+  --event-food    : rgba(150,204,40,.16);
 
-  /* [R2 elevate · chart 03] On warm-dark, a light ink wash reads as the spread
-     region without the heavy brown smear the old --accent fill produced. */
-  --anno-spread-fill : rgba(240,236,228,.07);
-  --anno-spread-edge : rgba(240,236,228,.22);
+  --anno-spread-fill : rgba(255,241,229,.07);
+  --anno-spread-edge : rgba(255,241,229,.22);
 
   --shadow-1 : 0 1px 0 rgba(0,0,0,.3),  0 0 1px rgba(0,0,0,.4);
   --shadow-2 : 0 4px 16px rgba(0,0,0,.5), 0 1px 2px rgba(0,0,0,.4);
   --shadow-3 : 0 20px 48px rgba(0,0,0,.6), 0 6px 14px rgba(0,0,0,.4);
 }
 
-/* Respect OS preference if user hasn't picked manually */
+/* Respect OS preference if the user hasn't picked manually */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
     color-scheme: dark;

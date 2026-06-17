@@ -23,6 +23,7 @@
    ============================================================ */
 
 import { BaseChart } from "./BaseChart.js";
+import { sphereGradient, defsOnce } from "../modules/CraftFX.js";
 
 // Step → focus year. Index 0 = idle, then per-year focus.
 const STEP_CONFIG = [
@@ -30,7 +31,7 @@ const STEP_CONFIG = [
   // sub-line (the idle chart already opens on the 2022 story, not a placeholder).
   { focus: null, caption: null },
   { focus: 2019, caption: "A narrow tidy ridge — Europe was a uniform inflation environment." },
-  { focus: 2022, caption: "Estonia 19.4 %  ·  France 5.9 % — the same currency union, fifteen points apart." },
+  { focus: 2022, caption: "Estonia 19.4 %  ·  France 5.9 % — the same currency union, fourteen points apart." },
   { focus: 2024, caption: "The ridge tightens — but it has not snapped back to its old shape." }
 ];
 
@@ -119,6 +120,18 @@ export class Ridgeline extends BaseChart {
     const colorFor = (year) => year === PROTAGONIST ? this._accent : this._inkRest;
     this._colorFor = colorFor;
 
+    // [R5·P7] Craft: the ONE active/protagonist ridge is filled with a vertical claret gradient
+    // (deep at the wave crest → light at the baseline) so it reads as a lit warm wave, not a flat
+    // block. Non-active ridges stay the calm ink wash (the six-test bar: claret reserved for the
+    // focus; everyone else is calm grey context). stop-color is a hex token (var() resolves in
+    // CSS → no d3 colour-parse, D15-safe). Rebuilt each render into the fresh <defs>.
+    const fdefs = defsOnce(this.svg);
+    const fg = fdefs.append("linearGradient").attr("id", "rdg-focus-grad")
+      .attr("x1", 0).attr("y1", 0).attr("x2", 0).attr("y2", 1);
+    fg.append("stop").attr("offset", "0%").attr("stop-color", "var(--accent)").attr("stop-opacity", 0.95);
+    fg.append("stop").attr("offset", "100%").attr("stop-color", "var(--accent)").attr("stop-opacity", 0.40);
+    this._focusFill = "url(#rdg-focus-grad)";
+
     // KDE — Epanechnikov, bandwidth 1.6 (the disclosed methodology number is
     // UNCHANGED). [R2·04] The evaluation grid is refined 0.4→0.2 so the curve is
     // sampled twice as densely: this removes the faceted "lumps" round-1 saw in
@@ -185,6 +198,11 @@ export class Ridgeline extends BaseChart {
     this.ridges.each(function(s) {
       const sel = d3.select(this);
       const density = kde(s.vals.map(d => d.v));
+      // [R5·P7] crest (mode) of this ridge — where the sphere dot lands on the active ridge.
+      let mxd = -1, modeX = 0;
+      density.forEach(p => { if (p[1] > mxd) { mxd = p[1]; modeX = p[0]; } });
+      s.mode = modeX;
+      s.peakY = -mxd * rowH * 15.5;
       // Transparent hit target spanning the whole row band (peak above baseline
       // to a little below) so hover fires reliably, not only over the thin path.
       sel.append("rect").attr("class", "ridge-hit")
@@ -293,9 +311,11 @@ export class Ridgeline extends BaseChart {
       sel.style("opacity", 0);
       const grow = sel.selectAll(".ridge-area, .rdg-dots")
         .attr("transform", "scale(1,0.04)");
-      sel.transition("reveal").delay(i * 90).duration(620).ease(d3.easeCubicOut)
+      // [R5·P7] Stagger tightened to ≤500ms total (PART 8.4: stagger ≤500ms) — 11 ridges × 40ms
+      // = a 400ms cascade span; the per-ridge grow still eases over ~600ms so each wave settles.
+      sel.transition("reveal").delay(i * 40).duration(600).ease(d3.easeCubicOut)
         .style("opacity", target);
-      grow.transition("reveal").delay(i * 90).duration(680).ease(d3.easeCubicOut)
+      grow.transition("reveal").delay(i * 40).duration(640).ease(d3.easeCubicOut)
         .attr("transform", "scale(1,1)");
     });
     // [CH4-C1] rAF-stall safety net — force the end-state if transitions don't tick
@@ -310,7 +330,7 @@ export class Ridgeline extends BaseChart {
         });
       });
       this._applyOpacities();
-    }, this.ridges.size() * 90 + 700);
+    }, this.ridges.size() * 40 + 700);
   }
 
   // Decide opacity + colour per ridge based on hover → step focus → protagonist.
@@ -325,6 +345,7 @@ export class Ridgeline extends BaseChart {
     const reduced = this.ctx.motion.reduced;
     const accent = this._accent || getCSS("var(--accent)");
     const ink = this._inkRest || getCSS("var(--ink-soft)");
+    const focusFill = this._focusFill || accent;   // [R5·P7] gradient on the active ridge
     if (!opts.skipOpacity) {
       const op = (d) => d.year === active ? 1 : 0.34;
       if (opts.animate && !reduced) {
@@ -336,14 +357,17 @@ export class Ridgeline extends BaseChart {
     this.ridges.each(function (d) {
       const on = d.year === active;
       const sel = d3.select(this);
-      // Repaint: the active ridge is terracotta; everyone else is ink. (Fill
-      // changes are instant — the eye should read the protagonist immediately.)
+      // Repaint: the active ridge is a claret gradient; everyone else is the calm ink wash.
+      // (Fill changes are instant — the eye should read the protagonist immediately.)
       sel.select(".ridge-area")
-        .attr("fill", on ? accent : ink)
+        .attr("fill", on ? focusFill : ink)
         .classed("is-focus", on)
         .classed("is-protagonist", d.year === PROTAGONIST);
       sel.classed("is-active", on);
       sel.select(".ridge-label").classed("is-focus", on);
+      // [R5·P7 / DESIGN-REVIEW #15] The real country-dot strip shows ONLY under the active ridge
+      // (the protagonist gets its real observations; the others stay clean waves — no perma-clutter).
+      sel.select(".rdg-dots").style("opacity", on ? 1 : 0);
     });
     // Raise the active ridge so its (near-opaque) shape, dots + plates aren't
     // clipped by rows painted on top of it.
@@ -364,7 +388,7 @@ export class Ridgeline extends BaseChart {
   _setKicker(activeYear) {
     if (!this.kickerY || !this.kickerSub) return;
     const restingSub = {
-      2022: "the year the spread blew open — fifteen points across one union"
+      2022: "the year the spread blew open — fourteen points across one union"
     };
     let sub;
     // The step caption only describes the step's OWN focus year. When the reader
@@ -415,6 +439,19 @@ export class Ridgeline extends BaseChart {
       .attr("x", 0).attr("y", -47).attr("text-anchor", "middle")
       .attr("fill", getCSS("var(--ink)"))
       .text(`median ${s.median.toFixed(1)}%`);
+    // [R5·P7] A lit accent sphere on the active ridge's CREST (its mode — the most common rate
+    // that year). Bremer craft: it punctuates the protagonist wave's peak. Distinct from the
+    // median tick (the bulk read) — the crest is the distribution's apex.
+    if (s.mode != null && s.peakY != null) {
+      const sphere = this.stampG.append("circle").attr("class", "rdg-crest-sphere")
+        .attr("cx", this.opts.margin.left + this._x(s.mode))
+        .attr("cy", this.opts.margin.top + yBase + s.peakY)
+        .attr("r", 5)
+        .attr("fill", sphereGradient(this.svg, "rdg-crest", getCSS("var(--accent)")))
+        .attr("stroke", getCSS("var(--bg)")).attr("stroke-width", 1.2)
+        .style("opacity", reduced ? 1 : 0);
+      if (!reduced) sphere.transition().delay(220).duration(300).style("opacity", 1);
+    }
     if (!reduced) {
       g.transition().delay(160).duration(360).style("opacity", 1);
       if (this._stampSafety) clearTimeout(this._stampSafety);

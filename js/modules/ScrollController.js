@@ -56,24 +56,25 @@ export class ScrollController {
     }, { rootMargin: "400px 0px", threshold: 0.01 });
     io.observe(chap);
 
-    // scrollama for step events
-    const scroller = scrollama();
-    scroller
-      .setup({
-        step: chap.querySelectorAll(".scroller__step"),
-        offset: 0.55,
-        progress: false
-      })
-      .onStepEnter(({ element, index }) => {
-        chap.querySelectorAll(".scroller__step").forEach(s => s.classList.remove("is-active"));
-        element.classList.add("is-active");
-        this._updateDock(element);   // [R2·1b] mirror the active step into the fixed mobile dock
-        // chart may not be mounted/rendered yet on a fast scroll — guard on the live instance
-        const chart = this.charts[key];
-        if (chart && chart.rendered && typeof chart.onStep === "function") {
-          chart.onStep(index, element);
-        }
-      });
+    // scrollama for step events — skip when a chapter has no steps (e.g. the compare map),
+    // otherwise scrollama logs "no step elements" (a console error).
+    const steps = chap.querySelectorAll(".scroller__step");
+    let scroller = null;
+    if (steps.length) {
+      scroller = scrollama();
+      scroller
+        .setup({ step: steps, offset: 0.55, progress: false })
+        .onStepEnter(({ element, index }) => {
+          chap.querySelectorAll(".scroller__step").forEach(s => s.classList.remove("is-active"));
+          element.classList.add("is-active");
+          this._updateDock(element);   // [R2·1b] mirror the active step into the fixed mobile dock
+          // chart may not be mounted/rendered yet on a fast scroll — guard on the live instance
+          const chart = this.charts[key];
+          if (chart && chart.rendered && typeof chart.onStep === "function") {
+            chart.onStep(index, element);
+          }
+        });
+    }
 
     // [R2·1b] Track chapter visibility so the mobile dock hides on hero / dividers / methodology.
     const visIO = new IntersectionObserver(entries => {
@@ -85,7 +86,7 @@ export class ScrollController {
     }, { threshold: 0.01 });
     visIO.observe(chap);
 
-    this.scrollers.push(scroller);
+    if (scroller) this.scrollers.push(scroller);
   }
 
   // [R2·1b] Mobile step-dock — a single fixed card at the bottom mirroring the active step's

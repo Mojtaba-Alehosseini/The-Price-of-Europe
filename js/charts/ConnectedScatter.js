@@ -8,6 +8,9 @@
    ============================================================ */
 
 import { BaseChart } from "./BaseChart.js";
+import { sphereGradient } from "../modules/CraftFX.js";
+
+function getCSS(name) { const m = String(name).match(/var\((--[^)]+)\)/); const n = m ? m[1] : name; return getComputedStyle(document.documentElement).getPropertyValue(n).trim() || "#888"; }
 
 // Step 0: overview. Step 1: pin Estonia — a "below the line" loser whose path is
 //   flat-then-late-vertical (pay only stirred in 2024, still short of prices).
@@ -28,6 +31,14 @@ const STEP_CONFIG = [
   {
     focus: "BG", caption: "Bulgaria — pay ran ahead of prices the whole way.",
     stamp: { eyebrow: "Pay won", line: "Pay rose +50% as prices rose +32% — above the line the whole way." }
+  },
+  // [R5·P13 / DESIGN-REVIEW #4] The merged BumpChart insight folded in as ONE annotated step
+  // (not a second encoding): Czechia is the deepest below-break-even point AND its electricity
+  // climbed the EU league — one fact explains the other. Verified vs the data: wages +22.8%,
+  // prices +41.0% (gap −18.2 pts); electricity rank climbed from mid-pack to among the dearest.
+  {
+    focus: "CZ", caption: "Czechia — pay fell furthest behind as its electricity climbed the EU league.",
+    stamp: { eyebrow: "Prices won big", line: "Pay rose +23% as prices rose +41% — and Czech electricity leapt from mid-pack to among the EU's dearest grids." }
   }
 ];
 
@@ -202,7 +213,12 @@ export class ConnectedScatter extends BaseChart {
       : new Set(rankedDefault.slice(0, 5).map(d => d.code).concat(["DE", "FR", "ES"]));
     this._defaultLabelCodes = defaultLabelCodes;
 
-    this.paths = this.g.selectAll("g.cs-line").data(series, d => d.code).join("g")
+    // [owner review D9] clip the marks to the plot rect so no path/node spills past the axes
+    // (the domain already fits via max×1.05.nice(); this guarantees it for any data).
+    this._defs.append("clipPath").attr("id", "cs-plot-clip")
+      .append("rect").attr("x", -2).attr("y", -2).attr("width", iw + 4).attr("height", ih + 4);
+    const marks = this.g.append("g").attr("clip-path", "url(#cs-plot-clip)");
+    this.paths = marks.selectAll("g.cs-line").data(series, d => d.code).join("g")
       .attr("class", "cs-line").attr("data-code", d => d.code)
       .classed("cs-line--default-focus", d => defaultLabelCodes.has(d.code));
 
@@ -362,6 +378,11 @@ export class ConnectedScatter extends BaseChart {
       if (code === active) return "url(#cs-arrow-focus)";
       return defaultSet && defaultSet.has(code) ? "url(#cs-arrow-default)" : null;
     });
+    // [R5·P13] Sphere endpoint on the active path's terminal (2024) node — the Bremer "arrival"
+    // dot. Reset the rest to the CSS default fill so only one node ever carries the sphere.
+    this.paths.selectAll("circle.cs-node--end").attr("fill", null);
+    if (active) this.paths.filter(d => d.code === active).select("circle.cs-node--end")
+      .attr("fill", sphereGradient(this.svg, "cs-end", getCSS("--accent")));
     // Editorial kicker readout (desktop/tablet only).
     if (this.kickerY && this.kickerSub) {
       if (active) {
@@ -443,23 +464,14 @@ export class ConnectedScatter extends BaseChart {
     const gap = l.wage - l.price;                      // signed: + = pay won, − = pay lost
     const ex = x(l.price), ey = y(l.wage);
 
-    // Anchor in the bottom-right corner — the most reliably empty zone in this
-    // chart (high prices + modest wages is nearly unpopulated). Height is derived
-    // from the wrapped line count so the block always sits fully above the x-axis.
-    // A dashed leader ties it to the focused endpoint, so the card reads as "this
-    // path's verdict" wherever the path ends.
-    const W = Math.min(236, iw * 0.5);
+    // [owner review D9] LEFT text box — stacked under the top-left country kicker, NOT a
+    // disproportionate label floating inside the plot with a leader into the marks.
+    const W = Math.min(220, iw * 0.46);
     const lineH = 14;
     const lines = this._wrapLines(stamp.line, W);
     const bodyTop = 56;                                // y of the first body line
-    const stampH = bodyTop + (lines.length - 1) * lineH + 6;
-    const sx = iw - W;
-    const sy = Math.max(8, ih - stampH - 4);
-
-    // Leader first (drawn under the stamp text), from focused endpoint to anchor.
-    this.g.append("line").attr("class", "cs-stamp-leader")
-      .attr("x1", ex).attr("y1", ey).attr("x2", sx).attr("y2", sy - 2);
-    // Stamp group appended after the leader, so its text always sits on top.
+    const sx = 0;
+    const sy = 84;                                     // below the kicker (top-left)
     const g = this.g.append("g").attr("class", "cs-stamp").attr("pointer-events", "none")
       .attr("transform", `translate(${sx}, ${sy})`);
 
