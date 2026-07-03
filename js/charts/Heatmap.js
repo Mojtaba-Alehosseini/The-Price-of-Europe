@@ -208,7 +208,7 @@ export class Heatmap extends BaseChart {
   onThemeChange() { this.render(); }
 }
 
-function getCSS(name) { const m = name.match(/var\((--[^)]+)\)/); const n = m ? m[1] : name; return getComputedStyle(document.documentElement).getPropertyValue(n).trim() || "#888"; }
+function getCSS(name) { const m = name.match(/var\((--[^)]+)\)/); const n = m ? m[1] : name; return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
 function fmtCell(v) { return v == null ? "" : String(Math.round(v)); }
 // higher-WCAG-contrast text colour against the cell fill (tokens-only, AA, both themes).
 function bestText(bgHex, a, b) { return contrast(bgHex, a) >= contrast(bgHex, b) ? a : b; }

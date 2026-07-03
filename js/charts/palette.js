@@ -41,11 +41,9 @@ export function readPalette() {
     inkSoft:   css("--ink-soft"),
     inkFaint:  css("--ink-faint"),
     rule:      css("--rule"),
-    ruleSoft:  css("--rule-soft"),
 
     // Accent
     accent:    css("--accent"),
-    accentVeil:css("--accent-veil"),
     link:      css("--link"),
 
     // Events
@@ -78,12 +76,3 @@ export const CATEGORY_TO_PALETTE = {
   FOOD: "food",
   SERV: "services"
 };
-
-/** d3.scaleSequential built from current seq tokens. */
-export function makeInflationScale(domain = [-2, 12]) {
-  const p = readPalette();
-  return d3.scaleLinear()
-    .domain([-2, 0, 2, 5, 10, 15])
-    .range([p.seq[0], p.seq[0], p.seq[1], p.seq[2], p.seq[3], p.seq[4]])
-    .clamp(true);
-}

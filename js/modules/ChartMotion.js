@@ -24,35 +24,6 @@ export const smooth = (t) => {
   return t * t * (3 - 2 * t);
 };
 
-/** Animate a D3 zoom into a bounding box on a map projection. */
-export function panToBBox(svg, gMap, projection, path, bbox, durationMs = 800, motionMgr) {
-  if (!bbox) return;
-  const [[x0, y0], [x1, y1]] = bbox;
-  const { width, height } = svg.node().getBoundingClientRect();
-  const scale = 0.9 * Math.min(width / (x1 - x0), height / (y1 - y0));
-  const tx = width  / 2 - scale * (x0 + x1) / 2;
-  const ty = height / 2 - scale * (y0 + y1) / 2;
-  const transform = `translate(${tx}, ${ty}) scale(${scale})`;
-  if (!motionMgr || motionMgr.reduced) {
-    gMap.attr("transform", transform);
-    return;
-  }
-  gMap.transition().duration(durationMs).ease(d3.easeCubicInOut).attr("transform", transform);
-}
-
-/** Reveal an array of elements sequentially based on scroll progress.
- *  @param sel d3 selection of elements
- *  @param p   scroll progress 0..1 for chapter
- *  @param attr e.g. "opacity" — set from 0 → 1 across staggered windows. */
-export function staggerReveal(sel, p, attr = "opacity", stagger = 0.05) {
-  const n = sel.size();
-  sel.each(function(d, i) {
-    const start = i * stagger;
-    const t = smooth(Math.max(0, Math.min(1, (p - start) / 0.4)));
-    d3.select(this).attr(attr, t);
-  });
-}
-
 /** Trace a path 0→1: set dasharray to length, dashoffset = (1-t)*length. */
 export function tracePath(pathSel, t) {
   pathSel.each(function() {
@@ -62,8 +33,8 @@ export function tracePath(pathSel, t) {
   });
 }
 
-/** One-shot draw-on for step-enter / onceVisible (the continuous, scroll-tied draw-on is
- *  tracePath above). Reduced-motion: jump straight to the drawn end-state, no animation. */
+/** One-shot draw-on for step-enter (the continuous, scroll-tied draw-on is tracePath above).
+ *  Reduced-motion: jump straight to the drawn end-state, no animation. */
 export function drawOnPlay(pathSel, motion, dur = 900) {
   pathSel.each(function() {
     const L = this.getTotalLength ? this.getTotalLength() : 0;
@@ -71,20 +42,6 @@ export function drawOnPlay(pathSel, motion, dur = 900) {
     if (motion && motion.reduced) { s.attr("stroke-dashoffset", 0); return; }
     s.transition().duration(dur).ease(d3.easeCubicInOut).attr("stroke-dashoffset", 0);
   });
-}
-
-/** Build a one-shot Intersection Observer that fires `fn` once when `el` enters viewport. */
-export function onceVisible(el, fn, opts = {}) {
-  if (!el) return;
-  const io = new IntersectionObserver((entries) => {
-    entries.forEach(e => {
-      if (e.isIntersecting) {
-        fn();
-        io.disconnect();
-      }
-    });
-  }, { threshold: opts.threshold ?? 0.15, ...opts });
-  io.observe(el);
 }
 
 /** Watch the chapter and emit continuous scroll progress (0..1). */

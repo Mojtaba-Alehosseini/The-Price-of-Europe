@@ -9,8 +9,8 @@
    Coins are <img> tiles of ONE real €1-coin common-side image (assets/coins/euro-1.png), repeated across
    all 100 tiles (100 × €1 = €100 of Jan 2019). No CSS/SVG gold spheres, no claret ring, no flip (owner
    override). The same SVG coin is still exported as
-   `buildCoinGlyph(tarnish)` / `progressCoin()` and reused (DRY) by the act-divider page-turn glyph
-   + the header progress-coin. Not a BaseChart: a bespoke screen, booted by main.js.
+   `buildCoinGlyph(tarnish)` is reused (DRY) by the BoxPlot finale bookend. Not a BaseChart: a
+   bespoke screen, booted by main.js.
    ============================================================ */
 
 import { smooth } from "../modules/ChartMotion.js";
@@ -84,7 +84,7 @@ function coinGroup(R, ids, { x = 0, y = 0, ashOpacity = 0, withAsh = true, cls =
 }
 
 /** A single standalone coin glyph SVG at a tarnish level (0 = full gold, 1 = fully ash) — the hero's
- *  coin reused as the act-divider connective glyph (PART 8.11/8.12). Returns an <svg> element. */
+ *  coin reused as the BoxPlot finale connective glyph. Returns an <svg> element. */
 export function buildCoinGlyph(tarnish = 0) {
   const t = clamp(tarnish, 0, 1);
   const { defs, ids } = coinGradients("cg" + (glyphSeq++));
@@ -97,21 +97,6 @@ export function buildCoinGlyph(tarnish = 0) {
   return svg;
 }
 
-/** The header progress-coin (PART 2 / DESIGN-REVIEW #7) — a small coin that TARNISHES gold→grey as the
- *  reader scrolls Act I→V: the connective glyph as a silent compass. Reuses the hero coin (DRY). Returns
- *  { el, setTarnish(t) }; setTarnish crossfades the ash overlay (0 = gold, 1 = grey). */
-export function progressCoin() {
-  const { defs, ids } = coinGradients("pc" + (glyphSeq++));
-  const S = 100, R = S * 0.46;
-  const svg = document.createElementNS(NS, "svg");
-  svg.setAttribute("viewBox", `0 0 ${S} ${S}`);
-  svg.setAttribute("class", "progress-coin__svg");
-  svg.setAttribute("aria-hidden", "true");
-  svg.innerHTML = defs;
-  const { g, ash } = coinGroup(R, ids, { x: S / 2, y: S / 2, ashOpacity: 0, withAsh: true });
-  svg.appendChild(g);
-  return { el: svg, setTarnish: (t) => ash.setAttribute("opacity", clamp(t, 0, 1).toFixed(3)) };
-}
 
 export class CoinHero {
   /** @param mountSel  selector/element for the medallion container

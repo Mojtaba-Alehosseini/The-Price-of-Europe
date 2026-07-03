@@ -50,6 +50,8 @@
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   font-weight: 600;
+  font-size: 10px;
+  fill: var(--ink);
   letter-spacing: 0.01em;
   paint-order: stroke;
   stroke: var(--bg);
@@ -60,269 +62,9 @@
 .chart-svg .spark-dot  { pointer-events: none; }
 .chart-svg .spark-event-tick { pointer-events: none; }
 
-/* Bars */
-.chart .bar {
-  transition: fill var(--dur-2) var(--ease-out), opacity var(--dur-2) var(--ease-out);
-}
-.chart .bar--pos { fill: var(--seq-1); }
-.chart .bar--neg { fill: var(--seq-4); }
+/* Cut-chart legacy styles (bar / slope / ridge — bare-.chart dead-root + cut charts)
+   removed in the round-5 debug pass. The live SVG root is .chart-svg. */
 
-/* Waffle — live rules live under `.chart-svg` (see "Chart 9 · WaffleChart" below);
-   the legacy `.chart .waffle-cell` block was dead (root is `.chart-svg`) and has been removed. */
-
-/* Bump chart — live rules live under `.chart-svg g.bump` (see "Chart 11 ·
-   BumpChart" below). The legacy `.chart .bump-*` block was dead (the SVG root is
-   `.chart-svg`, not `.chart`) and has been removed; the JS + the .chart-svg rules
-   already set fill:none / colors, so the lines can never regress to filled blobs. */
-
-/* Slope chart */
-.chart .slope-line { stroke-width: 1.4; stroke: var(--ink-faint); fill: none; }
-.chart .slope-line--up   { stroke: var(--seq-4); }
-.chart .slope-line--down { stroke: var(--seq-1); }
-.chart .slope-end-label  { font-size: 0.78rem; font-weight: 600; }
-
-/* Ridgeline */
-.chart .ridge-area { fill-opacity: 0.65; stroke: var(--bg); stroke-width: 0.5; }
-.chart .ridge-baseline { stroke: var(--rule); stroke-width: 0.5; }
-.chart .ridge-label {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 600;
-  fill: var(--ink-soft);
-  letter-spacing: 0.02em;
-  font-variant-numeric: tabular-nums;
-}
-.chart-svg .ridge-axis-label {
-  font-family: var(--font-body);
-  font-size: 10px;
-  font-weight: 600;
-  fill: var(--ink-faint);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-.chart-svg .ridge-ref-line {
-  stroke: var(--seq-target);
-  stroke-width: 1;
-  stroke-opacity: 0.55;
-  stroke-dasharray: 3 4;
-  pointer-events: none;
-}
-.chart-svg .ridge-ref-label {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  fill: var(--seq-target);
-  letter-spacing: 0.04em;
-}
-.chart-svg .ridge-extreme {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  paint-order: stroke;
-  stroke: var(--bg);
-  stroke-width: 3px;
-  stroke-linejoin: round;
-}
-.chart-svg .ridge-extreme--hi { fill: var(--seq-4); }
-.chart-svg .ridge-extreme--lo { fill: var(--seq-1); }
-
-/* ===== Chart 5 · StackedArea ===== */
-.chart-svg .stacked-band { transition: opacity var(--dur-3, 280ms) var(--ease-out); }
-.chart-svg .sa-peak-label {
-  font-family: var(--font-display); font-style: italic;
-  font-size: 12.5px; font-weight: 460;
-  font-variation-settings: "opsz" 144;
-  fill: var(--cat-energy);
-  paint-order: stroke;
-  stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round;
-}
-.chart-svg .stacked-legend__swatch { rx: 2; }
-.chart-svg .stacked-legend__text {
-  font-family: var(--font-body);
-  font-size: 10px;
-  font-weight: 600;
-  fill: var(--ink-soft);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-/* [Style v95] Peak-band callout — vertical accent + italic Fraunces value
-   appearing when a step focuses one band of the stacked area. */
-.chart-svg .sa-band-peak__rule {
-  stroke: var(--accent);
-  stroke-width: 1;
-  stroke-dasharray: 2 4;
-  stroke-opacity: 0.7;
-  pointer-events: none;
-}
-.chart-svg .sa-band-peak__label {
-  font-family: var(--font-display);
-  font-style: italic;
-  font-size: 12px;
-  font-weight: 460;
-  font-variation-settings: "opsz" 144;
-  fill: var(--accent);
-  paint-order: stroke;
-  stroke: var(--bg);
-  stroke-width: 4px;
-  stroke-linejoin: round;
-}
-/* ===== [R2 ELEVATE · Chart 5] StackedArea round-2 ============================
-   Replaces the centred swatch row + thin "X pts" callout with: a top-right colour
-   key, an ECB 2 % reference, an un-stacked focus overlay (the #1 lift — makes a
-   band's true magnitude/trajectory readable, esp. services in 2024), and an
-   editorial share stamp. All colours via tokens. ========================== */
-/* Top-right colour key */
-.chart-svg .sa-key__name {
-  font-family: var(--font-body);
-  font-size: 9.5px; font-weight: 600;
-  fill: var(--ink-soft);
-  letter-spacing: 0.08em; text-transform: uppercase;
-}
-.chart-svg .sa-key__swatch { rx: 1.5; stroke: var(--bg); stroke-width: 0.5; }
-.chart-svg .sa-key__row { transition: opacity var(--dur-3, 280ms) var(--ease-out); }
-
-/* ECB 2 % target reference */
-.chart-svg .sa-target__line {
-  stroke: var(--seq-target); stroke-width: 1;
-  stroke-dasharray: 3 4; stroke-opacity: 0.7;
-}
-.chart-svg .sa-target__label {
-  font-family: var(--font-mono); font-size: 9.5px;
-  fill: var(--seq-target); letter-spacing: 0.04em;
-  paint-order: stroke; stroke: var(--bg); stroke-width: 3px; stroke-linejoin: round;
-}
-
-/* Un-stacked focus overlay (zero-anchored area + bold top line) */
-.chart-svg .sa-focus-fill { fill-opacity: 0.16; pointer-events: none; }
-.chart-svg .sa-focus-line {
-  fill: none; stroke-width: 2.4;
-  stroke-linejoin: round; stroke-linecap: round;
-  pointer-events: none;
-}
-.chart-svg .sa-focus-dot { stroke: var(--bg); stroke-width: 1.4; pointer-events: none; }
-/* [R5·P8] peak-band callout: the focused band's value in pts + month, on the data. */
-.chart-svg .sa-focus-peaklabel {
-  font-family: var(--font-mono); font-size: 10.5px; font-variant-numeric: tabular-nums;
-  letter-spacing: 0.01em; paint-order: stroke; stroke: var(--bg); stroke-width: 3px;
-  stroke-linejoin: round; pointer-events: none;
-}
-
-/* Editorial share stamp (eyebrow + big italic Fraunces % + insight sentence) */
-.chart-svg .sa-stamp__eyebrow {
-  font-family: var(--font-body); font-size: 10px;
-  fill: var(--ink-faint); letter-spacing: 0.24em; font-weight: 600;
-}
-.chart-svg .sa-stamp__num {
-  font-family: var(--font-display); font-style: normal;   /* owner override: upright, not faint italic */
-  font-size: 34px; fill: var(--accent-text);
-  font-weight: 600; letter-spacing: -0.01em;
-  font-variant-numeric: tabular-nums;
-  paint-order: stroke; stroke: var(--bg); stroke-width: 5px; stroke-linejoin: round;
-}
-/* Band-tinted stamp number (large text, ≥3:1 on bg in both themes — verified). */
-.chart-svg .sa-stamp__num--energy   { fill: var(--cat-energy); }
-.chart-svg .sa-stamp__num--food     { fill: var(--cat-food); }
-.chart-svg .sa-stamp__num--services { fill: var(--cat-services); }
-.chart-svg .sa-stamp__num--other    { fill: var(--cat-other); }
-.chart-svg .sa-stamp__sentence {
-  font-family: var(--font-display); font-style: normal;
-  font-size: 13px; fill: var(--ink);
-  letter-spacing: 0;
-  paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round;
-}
-/* Compact (phone) stamp — smaller so it doesn't swamp the short plot. */
-.chart-svg .sa-stamp--compact .sa-stamp__eyebrow { font-size: 8px; letter-spacing: 0.18em; }
-.chart-svg .sa-stamp--compact .sa-stamp__num { font-size: 27px; stroke-width: 4px; }
-.chart-svg .sa-stamp--compact .sa-stamp__sentence { font-size: 10.5px; }
-
-/* [owner review D5] StackedArea absolute/share toggle — match the site controls (Schibsted,
-   hairline --rule, teal active) instead of the claret-hover ghost buttons that clashed. */
-#chart-stackedArea-controls { display: flex; gap: var(--space-2); justify-content: center; align-items: center; }
-#chart-stackedArea-controls .btn {
-  font-family: var(--font-ui); font-size: var(--fs-100); font-weight: 600;
-  letter-spacing: 0.06em; text-transform: uppercase;
-  padding: 5px 14px; border-radius: var(--radius-2);
-  background: var(--bg-elev); color: var(--ink-soft);
-  border: 1px solid var(--rule); transform: none;
-}
-#chart-stackedArea-controls .btn:hover {
-  background: var(--bg-elev); color: var(--ink); border-color: var(--link); transform: none;
-}
-#chart-stackedArea-controls .btn[aria-pressed="true"] {
-  background: var(--link); color: var(--bg-elev); border-color: var(--link);
-}
-
-/* Tooltip share badge (mono, muted) next to each pts value */
-.tooltip .sa-tip-share {
-  font-family: var(--font-mono); font-size: 0.78em;
-  color: var(--ink-faint); margin-inline-start: 4px;
-  font-variant-numeric: tabular-nums;
-}
-
-/* ===== Chart 6 · SlopeChart ===== */
-.chart-svg .slope-axis-label {
-  font-family: var(--font-body);
-  font-size: 10px;
-  font-weight: 600;
-  fill: var(--ink-faint);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-.chart-svg .slope-axis-rule {
-  stroke: var(--rule); stroke-width: 1;
-}
-.chart-svg .slope-y-tick { stroke: var(--rule); stroke-width: 1; }
-.chart-svg .slope-y-label {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  fill: var(--ink-faint);
-  letter-spacing: 0.02em;
-  font-variant-numeric: tabular-nums;
-}
-.chart-svg .slope-end-label {
-  font-family: var(--font-body);
-  font-size: 11px;
-  font-weight: 600;
-  fill: var(--ink);
-  paint-order: stroke;
-  stroke: var(--bg);
-  stroke-width: 3px;
-  stroke-linejoin: round;
-}
-.chart-svg .slope-end-label--right { fill: var(--ink); }
-/* Labels that aren't the current focus read as quiet context. */
-.chart-svg .slope-end-label.is-dim { opacity: 0.4; font-weight: 500; }
-/* Mono then→now value pair beneath a spotlight label (€0.120 → €0.215). */
-.chart-svg .slope-value-pair {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 500;
-  fill: var(--ink-soft);
-  letter-spacing: -0.01em;
-  font-variant-numeric: tabular-nums;
-  paint-order: stroke;
-  stroke: var(--bg);
-  stroke-width: 3px;
-  stroke-linejoin: round;
-}
-/* Leader line from a slope endpoint to its de-collided label. */
-.chart-svg .slope-leader {
-  stroke: var(--ink-fainter);
-  stroke-width: 1;
-  fill: none;
-}
-/* A leader to a spotlight label reads in the accent so the eye follows it. */
-.chart-svg .slope-leader.is-spot { stroke: var(--accent); opacity: 0.55; }
-/* Top-right direction key (legend-title system, scoped to slope). */
-.chart-svg .slope-dir-key__mark { stroke-width: 2.4; stroke-linecap: round; }
-.chart-svg .slope-dir-key__label {
-  font-family: var(--font-body);
-  font-size: 9.5px;
-  fill: var(--ink-faint);
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-}
-.chart-svg g.slope { transition: opacity var(--dur-3, 280ms) var(--ease-out); }
 
 /* ===== Chart 7 · Heatmap ===== */
 .chart-svg .hm-col-head {
@@ -588,260 +330,6 @@
   border-radius: 3px;
 }
 
-/* ===== Chart 10 · ConnectedScatter ===== */
-.chart-svg .cs-axis-label {
-  font-family: var(--font-body);
-  font-size: 10px;
-  font-weight: 600;
-  fill: var(--ink-faint);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-.chart-svg .cs-diagonal {
-  stroke: var(--ink-faint); stroke-width: 1;
-  stroke-dasharray: 3 4;
-  pointer-events: none;
-}
-.chart-svg .cs-diagonal-label {
-  font-family: var(--font-body);
-  font-size: 10px;
-  font-weight: 600;
-  fill: var(--ink-faint);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-/* [R2 ELEVATION · chart 10] The two break-even regions now carry the chart's core
-   meaning, so they must actually read. Pay-won = sage (--seq-1); prices-won uses
-   --seq-5 (wine) NOT --seq-4 (which equals --accent and would clash with the
-   focused path). Opacity bumped from 0.06 → legible-but-quiet washes. */
-.chart-svg .cs-region--pay    { fill: var(--seq-1); fill-opacity: 0.10; }
-.chart-svg .cs-region--prices { fill: var(--seq-5); fill-opacity: 0.07; }
-.chart-svg .cs-line {
-  transition: opacity var(--dur-3, 280ms) var(--ease-out);
-}
-.chart-svg .cs-path {
-  fill: none;
-  stroke: var(--ink-faint);
-  stroke-opacity: 0.45;
-  stroke-width: 1.6;
-  stroke-linejoin: round; stroke-linecap: round;
-  transition: stroke var(--dur-3) var(--ease-out), stroke-opacity var(--dur-3) var(--ease-out), stroke-width var(--dur-3) var(--ease-out);
-  /* [R5·P13] context paths multiply-blend so the overlapping field reads as depth (PART 8.9).
-     Light-only: multiply on the dark slate would crush the faint context to black. */
-  mix-blend-mode: multiply;
-}
-[data-theme="dark"] .chart-svg .cs-path { mix-blend-mode: normal; }
-@media (max-width: 480px) { .chart-svg .cs-path { mix-blend-mode: normal; } }
-.chart-svg .cs-node--start { fill: var(--ink-faint); }
-.chart-svg .cs-node--end   { fill: var(--ink-soft); stroke: var(--bg-elev); stroke-width: 1; }
-.chart-svg .cs-line.is-dim    { opacity: 0.18; }
-/* [Style v95] Default-focus = 8 named countries get a more visible stroke + dot
-   so the eye lands on the meaningful trajectories first. Background countries
-   stay light. is-focus (hover/step) overrides with accent. */
-.chart-svg .cs-line.cs-line--default-focus .cs-path { stroke: var(--ink-soft); stroke-opacity: 0.85; stroke-width: 1.9; }
-.chart-svg .cs-line.cs-line--default-focus .cs-node--end { fill: var(--ink); stroke: var(--bg-elev); stroke-width: 1.5; r: 5; }
-.chart-svg .cs-line.is-focus .cs-path { stroke: var(--accent); stroke-opacity: 0.95; stroke-width: 2.4; }
-.chart-svg .cs-line.is-focus .cs-node--end { fill: var(--accent); }
-.chart-svg .cs-end-label {
-  font-family: var(--font-ui);          /* [owner D9] legible dark labels (was faint serif) */
-  font-size: 11.5px;
-  font-weight: 600;
-  fill: var(--ink-soft);
-  paint-order: stroke;
-  stroke: var(--bg); stroke-width: 3.5px; stroke-linejoin: round;
-}
-/* [FULL-SITE AUDIT · chart 10] The break-even diagonal is the chart's single most
-   important reference; at --ink-faint it was the least visible element. Bump it to
-   --ink-soft so it reads through the path cluster. */
-.chart-svg .cs-diagonal { stroke: var(--ink-soft); stroke-opacity: 0.7; }
-.chart-svg .cs-diagonal-label { fill: var(--ink-soft); }
-/* [FULL-SITE AUDIT · chart 10] Arrowheads showing the 2019→2024 direction of
-   travel. marker paths inherit no fill from the line, so set it explicitly via
-   tokens. Default head = neutral ink; focus head = accent (matches is-focus path). */
-.chart-svg .cs-arrow--default path { fill: var(--ink-soft); }
-.chart-svg .cs-arrow--focus path   { fill: var(--accent); }
-/* Where a path carries an arrowhead, the arrow IS the terminus — shrink the
-   end-dot so it doesn't paint over the head. Plain (background) paths keep the
-   small dot as their only terminus. */
-.chart-svg .cs-line--default-focus .cs-node--end { r: 2.5; }
-.chart-svg .cs-line.is-focus .cs-node--end { r: 3; }
-/* Legend meaning lines: tint the two outcomes to match the shaded regions. */
-.chart-svg .cs-legend-pay    { fill: var(--seq-1); }
-.chart-svg .cs-legend-prices { fill: var(--seq-4); }
-
-/* ───────── [R2 ELEVATION · chart 10] ─────────
-   The diagonal as the legible spine of meaning: in-region labels angled along
-   the line so the reader never hunts a legend; de-collided end-labels with
-   leaders; an editorial stamp that states the takeaway as a signed number.
-   All colours via tokens; accent reserved for the focused path + its stamp. */
-
-/* In-region meaning labels, riding parallel to the break-even line. Sage names
-   the winning side; the losing side stays neutral ink so accent keeps its job. */
-.chart-svg .cs-region-label {
-  font-family: var(--font-body);
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  paint-order: stroke;
-  stroke: var(--bg); stroke-width: 3.5px; stroke-linejoin: round;
-  pointer-events: none;
-}
-.chart-svg .cs-region-label--pay    { fill: var(--seq-1); }
-.chart-svg .cs-region-label--prices { fill: var(--ink-soft); }
-
-/* Diagonal: confident solid line (was a faint dash) — it is the reference the
-   whole chart hangs on. Slightly stronger than the audit bump. */
-.chart-svg .cs-diagonal {
-  stroke: var(--ink-soft); stroke-opacity: 0.9;
-  stroke-width: 1.4; stroke-dasharray: none;
-}
-
-/* End-label colour variants. Won = sage, lost = neutral ink (NOT accent), active
-   = AA-safe deep terracotta + bold. The white halo (base rule) keeps them legible
-   over the path cluster. */
-.chart-svg .cs-end-label--won  { fill: var(--ink-soft); }   /* [owner D9] dark ink, not faint green */
-.chart-svg .cs-end-label--lost { fill: var(--ink-soft); }
-.chart-svg .cs-end-label.is-active { fill: var(--accent-text); font-weight: 800; }
-/* [R4·P13] When a country is focused (hover/step), recede the OTHER named labels to match their
-   dimmed paths — so the focused trajectory is the clear figure (grey-down-non-focus). */
-.chart-svg .cs-end-label.is-dim { opacity: 0.55; }   /* [owner D9] less faint so dimmed labels still read */
-
-/* Leader lines connecting a nudged label back to its true endpoint. */
-.chart-svg .cs-leader {
-  stroke: var(--ink-fainter); stroke-width: 1; fill: none;
-}
-.chart-svg .cs-leader.is-active { stroke: var(--accent); stroke-opacity: 0.7; }
-
-/* Editorial stamp (active step only). Eyebrow → big italic Fraunces signed gap →
-   word-wrapped sentence; a terracotta rule on top, a soft dashed leader to the
-   endpoint. The number is the takeaway. */
-.chart-svg .cs-stamp-leader {
-  stroke: var(--accent-soft); stroke-width: 1.2; stroke-dasharray: 2 3; fill: none;
-}
-.chart-svg .cs-stamp-rule { stroke: var(--accent); stroke-width: 2; }
-.chart-svg .cs-stamp-eyebrow {
-  font-family: var(--font-body);
-  font-size: 10px; font-weight: 700;
-  letter-spacing: 0.18em;
-  fill: var(--ink-faint);
-  paint-order: stroke; stroke: var(--bg); stroke-width: 3px; stroke-linejoin: round;
-}
-.chart-svg .cs-stamp-num {
-  font-family: var(--font-display);
-  font-style: normal; font-weight: 600;   /* owner override: upright, not italic */
-  font-size: 34px;
-  font-variant-numeric: tabular-nums;
-  paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round;
-}
-.chart-svg .cs-stamp-num.is-won  { fill: var(--cat-wages); }
-.chart-svg .cs-stamp-num.is-lost { fill: var(--accent-text); }
-.chart-svg .cs-stamp-line {
-  font-family: var(--font-body);
-  font-size: 12px; font-weight: 400;
-  fill: var(--ink-soft);
-  paint-order: stroke; stroke: var(--bg); stroke-width: 3px; stroke-linejoin: round;
-}
-
-/* ===== Chart 11 · BumpChart =====
-   Direction-encoded spotlight: a protagonist's whole group gets bump--up
-   (climbed the table → terracotta accent) or bump--down (fell → steel blue), so
-   line + node + name + delta all read one hue. Accent stays reserved: the field
-   is a calm ink wash, at most two lines ever carry colour. */
-.chart-svg g.bump {
-  transition: opacity var(--dur-3, 280ms) var(--ease-out);
-}
-.chart-svg g.bump .bump-line {
-  fill: none;
-  stroke: var(--ink-faint);
-  stroke-opacity: 0.3;
-  stroke-width: 1.1;
-  stroke-linejoin: round; stroke-linecap: round;
-  transition: stroke var(--dur-3) var(--ease-out), stroke-opacity var(--dur-3) var(--ease-out), stroke-width var(--dur-3) var(--ease-out);
-}
-/* Fat invisible hit-path so hover/tap catch a ~1.1 px line. */
-.chart-svg g.bump .bump-hit {
-  fill: none; stroke: transparent; stroke-width: 16px;
-  stroke-linejoin: round; stroke-linecap: round;
-}
-.chart-svg g.bump .bump-node {
-  fill: var(--bg-elev);
-  stroke: var(--ink-faint);
-  stroke-width: 1.1;
-  transition: fill var(--dur-3) var(--ease-out), stroke var(--dur-3) var(--ease-out), r var(--dur-2) var(--ease-out);
-}
-
-/* --- Direction colours (climber = accent, faller = steel) ----------------- */
-.chart-svg g.bump.bump--up .bump-line   { stroke: var(--accent);     stroke-opacity: 0.9; stroke-width: 2.3; }
-.chart-svg g.bump.bump--up .bump-node   { fill: var(--accent);     stroke: var(--accent); }
-.chart-svg g.bump.bump--down .bump-line { stroke: var(--seq-target); stroke-opacity: 0.9; stroke-width: 2.3; }
-.chart-svg g.bump.bump--down .bump-node { fill: var(--seq-target); stroke: var(--seq-target); }
-
-/* --- Rank-number gutters (the 2019 + 2024 standings) --------------------- */
-.chart-svg g.bump .bump-num {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-variant-numeric: tabular-nums;
-  fill: var(--ink-fainter);
-  paint-order: stroke;
-  stroke: var(--bg); stroke-width: 2.5px; stroke-linejoin: round;
-}
-.chart-svg g.bump.bump--up .bump-num   { fill: var(--accent-text); font-weight: 600; }
-.chart-svg g.bump.bump--down .bump-num { fill: var(--seq-target);  font-weight: 600; }
-
-/* --- Name-tags (off by default, shown for lit lines) --------------------- */
-.chart-svg g.bump .bump-name {
-  font-family: var(--font-body);
-  font-size: 11px;
-  font-weight: 600;
-  fill: var(--ink-soft);
-  paint-order: stroke;
-  stroke: var(--bg); stroke-width: 3px; stroke-linejoin: round;
-}
-.chart-svg g.bump.bump--up .bump-name   { fill: var(--accent-text); }
-.chart-svg g.bump.bump--down .bump-name { fill: var(--seq-target); }
-
-/* --- Focus / dim states ------------------------------------------------- */
-/* [R4·P14] Field dim lifted 0.14 → 0.20 (in line with cs-line 0.18 / slope, and the house
-   ~0.25 grey-down): for a LEAGUE-TABLE chart the 27-line churn should stay faintly readable
-   during a focus — the "the middle re-ranked" story needs the field present, not erased. */
-.chart-svg g.bump.is-dim { opacity: 0.2; }
-/* A lit line that has no intrinsic direction (e.g. an anchor, or any hovered
-   field line) reads in accent so the highlight is unmistakable. */
-.chart-svg g.bump.is-focus:not(.bump--down) .bump-line { stroke: var(--accent); stroke-opacity: 0.96; stroke-width: 2.6; }
-.chart-svg g.bump.is-focus:not(.bump--down) .bump-node { fill: var(--accent); stroke: var(--accent); }
-.chart-svg g.bump.is-focus:not(.bump--down) .bump-name { fill: var(--accent-text); }
-.chart-svg g.bump.is-focus.bump--down .bump-line { stroke-opacity: 0.96; stroke-width: 2.6; }
-.chart-svg g.bump.is-focus .bump-num  { font-weight: 700; }
-.chart-svg g.bump.is-focus .bump-node { r: 4; }
-
-/* [Rank-Δ badge] italic Fraunces with an arrow for the net swing. ▲ = climbed
-   the table (got dearer vs peers) → accent; ▼ = fell → steel. */
-.chart-svg .bump-delta {
-  font-family: var(--font-display);
-  font-style: italic;
-  font-size: 11px;
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-  paint-order: stroke;
-  stroke: var(--bg);
-  stroke-width: 3px;
-  stroke-linejoin: round;
-}
-.chart-svg .bump-delta--up   { fill: var(--accent-text); }  /* climbed up the table */
-.chart-svg .bump-delta--down { fill: var(--seq-target); }   /* slid down */
-.chart-svg .bump-delta--flat { fill: var(--ink-faint); font-style: normal; font-size: 9.5px; letter-spacing: 0.04em; }
-/* Delta badges follow their line's dim state (badge sits inside g.bump). */
-.chart-svg g.bump.is-dim .bump-delta { opacity: 0; }
-/* Rank-direction hint — tiny uppercase eyebrow so "row 1 = dearest" is explicit
-   without a y-axis (ranks are the rows). Mirrors the legend-title treatment. */
-.chart-svg .bump-axis-hint {
-  font-family: var(--font-body);
-  font-size: 9.5px;
-  font-weight: 600;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  fill: var(--ink-faint);
-}
 
 /* ===== Chart 12 · BoxPlot ===== */
 .chart-svg g.box {
@@ -970,89 +458,6 @@
 }
 .chart-svg .bp-stamp__bookend-num { fill: var(--accent-text); font-weight: 500; }
 
-/* Box plot */
-.chart .box-rect { fill: var(--bg-elev); stroke: var(--ink); stroke-width: 1; }
-.chart .box-median { stroke: var(--accent); stroke-width: 2; }
-.chart .box-whisker { stroke: var(--ink-soft); stroke-width: 1; }
-.chart .box-outlier { fill: var(--accent); fill-opacity: 0.55; }
-
-/* Connected scatter */
-.chart .cs-path { fill: none; stroke-width: 1.6; stroke-linecap: round; }
-.chart .cs-node { stroke: var(--bg-elev); stroke-width: 1.5; }
-.chart .cs-node--start { fill: var(--bg-elev); stroke: var(--ink); }
-.chart .cs-node--end   { fill: var(--accent); }
-
-/* Legend */
-.chart-legend {
-  display: flex; flex-wrap: wrap; gap: var(--space-3) var(--space-5);
-  margin-block-end: var(--space-5);
-  font-size: var(--fs-100);
-  color: var(--ink-soft);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-.chart-legend .swatch {
-  display: inline-block;
-  inline-size: 12px; block-size: 12px;
-  border-radius: 2px;
-  margin-inline-end: 6px;
-  vertical-align: -2px;
-}
-.chart-legend button {
-  display: inline-flex; align-items: center;
-  font-size: inherit; color: inherit; letter-spacing: inherit; text-transform: inherit;
-  padding: 0;
-}
-.chart-legend button[aria-pressed="false"] { opacity: 0.4; }
-
-/* Chart frame (figure container) */
-.chart-figure {
-  display: flex; flex-direction: column;
-  gap: var(--space-3);
-  background: var(--bg-elev);
-  border: 1px solid var(--rule);
-  border-radius: var(--radius-3);
-  padding: var(--space-6);
-  box-shadow: var(--shadow-1);
-}
-.chart-figure header { display: flex; flex-direction: column; gap: 4px; }
-.chart-figure h3 {
-  font-family: var(--font-display);
-  font-size: var(--fs-500);
-  font-weight: 600;
-  margin: 0;
-}
-.chart-figure .chart-subtitle { font-size: var(--fs-200); color: var(--ink-soft); }
-
-/* [R4·P8] Collapsible methodology note — keeps a chart's subtitle tight while a longer
-   disclosure (e.g. the StackedArea proxy weights) stays one click away. Collapsed by default
-   on every breakpoint; native <details> so it's keyboard-accessible (focus ring from base.css). */
-.chart-note { margin-block-start: var(--space-2); max-inline-size: var(--w-prose); }
-.chart-note > summary {
-  display: inline-flex; align-items: center; gap: 0.45em; width: max-content;
-  cursor: pointer; list-style: none;
-  font-size: var(--fs-100); letter-spacing: 0.08em; text-transform: uppercase;
-  color: var(--ink-soft);   /* [R4·final-a11y] ink-faint was 3.2:1 on cream (fails AA 1.4.3); ink-soft = 7.7:1 */
-  transition: color var(--motion-fast) var(--motion-ease);
-}
-.chart-note > summary::-webkit-details-marker { display: none; }
-.chart-note > summary::before {
-  content: "+"; font-family: var(--font-mono); font-size: 1.15em; line-height: 1; color: var(--accent-text);
-}
-.chart-note[open] > summary::before { content: "–"; }
-.chart-note > summary:hover { color: var(--ink); }
-.chart-note > p {
-  margin-block: var(--space-2) 0;
-  font-size: var(--fs-200); color: var(--ink-soft); line-height: var(--lh-normal);
-}
-.chart-figure .chart-source {
-  font-size: var(--fs-100);
-  /* [R5 fix] WCAG-AA: same lift as the scroller variant */
-  color: var(--ink-soft);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  margin-block-start: var(--space-4);
-}
 
 /* Tooltip */
 .tooltip {
@@ -1090,25 +495,25 @@
 .tooltip .row .val { font-family: var(--font-mono); font-weight: 600; font-variant-numeric: tabular-nums; color: var(--ink); }
 /* [AUDIT 03] Event-dot tooltip note line (replaces an inline style= in AnnotatedLine). */
 .tooltip .tip-note { margin: 0; color: var(--ink-soft); max-width: 240px; }
-/* [AUDIT 05] StackedArea tooltip — category-coloured contribution rows
-   (replaces an inline style="color:…" in StackedArea.js). The key keeps its
-   muted colour; the value carries the band colour so the swatch reads. */
-.tooltip .sa-tip-row--energy   .val { color: var(--cat-energy); }
-.tooltip .sa-tip-row--food     .val { color: var(--cat-food); }
-.tooltip .sa-tip-row--services .val { color: var(--cat-services); }
-.tooltip .sa-tip-row--other    .val { color: var(--cat-other); }
-.tooltip .sa-tip-foot { margin: 5px 0 0; color: var(--ink-faint); font-size: 0.72rem; }
 /* [AUDIT 08] DivergingBar tooltip — Real Δ coloured by sign
    (replaces an inline style="color:…" in DivergingBar.js). */
 .tooltip .db-tip-val--pos { color: var(--seq-1); }
 .tooltip .db-tip-val--neg { color: var(--seq-4); }
 
-/* Crosshair */
-.chart .crosshair {
+/* Crosshair — AnnotatedLine's vertical hover guide. Scoped to the live .chart-svg root;
+   the old bare-.chart selector never matched (root is .chart-svg) so the line was invisible. */
+.chart-svg .crosshair {
   stroke: var(--ink);
   stroke-opacity: 0.45;
   stroke-dasharray: 2 3;
   pointer-events: none;
+}
+
+/* Chart data-load error fallback (replaces the inline style= in main.js + ScrollController). */
+.chart-load-error {
+  color: var(--seq-4);
+  padding: var(--space-5);
+  font-family: var(--font-ui);
 }
 
 /* ============================================================
@@ -1158,10 +563,6 @@
 .chart-svg .annot-dot { fill: var(--accent); }
 
 .chart-svg .country-label { font-size: 10px; fill: var(--ink-soft); font-weight: 500; }
-.chart-svg .value-label {
-  font-family: var(--font-mono); font-size: 10px; fill: var(--ink);
-  font-variant-numeric: tabular-nums;
-}
 
 /* ----- Choropleth editorial layer ----- */
 .chart-svg.is-pannable { cursor: grab; }
@@ -1268,8 +669,14 @@
 }
 .map-detail__spark { width: 100%; height: 44px; display: block; }
 .map-detail__spark .ms-zero { stroke: var(--rule); stroke-width: 0.5; stroke-dasharray: 2 2; }
-.map-detail__spark .ms-line { fill: none; stroke: var(--accent); stroke-width: 1.6; }
-.map-detail__spark .ms-dot  { fill: var(--accent); }
+.map-detail__spark .ms-line {
+  fill: none; stroke: var(--accent); stroke-width: 1.6;
+  stroke-dasharray: 1; stroke-dashoffset: 1;
+  animation: msTrace 900ms var(--ease-out) 120ms forwards;
+}
+.map-detail__spark .ms-dot  { fill: var(--accent); animation: msDot 320ms var(--ease-out) 900ms forwards; }
+/* Bar-hover tooltip sparkline wrapper (replaces an inline style= in Choropleth). */
+.bar-tip-spark { display: block; margin: 2px 0 5px; }
 .map-detail__spark .ms-tick {
   font-family: var(--font-mono);
   font-size: 9.5px;
@@ -1376,11 +783,11 @@
    visibility to "while chapter 1 is in viewport" via the .is-active class. */
 .choro-bars-wrap {
   position: fixed;
-  /* [S1-4] Leave the site header visible during the morph — overlay covers the
-     viewport BELOW the header band. */
-  inset: var(--header-h, 60px) 0 0 0;
+  /* Full viewport — the fixed theme toggle sits above this in z-index, so it stays clickable
+     through the morph without needing a reserved band. */
+  inset: 0;
   width: 100vw;
-  height: calc(100dvh - var(--header-h, 60px));   /* [R5·P15/PART5] dvh — mobile URL-bar-safe */
+  height: 100dvh;   /* [R5·P15/PART5] dvh — mobile URL-bar-safe */
   pointer-events: none;
   opacity: 0;
   /* [Morph-v2 user-reported fix] visibility hidden when opacity 0 so the fixed overlay
@@ -1399,7 +806,9 @@
    spans the full monitor on wide screens. clamp keeps it readable laptop → 5K. */
 .choro-bars-stage {
   width: 100%;
-  max-width: clamp(680px, 92vw, 1180px);
+  /* [scroll-fix §4b] The ranking is the full-screen DESTINATION of the morph — let it use more of the
+     viewport so it reads as a finished chart, not a block floating in side-bands (was max 1180px). */
+  max-width: clamp(680px, 96vw, 1520px);
   height: 100%;
   position: relative;
   display: flex;
@@ -1931,6 +1340,39 @@
   pointer-events: none;
 }
 
+/* [R5·dual] Chart-1 second line — value of €100 (claret, the lit element) + its right € axis.
+   The € axis + caption are tinted claret to BIND them to the value line (so the reader never confuses
+   which line uses which axis); the left % axis stays ink for the muted rate line. */
+.chart-svg .anno-val-line { fill: none; pointer-events: none; }
+.chart-svg .anno-val-dot  { pointer-events: none; }
+.chart-svg .anno-val-startlbl {
+  font-family: var(--font-ui); font-size: 11px; fill: var(--ink-soft); letter-spacing: 0.01em;
+  paint-order: stroke; stroke: var(--bg); stroke-width: 3px; stroke-linejoin: round; pointer-events: none;
+}
+.chart-svg .anno-val-endlbl {
+  font-family: var(--font-display); font-weight: 600; font-size: 16px;
+  fill: var(--accent); letter-spacing: -0.005em; font-variant-numeric: tabular-nums;
+  paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round; pointer-events: none;
+}
+.chart-svg .anno-rate-endlbl {
+  font-family: var(--font-ui); font-size: 11px; fill: var(--ink-soft); letter-spacing: 0.01em;
+  paint-order: stroke; stroke: var(--bg); stroke-width: 3px; stroke-linejoin: round; pointer-events: none;
+}
+.chart-svg .anno-val-gap {
+  font-family: var(--font-display); font-style: italic; font-size: 15.5px; font-weight: 460;
+  font-variation-settings: "opsz" 144; fill: var(--ink);
+  paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round; pointer-events: none;
+}
+.chart-svg .anno-yaxis-r .domain,
+.chart-svg .anno-yaxis-r .tick line { stroke: var(--accent-soft); }
+.chart-svg .anno-yaxis-r .tick text {
+  font-family: var(--font-mono); font-size: 11px; fill: var(--accent-text); letter-spacing: 0.02em;
+}
+.chart-svg .anno-yr-cap {
+  font-family: var(--font-ui); font-size: 9.5px; fill: var(--accent-text);
+  letter-spacing: 0.16em; text-transform: uppercase;
+}
+
 /* [R2 elevate] Inline label for the step's key event (e.g. "Russia invades"). */
 /* [AUDIT 03 motion] opacity animated by d3 only. This group fades in/out on
    EVERY step change (_layoutEventLabel); the CSS opacity transition double-eased
@@ -2125,7 +1567,7 @@
 .scroller__chart .map-timeline-years { position: relative; width: 100%; height: 15px; margin-block-start: 1px; pointer-events: none; }
 .map-timeline-year {
   position: absolute; top: 0; transform: translateX(-50%);
-  font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-soft);
+  font-family: var(--font-mono); font-size: 11px; color: var(--ink-soft);
   letter-spacing: 0.02em; white-space: nowrap; line-height: 1;
 }
 .map-timeline-year--major { color: var(--ink); font-weight: 600; }
@@ -2160,6 +1602,10 @@
 #chart-compareMap {
   position: relative;
   inline-size: 100%;
+  /* [scroll-fix §4c] Cap the WIDTH so the height (= width / 1.42) plus the header + year-pickers +
+     source line all fit inside ONE viewport. Before this the map was ~1248x879 and overflowed the
+     screen (owner: "the map is larger than the screen") — the title and pickers scrolled off-top. */
+  max-inline-size: min(100%, calc((100dvh - 210px) * 1.42));
   aspect-ratio: 1.42 / 1;        /* matches the CompareMap BaseChart aspect → no letterbox */
   margin-inline: auto;
 }
@@ -2186,7 +1632,8 @@
 .cmp-handle:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
 .cmp-handle__grip { letter-spacing: -2px; }
 .scroller__chart .map-timeline {
-  display: block; width: 100%; height: 80px; overflow: visible;
+  /* [scroll-fix §4a] taller strip so the area + playhead read in proportion (was 80px, squashed). */
+  display: block; width: 100%; height: 92px; overflow: visible;
   cursor: pointer; user-select: none;
 }
 /* No black focus frame on the timeline — replaced with a subtle dot inside the playhead
@@ -2334,121 +1781,5 @@
   transition: cx 260ms var(--ease-out), cy 260ms var(--ease-out);
 }
 
-/* [AUDIT 04 · Ridgeline] The original ridge styles were authored under the
-   `.chart .X` root, but the SVG root is `.chart-svg`, so those rules above
-   (lines ~211-213) never applied: ridges rendered at fill-opacity:1 with no
-   separator stroke (front ridges fully occluded the ones behind — the whole
-   point of a ridgeline lost), baselines were strokeless, and year labels fell
-   back to Inter. These chart-scoped rules revive the intended look.
-   Scoped to .chart-svg .ridge-* — unique to this chart, no cross-chart risk. */
-.chart-svg .ridge-area {
-  fill-opacity: 0.62;
-  stroke: var(--bg);
-  stroke-width: 0.75;
-  stroke-linejoin: round;
-}
-.chart-svg .ridge-area.is-focus { fill-opacity: 0.92; }
-.chart-svg .ridge-baseline { stroke: var(--rule); stroke-width: 0.5; stroke-opacity: 0.6; }
-.chart-svg .ridge-label {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 600;
-  fill: var(--ink-faint);
-  letter-spacing: 0.01em;
-  font-variant-numeric: tabular-nums;
-}
-.chart-svg .ridge-label.is-focus { fill: var(--ink); }
-/* transparent per-row hit target so hover is reliable across the whole band,
-   not only over the thin filled density path */
-.chart-svg .ridge-hit { fill: transparent; cursor: pointer; }
 
-/* ============================================================
-   [R2 ELEVATE · chart 04 · Ridgeline] APPEND-ONLY.
-   Round-1 made the ridges translucent + revived the dead rules so the
-   ridgeline finally functioned. Round-2 raises the ceiling to a Pudding-grade
-   joyplot. The story is "2022 — the year the distribution broke": at rest the
-   2022 ridge is the lone terracotta protagonist; every other ridge draws in a
-   calm ink wash (so the chronological rainbow no longer paints the CALM years
-   the hottest colour). A faint strip of the 27 real country dots grounds each
-   smoothed KDE in its observations (Cairo truthfulness). The stamp names the
-   insight. All selectors are .chart-svg .ridge-* / .rdg-* — UNIQUE to this
-   chart (grep: only Ridgeline.js emits these classes), zero cross-chart risk.
-   JS sets every colour from a CSS token via getCSS(); nothing hard-coded.
-   ============================================================ */
-
-/* Resting ridge: calm neutral ink wash. JS paints fill = --rdg-rest (ink) for
-   every ridge and only the protagonist / focused ridge gets --accent. The
-   amplitude (width) carries the dispersion story; colour is reserved for the
-   ONE element that matters (CLAUDE.md §4 accent restraint). */
-.chart-svg .ridge-area {
-  fill-opacity: 0.40;          /* calmer than r1's 0.62 so the dot strip + back
-                                  ridges read through the front ones */
-  stroke-opacity: 0.9;
-  transition: fill-opacity var(--dur-3, 280ms) var(--ease-out);
-  /* [R5·P7] overlapping ridges blend so the stack of waves reads (PART 8.4). */
-  mix-blend-mode: multiply;
-}
-/* multiply over the dark slate would crush ridges to near-black; dark is deferred (Phase 17). */
-[data-theme="dark"] .chart-svg .ridge-area { mix-blend-mode: normal; }
-@media (max-width: 480px) { .chart-svg .ridge-area { mix-blend-mode: normal; } }
-.chart-svg .ridge-area.is-protagonist { fill-opacity: 0.60; }
-.chart-svg .ridge-area.is-focus       { fill-opacity: 0.90; }
-/* [R5·P7] lit accent sphere on the active ridge's crest (its mode). */
-.chart-svg .rdg-crest-sphere { pointer-events: none; }
-
-/* The 27 real country observations as a faint dot strip on each baseline.
-   Resting: quiet ink, small. The focused / protagonist row brightens + grows so
-   the reader sees the actual scatter that produced the smoothed shape. */
-.chart-svg .rdg-dot {
-  fill: var(--ink-faint);
-  fill-opacity: 0.45;
-  stroke: var(--bg);
-  stroke-width: 0.4;
-  transition: fill-opacity 280ms var(--ease-out), r 280ms var(--ease-out);
-  pointer-events: none;
-}
-.chart-svg .ridge.is-active .rdg-dot {
-  fill: var(--accent);
-  fill-opacity: 0.92;
-}
-/* The two extreme dots on the active ridge get a hairline ring so they read as
-   "these are the named countries". */
-.chart-svg .rdg-dot--extreme {
-  stroke: var(--bg);
-  stroke-width: 1;
-}
-
-/* Extreme-country callouts: small filled plate (stamp-plate language) so the
-   label reads on ANY ridge fill instead of relying on a paint-order halo over
-   a saturated fill (round-1 P2). */
-.chart-svg .rdg-extreme-plate {
-  fill: var(--bg);
-  fill-opacity: 0.82;
-  stroke: var(--rule);
-  stroke-opacity: 0.5;
-  stroke-width: 0.5;
-}
-.chart-svg .rdg-extreme-text {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.01em;
-}
-.chart-svg .rdg-extreme-text--hi { fill: var(--accent-text); }
-.chart-svg .rdg-extreme-text--lo { fill: var(--ink-soft); }
-
-/* Median marker on the active ridge: the Estonia/France plates show the TAIL,
-   this short tick + mono label shows where the BULK (typical country) sits. For
-   2022 it lands at 9.3% — far right of the ECB 2% line — proving the whole
-   distribution slid right, not just two outliers. */
-.chart-svg .rdg-median-tick { stroke-linecap: round; }
-.chart-svg .rdg-stamp-spread {
-  font-family: var(--font-mono); font-size: 10.5px;
-  fill: var(--ink-soft); letter-spacing: 0.01em;
-  font-variant-numeric: tabular-nums;
-  paint-order: stroke;
-  stroke: var(--bg);
-  stroke-width: 3px;
-  stroke-linejoin: round;
-}
+/* (Ridgeline chart cut — its .ridge-* / .rdg-* styles removed in the round-5 debug pass.) */

@@ -10,13 +10,11 @@ export class ScrollController {
     this.factories = factories;   // key -> () => new chart instance (lazy construction)
     this.charts = charts;         // key -> live instance, filled on mount
     this.ctx = ctx;
-    this.scrollers = [];
+    this._stepChapters = [];         // [{chap, key}] — chapters with steps, for re-setup after layout
+    this._scrollerByKey = new Map(); // key -> live scrollama instance (destroyed before each re-setup)
     this.mounted = new Set();
     this._dock = null;            // [R2·1b] fixed mobile step-dock element
     this._visibleChapters = new Set();
-    this.progressEl = document.getElementById("scroll-progress");
-    this._setupScrollProgress();
-    this._setupHeader();
   }
 
   init() {
@@ -26,6 +24,24 @@ export class ScrollController {
     }
 
     document.querySelectorAll(".chapter").forEach(chap => this._wireChapter(chap));
+
+    // [debug · real-Chrome 2026-06-21] scrollama wires its IntersectionObservers from the step geometry
+    // present at setup() time. At boot that geometry is NOT final — the async Google-Fonts swap, the
+    // 300dvh hero, and lazy-mounted chart heights all reflow afterwards — so the boot-time observers sit
+    // at stale trigger lines and onStepEnter NEVER fires. Result: every onStep-driven behaviour (the map
+    // year recolour, the heatmap / diverging / waffle / box-plot focus, the smallMultiples enlarge)
+    // silently freezes on the first read-through. (The watchChapterProgress reveals still ran, which
+    // masked it; the headless qa scrolls with programmatic scrollTo, which doesn't trip the IO, so it
+    // never caught it — confirmed in the owner's Chrome: a fresh setup() fires where the boot one is dead.)
+    // .resize() does NOT recover a stale instance — only a fresh setup() does — so REBUILD each chapter's
+    // step-watcher once the layout has settled: after fonts load, on window load, a delayed safety net,
+    // and (debounced) on resize. _wireSteps destroys the prior watcher first, so observers never stack.
+    const resync = () => this._stepChapters.forEach(({ chap, key }) => this._wireSteps(chap, key));
+    addEventListener("load", resync);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => requestAnimationFrame(resync));
+    setTimeout(resync, 1200);
+    let resizeT = null;
+    addEventListener("resize", () => { clearTimeout(resizeT); resizeT = setTimeout(resync, 160); }, { passive: true });
   }
 
   _wireChapter(chap) {
@@ -45,6 +61,11 @@ export class ScrollController {
             .then(() => {
               const chart = this.charts[key] || (this.charts[key] = this.factories[key]());
               try { chart.render(); } catch (err) { console.error(`Chart ${key} render failed`, err); }
+              // [debug · real-Chrome] Rebuild this chapter's step-watcher NOW — the chapter is
+              // near the viewport + laid out, so scrollama measures correct step geometry (the
+              // boot/early-resync setup ran while the chapter was far below + reflowing, leaving
+              // dead observers). This is the reliable trigger; the init() resync is the backstop.
+              this._wireSteps(chap, key);
             })
             .catch(err => {
               console.error(`Chart ${key} data load failed`, err);
@@ -56,24 +77,12 @@ export class ScrollController {
     }, { rootMargin: "400px 0px", threshold: 0.01 });
     io.observe(chap);
 
-    // scrollama for step events — skip when a chapter has no steps (e.g. the compare map),
-    // otherwise scrollama logs "no step elements" (a console error).
-    const steps = chap.querySelectorAll(".scroller__step");
-    let scroller = null;
-    if (steps.length) {
-      scroller = scrollama();
-      scroller
-        .setup({ step: steps, offset: 0.55, progress: false })
-        .onStepEnter(({ element, index }) => {
-          chap.querySelectorAll(".scroller__step").forEach(s => s.classList.remove("is-active"));
-          element.classList.add("is-active");
-          this._updateDock(element);   // [R2·1b] mirror the active step into the fixed mobile dock
-          // chart may not be mounted/rendered yet on a fast scroll — guard on the live instance
-          const chart = this.charts[key];
-          if (chart && chart.rendered && typeof chart.onStep === "function") {
-            chart.onStep(index, element);
-          }
-        });
+    // scrollama step watcher — created here AND rebuilt after the layout settles (see init/_wireSteps),
+    // because scrollama measures step geometry at setup() time and the page reflows after boot. Skip
+    // chapters with no steps (e.g. the compare map) — scrollama logs a console error on empty steps.
+    if (chap.querySelector(".scroller__step")) {
+      this._stepChapters.push({ chap, key });
+      this._wireSteps(chap, key);
     }
 
     // [R2·1b] Track chapter visibility so the mobile dock hides on hero / dividers / methodology.
@@ -85,8 +94,28 @@ export class ScrollController {
       if (this._visibleChapters.size === 0) this._hideDock();
     }, { threshold: 0.01 });
     visIO.observe(chap);
+  }
 
-    if (scroller) this.scrollers.push(scroller);
+  // [debug · real-Chrome] (Re)build the scrollama step-watcher for one chapter. The boot-time instance
+  // is measured before fonts/CSS/the 300dvh hero settle, so its observers never fire; init() calls this
+  // again once the layout is stable. Destroys any prior watcher for this chapter first so observers
+  // never stack. onStepEnter marks the active step, mirrors it into the mobile dock, and forwards the
+  // index to the live chart's onStep (guarded — the chart may still be mounting on a fast scroll).
+  _wireSteps(chap, key) {
+    const steps = chap.querySelectorAll(".scroller__step");
+    if (!steps.length) return;
+    const prev = this._scrollerByKey.get(key);
+    if (prev) { try { prev.destroy(); } catch (e) { /* older scrollama: no destroy */ } }
+    const scroller = scrollama();
+    scroller.setup({ step: steps, offset: 0.55, progress: false })
+      .onStepEnter(({ element, index }) => {
+        chap.querySelectorAll(".scroller__step").forEach(s => s.classList.remove("is-active"));
+        element.classList.add("is-active");
+        this._updateDock(element);
+        const chart = this.charts[key];
+        if (chart && chart.rendered && typeof chart.onStep === "function") chart.onStep(index, element);
+      });
+    this._scrollerByKey.set(key, scroller);
   }
 
   // [R2·1b] Mobile step-dock — a single fixed card at the bottom mirroring the active step's
@@ -111,30 +140,4 @@ export class ScrollController {
     d.classList.add("is-shown");
   }
   _hideDock() { if (this._dock) this._dock.classList.remove("is-shown"); }
-
-  _setupScrollProgress() {
-    if (!this.progressEl) return;
-    let raf = null;
-    const update = () => {
-      const h = document.documentElement;
-      const max = h.scrollHeight - h.clientHeight;
-      const p = max <= 0 ? 0 : h.scrollTop / max;
-      this.progressEl.style.setProperty("--scroll", p.toFixed(3));
-      raf = null;
-    };
-    addEventListener("scroll", () => { if (!raf) raf = requestAnimationFrame(update); }, { passive: true });
-    update();
-  }
-
-  _setupHeader() {
-    const hdr = document.getElementById("site-header");
-    if (!hdr) return;
-    let raf = null;
-    const update = () => {
-      hdr.dataset.scrolled = (scrollY > 8) ? "true" : "false";
-      raf = null;
-    };
-    addEventListener("scroll", () => { if (!raf) raf = requestAnimationFrame(update); }, { passive: true });
-    update();
-  }
 }

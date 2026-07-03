@@ -152,9 +152,6 @@
   --w-wide     : 78rem;
   --w-full     : 96rem;
 
-  /* Header */
-  --header-h   : 56px;
-
   /* Z-index */
   --z-header   : 50;
   --z-tooltip  : 90;

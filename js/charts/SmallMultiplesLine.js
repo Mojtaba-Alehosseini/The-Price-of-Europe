@@ -62,21 +62,7 @@ const PROTAGONIST = "CP045";
 
 function getCSS(name) {
   const m = name.match(/var\((--[^)]+)\)/); const n = m ? m[1] : name;
-  return getComputedStyle(document.documentElement).getPropertyValue(n).trim() || "#888";
-}
-
-function sparkPath(data, w, h) {
-  if (!data || !data.length) return { d: "", lastX: 0, lastY: h, zeroY: h - 2, length: 0 };
-  const x = d3.scaleLinear().domain([0, data.length - 1]).range([2, w - 2]);
-  const ext = d3.extent(data, d => d.value);
-  const y = d3.scaleLinear().domain([Math.min(0, ext[0]), Math.max(ext[1], 2)]).range([h - 2, 2]);
-  const line = d3.line().x((_, i) => x(i)).y(d => y(d.value)).curve(d3.curveMonotoneX);
-  const d = line(data);
-  const last = data[data.length - 1];
-  const tmp = document.createElementNS("http://www.w3.org/2000/svg", "path");
-  tmp.setAttribute("d", d);
-  const length = tmp.getTotalLength ? tmp.getTotalLength() : w;
-  return { d, lastX: x(data.length - 1), lastY: y(last.value), zeroY: y(0), length };
+  return getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 }
 
 export class SmallMultiplesLine extends BaseChart {
@@ -416,7 +402,9 @@ export class SmallMultiplesLine extends BaseChart {
   }
 
   _buildOverlay() {
-    const m = this.opts.margin;
+    // [debug D02] Use the ACTIVE layout margins (this._m), not the desktop this.opts.margin — the
+    // panels lay out with _m (tighter on phone), so a desktop margin here offset the hit-area below 480px.
+    const m = this._m;
     // Shared logic — given a viewport (x, y) inside the SVG, compute the month
     // key and call _brush. Returns false if outside the cell area (so callers
     // can decide to do nothing for that input).
@@ -499,9 +487,9 @@ export class SmallMultiplesLine extends BaseChart {
         const cat0 = this.cats[col];
         if (!cat0) continue;
         const rec0 = (this.seriesMap.get(cat0) || []).find(p => p.time === monthKey);
-        const px = this.opts.margin.left + col * (this.cellW + this.gapX) + this.x(this.parse(monthKey));
-        const topPanelTop = this.opts.margin.top;
-        const botPanelBottom = this.opts.margin.top + this.rows * this.cellH + (this.rows - 1) * this.gapY;
+        const px = this._m.left + col * (this.cellW + this.gapX) + this.x(this.parse(monthKey));
+        const topPanelTop = this._m.top;
+        const botPanelBottom = this._m.top + this.rows * this.cellH + (this.rows - 1) * this.gapY;
         this.cursorG.append("line").attr("class", "cursor-line")
           .attr("x1", px).attr("x2", px).attr("y1", topPanelTop).attr("y2", botPanelBottom)
           .attr("stroke", "var(--ink)").attr("stroke-opacity", 0.5).attr("stroke-dasharray", "2 3");
@@ -512,17 +500,17 @@ export class SmallMultiplesLine extends BaseChart {
         const d = cell.datum(); if (!d) return;
         const rec = d.series.find(p => p.time === monthKey); if (!rec) return;
         const col = this.cats.indexOf(cat) % this.cols, row = Math.floor(this.cats.indexOf(cat) / this.cols);
-        const ox = this.opts.margin.left + col * (this.cellW + this.gapX);
-        const oy = this.opts.margin.top  + row * (this.cellH + this.gapY);
+        const ox = this._m.left + col * (this.cellW + this.gapX);
+        const oy = this._m.top  + row * (this.cellH + this.gapY);
         this.cursorG.append("circle").attr("class", "cursor-dot")
           .attr("cx", ox + this.x(rec.t)).attr("cy", oy + this.y(rec.v))
           .attr("r", 3).attr("fill", "var(--ink)").attr("stroke", "var(--bg)").attr("stroke-width", 1.5);
       });
       // Month label riding the top of the playhead (so the slice reads without
       // the tooltip — useful on touch where the tooltip can sit under a thumb).
-      const lblX = this.opts.margin.left + this.x(this.parse(monthKey));
+      const lblX = this._m.left + this.x(this.parse(monthKey));
       this.cursorG.append("text").attr("class", "sml-cursor-month")
-        .attr("x", lblX).attr("y", this.opts.margin.top - 4)
+        .attr("x", lblX).attr("y", this._m.top - 4)
         .attr("text-anchor", "start")
         .text(d3.timeFormat("%b %Y")(this.parse(monthKey)));
     }
@@ -551,7 +539,10 @@ export class SmallMultiplesLine extends BaseChart {
       // so the overview sub-line is redundant there — drop it on phone. (On focus
       // the sub-line carries the peak read-out, which IS the phone's stamp
       // substitute, so it stays.)
-      this.kickerSub.text(this.isPhone ? "" : "eight categories of euro-area inflation, monthly");
+      // [scroll-fix §5] Drop the in-SVG sub-line entirely. It sat at y72, one px above the first
+      // panel's title (y74) → the overlap the owner flagged. The HTML chart-subtitle above the SVG
+      // ("Inflation by spending category, 2019–2025") already states scope, so this was redundant.
+      this.kickerSub.text("");
       return;
     }
     const series = this.seriesMap.get(focusCat) || [];
@@ -599,8 +590,10 @@ export class SmallMultiplesLine extends BaseChart {
     // uniformly — no poke-through) to a faint ghost: "the others recede to calm context". The
     // hero draws on an opaque paper plate above it. Mute the grid's hover cursor (it would fire
     // under the ghost — invisible playhead, confusing tooltip); the hero has its own hover.
-    if (reduced) this.g.style("opacity", 0.08);
-    else this.g.transition("grid-fade").duration(360).style("opacity", 0.08);
+    // [scroll-fix §5] FULLY hide the small grid while one panel is enlarged (was 0.08 — a faint
+    // ghost still showed behind the hero, making both unreadable). The hero owns the screen now.
+    if (reduced) this.g.style("opacity", 0);
+    else this.g.transition("grid-fade").duration(300).style("opacity", 0);
     if (this.overlay) this.overlay.style("pointer-events", "none");
     this.ctx.tooltip.hide();
     this._drawHero(focus);
@@ -625,48 +618,39 @@ export class SmallMultiplesLine extends BaseChart {
     const [ay, am] = a.split("-").map(Number), [by, bm] = b.split("-").map(Number);
     return Math.abs((by * 12 + bm) - (ay * 12 + am));
   }
-  // The verified lead (months) the focused category ran ahead of / behind its reference, at 5%.
-  _leadFor(focus) {
-    const map = { CP045: { other: "CP00", phrase: "before the headline" },
-                  CP01:  { other: "CP045", phrase: "after energy" } };
-    const cfg = map[focus]; if (!cfg) return null;
-    const a = this._firstCross(focus, 5), b = this._firstCross(cfg.other, 5);
-    if (!a || !b) return null;
-    return { gap: this._monthsBetween(a.time, b.time), phrase: cfg.phrase };
-  }
-
   _drawHero(focus) {
     if (!this.heroG) return;
     const reduced = this.ctx.motion.reduced;
     const m = this._m, plotW = this._plotW, plotH = this._plotH;
     const series = (this.seriesMap.get(focus) || []).filter(d => Number.isFinite(d.v));
     if (!series.length) return;
-    const isPhone = this.isPhone;
 
-    // (The grid is faded to a faint ghost by _applyFocus — see there. The hero draws on an
-    // opaque paper plate above it, with its caption in the freed space.)
-
-    // layout: hero panel + caption in the freed space (never below a shrunken chart)
-    let hero, capRect;
-    if (isPhone) {
-      hero    = { x: m.left, y: m.top + 2, w: plotW, h: Math.round(plotH * 0.52) };
-      capRect = { x: m.left, y: hero.y + hero.h + 16, w: plotW, h: plotH - hero.h - 20 };
-    } else {
-      // [owner review D2] descriptions on the LEFT, the enlarged chart on the RIGHT.
-      const hw = Math.round(plotW * 0.60);
-      const capW = plotW - hw - 30;
-      capRect = { x: m.left, y: m.top + 12, w: capW, h: plotH - 24 };
-      hero    = { x: m.left + capW + 30, y: m.top + 6, w: hw, h: plotH - 12 };
-    }
+    // [scroll-fix §5] The enlarged panel fills the WHOLE plot the 8 small panels occupied. Its
+    // description is NO LONGER drawn here — it lives in the left scroller step card (owner: all step
+    // text belongs in the left box, never floating over the chart). _drawHeroCaption is now unused.
+    const hero = { x: m.left, y: m.top, w: plotW, h: plotH };
 
     const g = this.heroG.append("g").attr("class", "sml-hero").style("opacity", reduced ? 1 : 0);
     this._drawHeroPanel(g, hero, focus, series, reduced);
-    this._drawHeroCaption(g, capRect, focus, series, isPhone);
 
-    if (!reduced) {
-      g.transition().duration(280).ease(d3.easeCubicOut).style("opacity", 1);
-      this._heroFade = setTimeout(() => { if (!g.empty()) g.interrupt().style("opacity", 1); }, 360);
-    }
+    if (reduced) { g.style("opacity", 1); return; }
+
+    // [scroll-fix §5] FLIP grow — the hero starts at the focused SMALL panel's footprint and grows to
+    // full size, so the enlarge reads as that panel expanding (was an abrupt fade). Uniform scale (no
+    // text distortion), centred on the small panel so it grows out of where the reader was looking.
+    const i = this.cats.indexOf(focus);
+    const col = i % this.cols, row = Math.floor(i / this.cols);
+    const smallCx = m.left + col * (this.cellW + this.gapX) + this.cellW / 2;
+    const smallCy = m.top  + row * (this.cellH + this.gapY) + this.cellH / 2;
+    const s0 = Math.max(0.25, this.cellW / hero.w);
+    const heroCx = hero.x + hero.w / 2, heroCy = hero.y + hero.h / 2;
+    const sx = (smallCx - heroCx * s0).toFixed(1), sy = (smallCy - heroCy * s0).toFixed(1);
+    g.attr("transform", `translate(${sx},${sy}) scale(${s0.toFixed(3)})`).style("opacity", 0.4);
+    g.transition().duration(560).ease(d3.easeCubicInOut)
+      .attr("transform", "translate(0,0) scale(1)").style("opacity", 1);
+    this._heroFade = setTimeout(() => {
+      if (!g.empty()) g.interrupt().attr("transform", "translate(0,0) scale(1)").style("opacity", 1);
+    }, 640);
   }
 
   _heroAreaGradient(cls) {
@@ -802,55 +786,6 @@ export class SmallMultiplesLine extends BaseChart {
       .attr("text-anchor", "end").text(d3.timeFormat("%b ’%y")(early.t));
     panel.append("text").attr("class", "sml-lead-tag").attr("x", xl + 3).attr("y", rect.h - 5)
       .attr("text-anchor", "start").text(d3.timeFormat("%b ’%y")(late.t));
-  }
-
-  _drawHeroCaption(g, rect, focus, series, isPhone) {
-    const cap = g.append("g").attr("class", "sml-hero-caption").attr("transform", `translate(${rect.x},${rect.y})`);
-    const peak = d3.greatest(series, d => d.v);
-    const name = (SHORT_LABEL[focus] || this.data.categoryLabel(focus));
-    let y = 6;
-    cap.append("text").attr("class", "stamp-eyebrow").attr("x", 0).attr("y", y).text(name.toUpperCase());
-
-    // headline number = the LEAD (months) when there is one — that is the chapter's evidence;
-    // otherwise the category peak.
-    const lead = this._leadFor(focus);
-    y += isPhone ? 30 : 46;
-    if (lead) {
-      cap.append("text").attr("class", "stamp-num").attr("x", -1).attr("y", y).text(lead.gap);
-      cap.append("text").attr("class", "stamp-compare").attr("x", 0).attr("y", y + (isPhone ? 16 : 19))
-        .text(`months ${lead.phrase}`);
-    } else if (peak) {
-      cap.append("text").attr("class", "stamp-num").attr("x", -1).attr("y", y)
-        .text(`${peak.v >= 0 ? "+" : ""}${peak.v.toFixed(1)}%`);
-      cap.append("text").attr("class", "stamp-compare").attr("x", 0).attr("y", y + (isPhone ? 16 : 19))
-        .text(`peak · ${d3.timeFormat("%b %Y")(peak.t)}`);
-    }
-    y += isPhone ? 34 : 42;
-
-    // sentence (word-wrapped)
-    const sentence = this._stepCaption || "";
-    if (sentence) {
-      const maxChars = isPhone ? 44 : 27;
-      const words = sentence.split(" ");
-      let buf = "", lineN = 0;
-      const sg = cap.append("g").attr("transform", `translate(0, ${y})`);
-      const emit = (txt) => sg.append("text").attr("class", "stamp-sentence").attr("x", 0).attr("y", lineN++ * 17).text(txt);
-      words.forEach(w => { if ((buf + " " + w).trim().length > maxChars) { emit(buf.trim()); buf = w; } else buf += " " + w; });
-      if (buf.trim()) emit(buf.trim());
-      y += lineN * 17;
-    }
-
-    // mini sparkline (last 72 mo) — desktop only (phone is tight)
-    if (!isPhone) {
-      const arr = series.slice(-72).map(d => ({ value: d.v }));
-      if (arr.length > 12) {
-        const sw = Math.min(rect.w, 200), sh = 30;
-        const sp = sparkPath(arr, sw, sh);
-        const skg = cap.append("g").attr("transform", `translate(0, ${Math.min(rect.h - sh - 2, y + 18)})`);
-        skg.append("path").attr("d", sp.d).attr("fill", "none").attr("stroke", "var(--accent)").attr("stroke-width", 1.4);
-        skg.append("circle").attr("cx", sp.lastX).attr("cy", sp.lastY).attr("r", 2.4).attr("fill", "var(--accent)");
-      }
-    }
   }
 
   _buildHeroHover(panel, rect, xs, ys) {

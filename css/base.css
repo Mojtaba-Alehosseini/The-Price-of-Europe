@@ -101,14 +101,6 @@ p {
 p strong { color: var(--ink); font-weight: 600; }
 p em { color: var(--ink); font-style: italic; }
 
-/* Lede paragraph (first paragraph after a heading) */
-.lede {
-  font-size: var(--fs-500);
-  color: var(--ink);
-  line-height: var(--lh-normal);
-  text-wrap: pretty;
-}
-
 /* Tabular numerals on every data-number run — figures (charts + their controls), the
    singleton tooltip, and the .tnum/.num/.tabular/output utilities. */
 .tnum, .num, .tabular, figure, output, .tooltip { font-variant-numeric: tabular-nums; }
@@ -134,29 +126,6 @@ code, kbd, samp {
   padding: 1px 6px;
   border-radius: var(--radius-1);
   font-variant-numeric: tabular-nums;
-}
-
-/* Block quotes — used for editorial pull-quotes */
-blockquote {
-  font-family: var(--font-display);
-  font-size: var(--fs-600);
-  line-height: var(--lh-snug);
-  color: var(--ink);
-  border-inline-start: 3px solid var(--accent);
-  padding-inline-start: var(--space-5);
-  margin-block: var(--space-7);
-  max-width: var(--w-prose);
-  text-wrap: balance;
-}
-blockquote cite {
-  display: block;
-  margin-block-start: var(--space-3);
-  font-family: var(--font-ui);
-  font-size: var(--fs-200);
-  color: var(--ink-soft);
-  font-style: normal;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
 }
 
 /* Small caption */

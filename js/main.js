@@ -8,19 +8,15 @@ import { MotionManager }   from "./modules/MotionManager.js";
 import { DataManager }     from "./modules/DataManager.js";
 import { ScrollController }from "./modules/ScrollController.js";
 import { Tooltip }         from "./modules/Tooltip.js";
-import { Navigation }      from "./modules/Navigation.js";
-import { CoinHero, buildCoinGlyph } from "./charts/Hero.js";
+import { CoinHero }        from "./charts/Hero.js";
 
 import { Choropleth }         from "./charts/Choropleth.js";
 import { CompareMap }         from "./charts/CompareMap.js";
 import { SmallMultiplesLine } from "./charts/SmallMultiplesLine.js";
 import { AnnotatedLine }      from "./charts/AnnotatedLine.js";
-import { Ridgeline }          from "./charts/Ridgeline.js";
-import { StackedArea }        from "./charts/StackedArea.js";
 import { Heatmap }            from "./charts/Heatmap.js";
 import { DivergingBar }       from "./charts/DivergingBar.js";
 import { WaffleChart }        from "./charts/WaffleChart.js";
-import { ConnectedScatter }   from "./charts/ConnectedScatter.js";
 import { BoxPlot }            from "./charts/BoxPlot.js";
 
 // --- Wait for global D3 + libs to be parsed before booting -----------
@@ -37,29 +33,18 @@ async function boot() {
   const theme  = new ThemeManager();
   const motion = new MotionManager(theme);
   const tip    = new Tooltip();
-  const nav    = new Navigation();
-  const ctx    = { theme, motion, tooltip: tip, nav };
+  const ctx    = { theme, motion, tooltip: tip };
 
   // 2. hero — "a coin made of coins" sunflower medallion (MASTER-PLAN PART 7). Flat DOM/SVG,
   //    always-on above the fold, so it is instantiated directly here (not scroll-mounted). The
   //    old hero video + canvas (heroSequence.js / hero.mp4) are retired — kept on disk, dereferenced.
   new CoinHero("#hero-coins", ctx);
 
-  // 2b. Act-divider coin glyphs (PART 8.11/8.12) — the hero's coin, aging across the essay via a
-  //     per-act tarnish level (data-tarnish). Inline SVG (reuses buildCoinGlyph; zero image bytes).
-  //     Each coin settles in on scroll (data-in-view -> CSS fade+scale); reduced-motion = end-state.
-  document.querySelectorAll(".act-divider__coin").forEach(el => {
-    el.appendChild(buildCoinGlyph(parseFloat(el.dataset.tarnish || "0")));
-  });
-  const dividers = document.querySelectorAll(".act-divider");
-  if (!motion.reduced && "IntersectionObserver" in window) {
-    const dividerIO = new IntersectionObserver((entries) => {
-      entries.forEach(e => { if (e.isIntersecting) { e.target.dataset.inView = "true"; dividerIO.unobserve(e.target); } });
-    }, { threshold: 0.3 });
-    dividers.forEach(d => dividerIO.observe(d));
-  } else {
-    dividers.forEach(d => { d.dataset.inView = "true"; });
-  }
+  // 2b. (The earlier design's header progress-coin + act-divider coin glyphs were removed in the
+  //     round-5 debug pass. The page is a flat chapter flow with no acts, and the header deliberately
+  //     scrolls away — so a header coin can't function as a scroll compass, and a fixed coin would add
+  //     persistent chrome the "header is not a bar" design avoids. The coin motif lives on in the hero
+  //     medallion and the BoxPlot finale bookend.)
 
   // 2c. Reveal-on-scroll for [.reveal-up] (the about credit block + UniGe logo + lede): fade/rise in
   //     when scrolled into view. Generic + reusable; CSS owns the transition + the stagger. Reduced-motion
@@ -81,7 +66,7 @@ async function boot() {
   } catch (err) {
     console.error("Data load failed", err);
     document.querySelectorAll(".chart-body").forEach(el => {
-      el.innerHTML = `<p style="color:var(--seq-4);padding:1em">Data load failed — check the console.</p>`;
+      el.innerHTML = `<p class="chart-load-error">Data load failed — check the console.</p>`;
     });
     return;
   }
@@ -96,12 +81,9 @@ async function boot() {
     compareMap        : () => new CompareMap        ("#chart-compareMap",        data, ctx),
     smallMultiples    : () => new SmallMultiplesLine("#chart-smallMultiples",    data, ctx),
     annotatedLine     : () => new AnnotatedLine     ("#chart-annotatedLine",     data, ctx),
-    ridgeline         : () => new Ridgeline         ("#chart-ridgeline",         data, ctx),
-    stackedArea       : () => new StackedArea       ("#chart-stackedArea",       data, ctx),
     heatmap           : () => new Heatmap           ("#chart-heatmap",           data, ctx),
     divergingBar      : () => new DivergingBar      ("#chart-divergingBar",      data, ctx),
     waffle            : () => new WaffleChart       ("#chart-waffle",            data, ctx),
-    connectedScatter  : () => new ConnectedScatter  ("#chart-connectedScatter",  data, ctx),
     boxplot           : () => new BoxPlot           ("#chart-boxplot",           data, ctx),
   };
 

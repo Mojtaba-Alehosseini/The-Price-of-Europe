@@ -46,7 +46,7 @@ const STEP_CONFIG = [
 
 function getCSS(name) {
   const m = name.match(/var\((--[^)]+)\)/); const n = m ? m[1] : name;
-  return getComputedStyle(document.documentElement).getPropertyValue(n).trim() || "#888";
+  return getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 }
 
 function sparkPath(data, w, h) {
@@ -920,10 +920,8 @@ export class Choropleth extends BaseChart {
       sparkSvg = `
         <svg class="map-detail__spark" viewBox="0 0 ${sw} ${totalH}" preserveAspectRatio="none">
           <path class="ms-zero" d="M 0 ${sp.zeroY} L ${sw} ${sp.zeroY}" />
-          <path class="ms-line" d="${sp.d}" pathLength="1"
-                style="stroke-dasharray:1;stroke-dashoffset:1;animation:msTrace 900ms var(--ease-out) 120ms forwards;" />
-          <circle class="ms-dot" cx="${sp.lastX}" cy="${sp.lastY}" r="0"
-                  style="animation:msDot 320ms var(--ease-out) 900ms forwards;" />
+          <path class="ms-line" d="${sp.d}" pathLength="1" />
+          <circle class="ms-dot" cx="${sp.lastX}" cy="${sp.lastY}" r="0" />
           ${tickEls}
         </svg>`;
     }
@@ -953,6 +951,7 @@ export class Choropleth extends BaseChart {
   }
 
   _click(d) {
+    if (this._transitioning) return;   // [scroll-fix §4b] ignore clicks mid-morph
     if (!d) {
       this.lockedCode = null;
     } else {
@@ -1185,6 +1184,9 @@ export class Choropleth extends BaseChart {
   }
 
   _hover(event, d) {
+    // [scroll-fix §4b] No country tooltips while the map→ranking morph is mid-flight — the map is
+    // fading/zero-opacity and a hover card over a half-empty screen reads as a bug.
+    if (this._transitioning) { this.ctx.tooltip.hide(); return; }
     // Light hover — just country name + current-year value. Clicking the country
     // promotes it to the full card with rank + sparkline (see _renderMapLabel).
     const iso = this.data.topoToIso(d.id);
@@ -1271,7 +1273,13 @@ export class Choropleth extends BaseChart {
     }).filter(r => Number.isFinite(r.cumPct));
     barRows.sort((a, b) => (b.cumPct - euVal) - (a.cumPct - euVal));
 
-    const xExt = Math.max(1, d3.max(barRows, r => Math.abs(r.cumPct - euVal)) || 1) * 1.05;  // [owner D1 4b] tighter pad → fuller bars, smaller gap
+    // [scroll-fix §4b] DATA-FIT (asymmetric) domain. The deviations are lopsided (+33.9 Hungary vs
+    // only −10.5 Denmark), so a symmetric [-xExt,xExt] left the whole centre-left empty — a big gap
+    // between the far-left country names and the bars (the owner's "empty bands"). Fit each side to its
+    // own extent (with pad for the value labels) so the bars span the full width and names sit beside them.
+    const _devs   = barRows.map(r => r.cumPct - euVal);
+    const _posMax = Math.max(1, d3.max(_devs) || 1);
+    const _negMax = Math.max(0, -(d3.min(_devs) || 0));
 
     // --- FULL-CHAPTER overlay (covers both grid columns, sticky to viewport) ---
     // The wrap is sticky inside the chapter so as the user scrolls into the morph
@@ -1303,12 +1311,14 @@ export class Choropleth extends BaseChart {
     // is hidden ≤1100px (responsive.css) since the title + axis tag carry the framing on small
     // screens, so 156 (not 176) cleanly clears the 3-line title without orphan whitespace.
     const m = isMobile
-      ? { top: 156, right: 50, bottom: 108, left: 72 }    // [owner D1 4b] left 92->72: tighter label→bar gutter
-      : { top: 156, right: 150, bottom: 140, left: 150 };  // [owner D1 4b] left 200->150: tighter label→bar gutter
+      ? { top: 150, right: 50, bottom: 100, left: 72 }    // [owner D1 4b] left 92->72: tighter label→bar gutter
+      // [scroll-fix §4b] trim the oversized top/bottom bands so the 27 rows grow taller and the
+      // ranking fills its (now wider) stage — title still clears at top:128, axis tag at bottom:108.
+      : { top: 128, right: 150, bottom: 108, left: 150 };
     const iw = W - m.left - m.right;
     const ih = H - m.top - m.bottom;
     const yBand = d3.scaleBand().domain(barRows.map(r => r.code)).range([0, ih]).padding(0.18);
-    const xLin  = d3.scaleLinear().domain([-xExt, xExt]).range([0, iw]);
+    const xLin  = d3.scaleLinear().domain([-(_negMax * 1.22 + 1), _posMax * 1.12]).range([0, iw]);
     const pal   = this.palette();
     const barColor = d3.scaleLinear()
       .domain([-15, -5, 0, 5, 15, 30])
@@ -1695,7 +1705,7 @@ export class Choropleth extends BaseChart {
   // [owner review D1 4b] Hover a bar row → dim the others + show an enlarged 2-line mini-chart
   // (the country's 2019→now index vs the EU-27 average) in the shared singleton tooltip.
   _barRowHover(event, d) {
-    if (!this._bars) return;
+    if (!this._bars || this._transitioning) return;   // [scroll-fix §4b] no row cards until the ranking has settled
     this._bars.root.selectAll("g.bar-row").style("opacity", r => (r.code === d.code ? 1 : 0.3));
     this.ctx.tooltip.show(this._barMiniChart(d), event.clientX, event.clientY);
   }
@@ -1730,7 +1740,7 @@ export class Choropleth extends BaseChart {
     const col = this._bars.barColor(d.cumPct - this._bars.euVal);
     const cum = d.cumPct, euCum = this._bars.euVal;
     return `<h5>${d.name}</h5>
-      <svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="display:block;margin:2px 0 5px">
+      <svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" class="bar-tip-spark">
         <path d="${toPath(eN)}" fill="none" stroke="var(--ink-faint)" stroke-width="1.4" stroke-dasharray="3 3"/>
         <path d="${toPath(cN)}" fill="none" stroke="${col}" stroke-width="2"/>
       </svg>
@@ -1774,10 +1784,12 @@ export class Choropleth extends BaseChart {
     // [Task 10] prefers-reduced-motion — snap to end state, skip animation
     if (this.ctx?.motion?.reduced) {
       const onScreen = p > 0.55;
+      this._transitioning = false;   // [scroll-fix §4b] reduced-motion snaps; no in-flight state
       wrap.style.opacity = onScreen ? "1" : "0";
       wrap.style.pointerEvents = onScreen ? "auto" : "none";
       wrap.style.visibility = onScreen ? "visible" : "hidden";
       wrap.classList.toggle("is-active", onScreen);
+      if (this.gMap) this.gMap.style("pointer-events", onScreen ? "none" : "auto");
       if (this._bars_textbox) this._bars_textbox.style.opacity = onScreen ? "1" : "0";
       if (this._bars_legend)  this._bars_legend.style.opacity  = onScreen ? "1" : "0";
       if (this._bars_source)  this._bars_source.style.opacity  = onScreen ? "1" : "0";
@@ -1824,9 +1836,17 @@ export class Choropleth extends BaseChart {
     // Closing-text opacity — fades in once bars are complete (p ≥ 0.93)
     const closingOp = Math.max(0, Math.min(1, (p - 0.93) / 0.04));
 
+    // [scroll-fix §4b] Settled states = pure map (p<0.62) OR fully-ranked (p≥0.965). Anything between is
+    // the morph in flight: gate ALL pointer interactions and clear any open tooltip so no country/row card
+    // ever floats over a half-formed screen. The flag flips once; clear the tooltip on the rising edge.
+    const transitioning = p >= 0.62 && p < 0.965;
+    if (transitioning && !this._transitioning) this.ctx.tooltip?.hide();
+    this._transitioning = transitioning;
+
     // Bar wrap opacity + active visibility
     wrap.style.opacity = String(show);
-    wrap.style.pointerEvents = show > 0.5 ? "auto" : "none";
+    // Bars accept hover ONLY when the ranking has fully settled (not mid-morph).
+    wrap.style.pointerEvents = (p >= 0.965) ? "auto" : "none";
     // [user-reported fix] hide via visibility when fully transparent so the fixed
     // overlay can never visually block the choropleth map below.
     wrap.style.visibility = show > 0.001 ? "visible" : "hidden";
@@ -1844,6 +1864,9 @@ export class Choropleth extends BaseChart {
 
     // Fade the choropleth ornaments as the morph takes over
     if (this.gMap)       this.gMap.style("opacity", 1 - mapFade);
+    // [scroll-fix §4b] Once the map starts fading, stop it catching pointer events — otherwise the
+    // invisible country layer still pops hover cards (the "Croatia card over a half-empty screen" bug).
+    if (this.gMap)       this.gMap.style("pointer-events", mapFade > 0.01 ? "none" : "auto");
     if (this.kickerG)    this.kickerG.style("opacity", 1 - mapFade);
     if (this.labelG)     this.labelG.style("opacity", (1 - mapFade) * (this.focusCode ? 0 : 1));
     if (this._mapCardEl) this._mapCardEl.style.opacity = (1 - mapFade);

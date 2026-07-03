@@ -111,7 +111,7 @@ export class WaffleChart extends BaseChart {
     // each surviving euro reads as a lit, slightly-domed tile. Stays a SQUARE (DESIGN-REVIEW #16:
     // the coin trick belongs to the hero; this is the analytical register). Resolved to HEX
     // (d3.rgb brighter/darker) so no oklch()/color-mix reaches d3 (D15-safe).
-    const accHex = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#990F3D";
+    const accHex = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim();
     const sgrad = defs.append("radialGradient").attr("id", "waffle-survivor-grad")
       .attr("cx", "38%").attr("cy", "34%").attr("r", "72%");
     sgrad.append("stop").attr("offset", "0%").attr("stop-color", d3.rgb(accHex).brighter(0.6));

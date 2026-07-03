@@ -19,24 +19,18 @@ const CRITICAL_PATHS = {
 const DEFERRED_PATHS = {
   hicpMonthly  : "data/processed/hicp_monthly.json",
   hicpIndex    : "data/processed/hicp_index.json",
-  electricity  : "data/processed/electricity_prices.json",
   minWages     : "data/processed/minimum_wages.json"
 };
 // Which DEFERRED datasets each chart needs before it can render. Charts not listed
-// (ridgeline, heatmap, boxplot) need only CRITICAL data and render immediately.
+// (compareMap, heatmap, boxplot) need only CRITICAL data and render immediately.
 const CHART_NEEDS = {
   choropleth: ["hicpMonthly", "hicpIndex"],
-  compareMap: [],   // annual HICP + topology are boot-loaded (like ridgeline/heatmap)
+  compareMap: [],   // annual HICP + topology are boot-loaded
   smallMultiples: ["hicpMonthly"],
-  annotatedLine: ["hicpMonthly"],
-  ridgeline: [],
-  stackedArea: ["hicpMonthly"],
-  slope: ["electricity"],
+  annotatedLine: ["hicpMonthly", "hicpIndex"],   // index = the value-of-€100 second line (round-5 dual-axis)
   heatmap: [],
   divergingBar: ["minWages", "hicpIndex"],
   waffle: ["hicpIndex"],
-  connectedScatter: ["hicpIndex", "minWages"],
-  bump: ["electricity"],
   boxplot: []
 };
 
@@ -147,9 +141,7 @@ export class DataManager {
     // Deferred placeholders so any defensive read before ensure() resolves doesn't throw.
     this.hicpMonthly = this.hicpMonthly || {};
     this.hicpIndex   = this.hicpIndex   || {};
-    this.electricity = this.electricity || {};
     this.minWages    = this.minWages    || {};
-    this.housePrice  = {};   // read by no chart; retained as a harmless empty stub
   }
 
   /** Build the nested index for one freshly-fetched DEFERRED dataset. */
@@ -164,10 +156,6 @@ export class DataManager {
         (this._hicpIndex || []).filter(r => KEY_CATEGORIES.includes(r.coicop)),
         r => r.geo, r => r.coicop, r => r.time, r => r.value
       );
-    } else if (key === "electricity") {
-      // nrg_pc_204 blends consumption-band / currency / tax onto one key upstream; take the
-      // median of EUR-plausible €/kWh readings per (geo, semester) — deterministic, robust.
-      this.electricity = collapseEurMedian(this._electricity, r => `${r.year}${r.semester}`);
     } else if (key === "minWages") {
       this.minWages = {};
       (this._minWages || []).forEach(r => {
@@ -245,34 +233,3 @@ function nest3(arr, k1, k2, k3, valFn) {
   return out;
 }
 
-// Collapse a flat record array of mixed €/kWh prices into {geo: {time: value}}
-// using the MEDIAN of EUR-plausible readings per (geo, time). Filters out
-// national-currency and PPS contamination by restricting to 0.05–0.60 €/kWh,
-// the realistic range for EU household electricity. Deterministic (order-free).
-function collapseEurMedian(arr, timeFn, lo = 0.05, hi = 0.60) {
-  const buckets = {}; // geo -> time -> number[]
-  if (Array.isArray(arr)) {
-    for (const r of arr) {
-      const v = r.value;
-      if (v == null || v < lo || v > hi) continue; // drop non-EUR / outliers
-      const time = timeFn(r);
-      (buckets[r.geo] ||= {});
-      (buckets[r.geo][time] ||= []).push(v);
-    }
-  }
-  const out = {};
-  for (const geo in buckets) {
-    out[geo] = {};
-    for (const time in buckets[geo]) {
-      out[geo][time] = median(buckets[geo][time]);
-    }
-  }
-  return out;
-}
-
-function median(nums) {
-  const s = nums.slice().sort((a, b) => a - b);
-  const n = s.length;
-  if (!n) return null;
-  return n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2;
-}

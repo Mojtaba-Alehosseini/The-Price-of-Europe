@@ -32,7 +32,7 @@ const PROTAGONIST = 2022;
 function getCSS(name) {
   const m = String(name).match(/var\((--[^)]+)\)/);
   const n = m ? m[1] : name;
-  return getComputedStyle(document.documentElement).getPropertyValue(n).trim() || "#888";
+  return getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 }
 
 const STEP_CONFIG = [
@@ -421,41 +421,25 @@ export class BoxPlot extends BaseChart {
     if (cmp) { this.stampG.style("opacity", 0); this._stampShown = false; return; } // phone has no room — step copy carries it
 
     const x = this._x, y = this._y;
-    // Placement is driven by the data geometry, not a fixed corner: on the closing
-    // step the 2022/2023 PEAK fills the right half (y up to 20 %) while every box
-    // 2015–2021 sits in a tight 0–3 % band on the left — so the whole upper-LEFT /
-    // CENTRE is clean air. Anchor the exhale there (just left of the rising spine),
-    // high enough to clear the boxes below and the kicker above. A leader from the
-    // figure still ties it to the 2024 end box so the "where it landed" reads.
-    const sx = x(2017);
-    const sy = y(18.5);
+    // [scroll-fix §7] The "WHERE IT LANDED / 5 pts / fourteen-point gap…" analysis block has MOVED to
+    // the left scroller step card (owner: step text belongs in the card, never floating over the boxes).
+    // Only the quiet coin BOOKEND remains — small + tasteful, parked in the clean upper-left air above
+    // the low 2015–2019 boxes (a tight 0–3 % band), so it never covers the data.
+    const sx = x(2015) + 4;
+    const sy = y(18);
     this.stampG.attr("transform", `translate(${sx}, ${sy})`);
 
-    this.stampG.append("text").attr("class", "bp-stamp__eyebrow").attr("x", 0).attr("y", 0)
-      .text("WHERE IT LANDED");
-    this.stampG.append("text").attr("class", "bp-stamp__num").attr("x", 0).attr("y", 38)
-      .text("5 pts");
-    const sent = this.stampG.append("text").attr("class", "bp-stamp__sentence").attr("x", 0).attr("y", 60);
-    // Human voice — extends the step's "the gap is closing; it has not closed" and
-    // adds the one fact the marks imply but never say: the floor stayed up.
-    [
-      "The fourteen-point gap of 2022 has mostly closed.",
-      "But every box now floats above the line it began on —",
-      "the spread came back; the prices did not."
-    ].forEach((ln, i) => sent.append("tspan").attr("x", 0).attr("dy", i === 0 ? 0 : 17).text(ln));
-
-    // [R5·P14 / DESIGN-REVIEW #12 · PART 2 S1] THE BOOKEND — the essay opened on the hero coin; the
-    // finale closes on it, now tarnished, looping back to where it began. Reuse buildCoinGlyph (DRY)
-    // as a nested SVG at the Act-V tarnish level; "Five years on, your €100 is now €77."
-    const coinY = 104, coinS = 50;
+    // THE BOOKEND — the essay opened on the hero coin; the finale closes on it, tarnished (DRY:
+    // buildCoinGlyph at the Act-V level). Small (34px) so it reads as a quiet closing note, not clutter.
+    const coinS = 34;
     const coin = buildCoinGlyph(0.95);
-    coin.setAttribute("x", 0); coin.setAttribute("y", coinY);
+    coin.setAttribute("x", 0); coin.setAttribute("y", 0);
     coin.setAttribute("width", coinS); coin.setAttribute("height", coinS);
     coin.setAttribute("aria-hidden", "true");
     this.stampG.node().appendChild(coin);
-    const bk = this.stampG.append("text").attr("class", "bp-stamp__bookend").attr("x", coinS + 14).attr("y", coinY + 22);
-    bk.append("tspan").attr("x", coinS + 14).text("Five years on, your");
-    bk.append("tspan").attr("x", coinS + 14).attr("dy", 19).text("€100 is now ");
+    const bk = this.stampG.append("text").attr("class", "bp-stamp__bookend").attr("x", coinS + 12).attr("y", 14);
+    bk.append("tspan").attr("x", coinS + 12).text("Five years on, your");
+    bk.append("tspan").attr("x", coinS + 12).attr("dy", 18).text("€100 is now ");
     bk.append("tspan").attr("class", "bp-stamp__bookend-num").text("€77.");
 
     if (reduced) this.stampG.style("opacity", 1);

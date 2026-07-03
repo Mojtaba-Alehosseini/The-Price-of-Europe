@@ -11,7 +11,7 @@
 import { BaseChart } from "./BaseChart.js";
 import { sphereGradient } from "../modules/CraftFX.js";
 
-function getCSS(name) { const m = String(name).match(/var\((--[^)]+)\)/); const n = m ? m[1] : name; return getComputedStyle(document.documentElement).getPropertyValue(n).trim() || "#888"; }
+function getCSS(name) { const m = String(name).match(/var\((--[^)]+)\)/); const n = m ? m[1] : name; return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
 
 // Step focus: null (all), "pos" (winners), "neg" (losers).
 // The headline framing ("N gained / N lost") is rendered as a two-camp header in the
@@ -102,9 +102,9 @@ export class DivergingBar extends BaseChart {
       const lg = this.svg.append("g").attr("class", "anno-legend db-unit")
         .attr("transform", `translate(${width - this.opts.margin.right}, 44)`);
       lg.append("text").attr("class", "legend-title")
-        .attr("text-anchor", "end").attr("y", 0).text("REAL Δ · 2019 → 2024");
+        .attr("text-anchor", "end").attr("y", 0).text("Real change in the minimum wage");
       lg.append("text").attr("class", "legend-tick db-unit-sub")
-        .attr("text-anchor", "end").attr("y", 14).text("minimum wage, after inflation");
+        .attr("text-anchor", "end").attr("y", 14).text("2019–2024 (after inflation)");
     }
 
     // axes — fewer ticks on narrow viewports so the %-labels never collide.

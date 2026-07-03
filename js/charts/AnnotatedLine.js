@@ -8,7 +8,7 @@
    ============================================================ */
 
 import { BaseChart } from "./BaseChart.js";
-import { watchChapterProgress, smooth } from "../modules/ChartMotion.js";
+import { watchChapterProgress, smooth, tracePath } from "../modules/ChartMotion.js";
 import { ensureGlow } from "../modules/CraftFX.js";
 
 // onStep wires the narrative copy in index.html to band/anchor highlights.
@@ -22,7 +22,7 @@ const STEP_CONFIG = [
 
 export class AnnotatedLine extends BaseChart {
   constructor(sel, data, ctx) {
-    super(sel, data, ctx, { margin: { top: 96, right: 60, bottom: 36, left: 56 }, aspect: 1.55 });
+    super(sel, data, ctx, { margin: { top: 96, right: 78, bottom: 36, left: 56 }, aspect: 1.55 });
     this._focusKey = null;
     this._stepCaption = null;
     this._anchorDate = null;
@@ -41,6 +41,8 @@ export class AnnotatedLine extends BaseChart {
     this.container.innerHTML = "";
     const { width, height } = this.ensureSvg();
     this.W = width; this.H = height;
+    // [R5·dual] a11y — the <title> states the finding (both lines), not just the headline.
+    this.svg.select("title").text("Euro-area inflation returned to about 2% by 2025, but €100 saved in January 2019 is now worth about €77.");
     const { width: iw, height: ih } = this.innerSize();
     this._iw = iw; this._ih = ih;
 
@@ -54,6 +56,20 @@ export class AnnotatedLine extends BaseChart {
     const x = d3.scaleTime().domain(d3.extent(all, d => d.t)).range([0, iw]);
     const y = d3.scaleLinear().domain([-1, Math.max(12, (d3.max(all, d => d.v) ?? 11) + 1)]).range([ih, 0]);
     this._x = x; this._y = y;
+
+    // [R5·dual] The SECOND line — the VALUE of €100 saved in Jan 2019, eroded by cumulative inflation.
+    // Source = the HICP price INDEX (the same series the Waffle prints €77 from), value(t) = 100·idx[Jan2019]/idx[t].
+    // It exists ONLY from 2019-01 (the €100 wasn't saved before then) and ends ≈ €77 (verified vs DataManager:
+    // idx 103.22→133.83 ⇒ 77.13). Right axis = € (76–100). The gap at the right end is the chapter's point.
+    const idxObj = this.data.hicpIndex[eu]?.CP00 || {};
+    const valBase = idxObj["2019-01"];
+    this._valBase = valBase; this._valIdx = idxObj;
+    this._valSeries = valBase
+      ? all.filter(d => d.time >= "2019-01" && Number.isFinite(idxObj[d.time]))
+           .map(d => ({ t: d.t, time: d.time, v: 100 * valBase / idxObj[d.time] }))
+      : [];
+    const yR = d3.scaleLinear().domain([76, 100]).range([ih, 0]);
+    this._yR = yR;
 
     // Clip rect bounds the line + envelope + bands to the inner plot, so that
     // zooming to one year (which keeps all 192 months in the data but slides
@@ -75,9 +91,9 @@ export class AnnotatedLine extends BaseChart {
     const lg = this.svg.append("g").attr("class", "anno-legend")
       .attr("transform", `translate(${width - this.opts.margin.right}, 50)`);
     lg.append("text").attr("class", "legend-title")
-      .attr("text-anchor", "end").attr("y", 0).text("MONTHLY YoY %");
+      .attr("text-anchor", "end").attr("y", 0).text("INFLATION RATE");
     lg.append("text").attr("class", "legend-tick")
-      .attr("text-anchor", "end").attr("y", 16).text("EU-27 aggregate · 2010–2025");
+      .attr("text-anchor", "end").attr("y", 16).text("% change on a year earlier");
 
     // bands ----------------------------------------------------------
     // fillVar names the CSS custom property for each band's translucent colour.
@@ -130,6 +146,19 @@ export class AnnotatedLine extends BaseChart {
       .call(d3.axisBottom(x).ticks(d3.timeYear.every(2)).tickFormat(d3.timeFormat("%Y")));
     this.g.append("g").attr("class", "axis axis--y")
       .call(d3.axisLeft(y).ticks(6).tickFormat(d => d + "%"));
+
+    // [R5·dual] Right axis = € value of the saved €100, drawn at the plot's right edge so the reader
+    // can never confuse which line uses which axis (left % rate / right € value). Only when the value
+    // series exists. The teal tick colour + a small unit caption mark it as the value scale.
+    if (this._valSeries.length) {
+      this._yRAxisG = this.g.append("g").attr("class", "axis axis--yR anno-yaxis-r")
+        .attr("transform", `translate(${iw},0)`)
+        .call(d3.axisRight(yR).tickValues([80, 90, 100]).tickFormat(d => `€${d}`));
+      this._yRCap = this.g.append("text").attr("class", "anno-yr-cap")
+        .attr("transform", `translate(${iw + 56}, ${ih / 2}) rotate(90)`)
+        .attr("text-anchor", "middle")
+        .text("value of €100 saved Jan 2019");
+    }
 
     // zero line
     this.g.append("line").attr("class", "zero-line")
@@ -244,12 +273,50 @@ export class AnnotatedLine extends BaseChart {
     // mandatory (the SVG root is .chart-svg, so the global `.chart .line{fill:none}` never
     // matches here → a black blob without it).
     const line = d3.line().x(d => x(d.t)).y(d => y(d.v)).curve(d3.curveMonotoneX);
+    // [R5·dual] The rate line is now MUTED ink — the chapter's point is the MONEY (the claret value
+    // line), so the accent moves there (Burn-Murdoch one-accent). The rate reads as the calm "mountain"
+    // context: up to 11.5% then home to ~2%.
     drawG.append("path")
       .datum(all).attr("class", "line anno-line series--overall")
       .attr("fill", "none").attr("clip-path", this._clipUrl)
-      .attr("stroke", "var(--accent)").attr("stroke-width", 2.2)
+      .attr("stroke", "var(--ink-soft)").attr("stroke-width", 1.8)
       .attr("d", line);
     this._drawnP = 0;
+
+    // [R5·dual] The VALUE line — claret, the lit element, on the right € axis. Own group + own
+    // tracePath reveal (the second beat / rug-pull), driven later in the scroll than the rate.
+    if (this._valSeries.length) {
+      const vLine = d3.line().x(d => x(d.t)).y(d => yR(d.v)).curve(d3.curveMonotoneX);
+      this._valG = this.g.append("g").attr("class", "anno-val-g").attr("clip-path", this._clipUrl);
+      this._valPath = this._valG.append("path").datum(this._valSeries)
+        .attr("class", "anno-val-line").attr("fill", "none")
+        .attr("stroke", "var(--accent)").attr("stroke-width", 2.6)
+        .attr("stroke-linejoin", "round").attr("stroke-linecap", "round")
+        .attr("d", vLine);
+      const sN = this._valSeries.at(-1), s0 = this._valSeries[0], rN = all.at(-1);
+      this._valDot = this._valG.append("circle").attr("class", "anno-val-dot")
+        .attr("cx", x(sN.t)).attr("cy", yR(sN.v)).attr("r", 4)
+        .attr("fill", "var(--accent)").attr("stroke", "var(--bg-elev)").attr("stroke-width", 1.6)
+        .style("opacity", 0);
+      // Start note at €100 (top of the value line, Jan 2019)
+      this._valStart = this.g.append("g").attr("class", "anno-val-start").style("opacity", 0);
+      this._valStart.append("circle").attr("cx", x(s0.t)).attr("cy", yR(s0.v)).attr("r", 3).attr("fill", "var(--ink-soft)");
+      this._valStart.append("text").attr("class", "anno-val-startlbl")
+        .attr("x", x(s0.t) + 6).attr("y", yR(s0.v) - 8).attr("text-anchor", "start")
+        .text("Jan 2019 · you save €100");
+      // End labels — value (lit claret) + rate (muted), both anchored just left of the right edge.
+      this._valEnd = this.g.append("text").attr("class", "anno-val-endlbl").style("opacity", 0)
+        .attr("x", x(sN.t) - 8).attr("y", yR(sN.v) + 4).attr("text-anchor", "end")
+        .text(`Your €100 · €${Math.round(sN.v)}`);
+      this._rateEnd = this.g.append("text").attr("class", "anno-rate-endlbl").style("opacity", 0)
+        .attr("x", x(rN.t) - 8).attr("y", y(rN.v) - 8).attr("text-anchor", "end")
+        .text(`Inflation rate · back to ${rN.v.toFixed(0)}%`);
+      // The finding — a quiet ink thesis in the calm-decade upper-left air (claret stays on the value line).
+      this._valGap = this.g.append("text").attr("class", "anno-val-gap").style("opacity", 0)
+        .attr("x", x(this._parse("2010-06"))).attr("y", y(9)).attr("text-anchor", "start");
+      this._valGap.append("tspan").attr("x", x(this._parse("2010-06"))).text("The rate came home.");
+      this._valGap.append("tspan").attr("x", x(this._parse("2010-06"))).attr("dy", 19).text("Your money did not.");
+    }
 
     // event dots (from events.json)
     const focusedEvents = this.data.events.filter(e => e.date.length >= 7);
@@ -307,14 +374,16 @@ export class AnnotatedLine extends BaseChart {
       const pg = this.g.append("g").attr("class", "anno-peak-g").attr("clip-path", this._clipUrl).style("opacity", 0);
       this._peakG = pg;
       // leader line — anchored later by _layoutPeak() so it tracks the zoom domain
-      pg.append("line").attr("class", "anno-peak-leader");
+      // [R5·dual] Peak callout MUTED to ink — a small calm marker on the 11.5% peak, not a claret
+      // headline (the claret now belongs to the value line). The number still names the climax.
+      pg.append("line").attr("class", "anno-peak-leader").attr("stroke", "var(--ink-faint)");
       pg.append("circle").attr("class", "anno-peak-dot")
-        .attr("cx", x(peak.t)).attr("cy", y(peak.v)).attr("r", 4)
-        .attr("fill", "var(--accent)").attr("stroke", "var(--bg-elev)").attr("stroke-width", 1.6);
-      pg.append("text").attr("class", "anno-peak-eyebrow").text("THE PEAK");
-      pg.append("text").attr("class", "anno-peak-num")
+        .attr("cx", x(peak.t)).attr("cy", y(peak.v)).attr("r", 3.5)
+        .attr("fill", "var(--ink-faint)").attr("stroke", "var(--bg-elev)").attr("stroke-width", 1.6);
+      pg.append("text").attr("class", "anno-peak-eyebrow").attr("fill", "var(--ink-faint)").text("THE PEAK");
+      pg.append("text").attr("class", "anno-peak-num").attr("fill", "var(--ink-soft)")
         .text(`${peak.v.toFixed(1)}%`);
-      pg.append("text").attr("class", "anno-peak-date")
+      pg.append("text").attr("class", "anno-peak-date").attr("fill", "var(--ink-faint)")
         .text(d3.timeFormat("%B %Y")(peak.t));
       this._layoutPeak(x);
     }
@@ -357,8 +426,14 @@ export class AnnotatedLine extends BaseChart {
         if (!rec) return;
         ch.style("opacity", 1).attr("transform", `translate(${x(rec.t)},0)`);
         dot.attr("cx", 0).attr("cy", y(rec.v));
+        // [R5·dual] show BOTH numbers at this month — the inflation rate AND the value of €100.
+        const vEur = (this._valBase && Number.isFinite(this._valIdx[rec.time]))
+          ? 100 * this._valBase / this._valIdx[rec.time] : null;
+        const valRow = vEur != null
+          ? `<div class="row"><span class="key">€100 saved 2019</span><span class="val">€${vEur.toFixed(0)}</span></div>`
+          : "";
         this.ctx.tooltip.show(`<h5>${d3.timeFormat("%b %Y")(rec.t)}</h5>
-          <div class="row"><span class="key">EU-27 HICP</span><span class="val">${rec.v.toFixed(1)}%</span></div>`,
+          <div class="row"><span class="key">Inflation rate</span><span class="val">${rec.v.toFixed(1)}%</span></div>${valRow}`,
           event.clientX, event.clientY);
       })
       .on("mouseleave", () => { ch.style("opacity", 0); this.ctx.tooltip.hide(); });
@@ -377,7 +452,8 @@ export class AnnotatedLine extends BaseChart {
     // at once; otherwise the scroll watcher drives the latched left→right draw (its compute fires
     // immediately, so a deep-link mid-chapter lands at the right progress, not at zero).
     this._zoomed = false;
-    if (this.ctx.motion.reduced) this._revealTo(1);
+    if (this._valPath) tracePath(this._valPath, 0);   // [R5·dual] start hidden; scroll traces it on
+    if (this.ctx.motion.reduced) { this._revealTo(1); this._revealValTo(1); }
     else this._wireScroll();
 
     // Apply current step state (in case onStep fired before render)
@@ -399,6 +475,25 @@ export class AnnotatedLine extends BaseChart {
     if (this._zoomed) return;
     const target = smooth(Math.max(0, Math.min(1, (p - 0.05) / 0.6)));
     if (target > (this._drawnP || 0)) this._revealTo(target);
+    // [R5·dual] The value line is the SECOND beat (the rug-pull): it reveals later in the scroll
+    // (p 0.45→0.85), after the familiar rate, latched so reverse never un-draws it.
+    const vt = smooth(Math.max(0, Math.min(1, (p - 0.45) / 0.4)));
+    if (vt > (this._valDrawn || 0)) this._revealValTo(vt);
+  }
+
+  // [R5·dual] Latched trace-on for the value line; fades its start note in early, its end label +
+  // dot + the gap thesis in as it completes. Reduced-motion calls this with 1 (full end state).
+  _revealValTo(vt) {
+    this._valDrawn = Math.max(this._valDrawn || 0, vt);
+    if (!this._valPath) return;
+    const t = this._valDrawn;
+    tracePath(this._valPath, t);
+    const endShown = t > 0.9 ? 1 : 0;
+    if (this._valStart) this._valStart.style("opacity", t > 0.04 ? 1 : 0);
+    if (this._valDot)   this._valDot.style("opacity", endShown);
+    if (this._valEnd)   this._valEnd.style("opacity", endShown);
+    if (this._rateEnd)  this._rateEnd.style("opacity", endShown);
+    if (this._valGap)   this._valGap.style("opacity", t > 0.82 ? 1 : 0);   // lands with the €77 climax
   }
 
   // Latched reveal: widen the clip-rect to drawnP·iw (never narrower → no un-draw / re-trace),
@@ -481,6 +576,16 @@ export class AnnotatedLine extends BaseChart {
       .transition(t).attr("d", function (data) { return topLine(data || d3.select(this).datum()); });
 
     const zoomed = (yearStr !== "all");
+
+    // [R5·dual] The value line + its € axis tell a full-range (2019→latest) story; on a single-year
+    // zoom they'd be mostly off-domain and clutter the view, so hide them and restore on "all".
+    if (zoomed) {
+      [this._valG, this._valStart, this._valEnd, this._rateEnd, this._valGap, this._yRAxisG, this._yRCap]
+        .forEach(el => el && el.interrupt("vz").transition("vz").duration(280).style("opacity", 0));
+    } else {
+      [this._valG, this._yRAxisG, this._yRCap].forEach(el => el && el.interrupt("vz").style("opacity", null));
+      this._revealValTo(this._valDrawn || 0);   // restore label/dot opacities for the latched draw
+    }
 
     // Calm-decade bracket is a 2010–2019 annotation — meaningless once zoomed to a
     // single year. Fade it out on zoom, back in on the overview.

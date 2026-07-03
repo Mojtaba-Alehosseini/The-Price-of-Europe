@@ -26,7 +26,11 @@
 /* Text column */
 .scroller__text {
   display: flex; flex-direction: column; gap: 80dvh;  /* one step per viewport */
-  padding-block: 20dvh;
+  /* [scroll-fix §3] padding-block-end was 20dvh — too little. scrollama fires at offset:0.55, so the
+     LAST step's top must reach 55% of the viewport to activate, needing ~45dvh of trailing scroll.
+     With only 20dvh the sticky unpinned first and the final step never fired (Services in chart 3, the
+     heatmap's peak box). 52dvh gives every chapter's last step room to trigger AND dwell. */
+  padding-block: 20dvh 52dvh;
 }
 .scroller__step {
   max-inline-size: 38ch;
@@ -72,8 +76,8 @@
 /* Sticky chart panel — Pudding/Reuters: no frame, just whitespace */
 .scroller__chart {
   position: sticky;
-  inset-block-start: calc(var(--header-h) + var(--space-3));
-  block-size: calc(100dvh - var(--header-h) - var(--space-4));
+  inset-block-start: var(--space-3);
+  block-size: calc(100dvh - var(--space-4));
   display: grid;
   grid-template-rows: auto 1fr auto;
   /* [owner review A3 — TOP PRIORITY] kill the gaps: tight header→chart→source rhythm so the
@@ -212,23 +216,5 @@
   text-transform: uppercase;
 }
 
-/* Inline / standalone chart figure (no scrolling steps) — when chart is the whole section */
-.chart-standalone {
-  max-inline-size: var(--w-content);
-  margin-inline: auto;
-  padding-inline: var(--space-5);
-  padding-block: var(--space-9);
-}
-
-/* Header progress-coin (PART 2 / DESIGN-REVIEW #7) — replaces the scroll-progress bar. The hero's
-   coin tarnishes gold→grey as the reader scrolls Act I→V: the connective glyph as a silent compass.
-   main.js (reusing Hero.progressCoin) maps scroll position to tarnish; reduced-motion = static mid. */
-.progress-coin {
-  display: inline-flex;
-  inline-size: 16px;
-  block-size: 16px;
-  align-self: center;
-  margin-inline-start: var(--space-2);
-  flex: none;
-}
-.progress-coin__svg { inline-size: 16px; height: 16px; display: block; overflow: visible; }
+/* (The header progress-coin was removed in the round-5 debug pass — the header deliberately scrolls
+   away, so a coin there can't function as a scroll compass. See LOG 2026-06-21 Session 19.) */

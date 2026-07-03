@@ -9,30 +9,22 @@
 .container-wide   { max-width: var(--w-wide); }
 .container-full   { max-width: var(--w-full); }
 
-/* ---------- Header — NOT a bar ----------
-   No fixed bar, no background/blur/border. The site name + theme toggle simply sit on the paper at the
-   top of the page in normal flow and scroll away with it. (--header-h is kept only for chart sticky offsets.) */
-.site-header {
+/* ---------- Brand mark — NOT a bar ----------
+   No fixed bar, no background/blur/border. The site name simply sits on the paper at the top of the
+   page in normal flow and scrolls away with it (the theme toggle is separate + fixed, below). */
+.brand-mark {
   position: relative;
   z-index: var(--z-header);
-}
-/* Desktop: float the header (out of flow, no layout height) so the hero pin centres in the FULL viewport
-   and the flower can be large without the in-flow header nudging it down / clipping it at the top. On
-   mobile the header stays in flow — there the disc stacks on top and the header must not overlay it. */
-@media (min-width: 861px) {
-  .site-header { position: absolute; inset-inline: 0; inset-block-start: 0; }
-}
-/* Minimal header — site name centred, theme toggle right (empty 1fr left balances the toggle). */
-.site-header .container {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
+  text-align: center;
   padding-block: var(--space-4);
-  max-width: var(--w-full);
+}
+/* Desktop: float the brand (out of flow, no layout height) so the hero pin centres in the FULL viewport
+   and the flower can be large without the in-flow brand nudging it down / clipping it at the top. On
+   mobile the brand stays in flow — there the disc stacks on top and the brand must not overlay it. */
+@media (min-width: 861px) {
+  .brand-mark { position: absolute; inset-inline: 0; inset-block-start: 0; }
 }
 .brand {
-  grid-column: 2;
-  justify-self: center;
   font-family: var(--font-display);
   font-weight: 600;
   font-size: var(--fs-400);
@@ -40,10 +32,13 @@
   color: var(--ink);
   text-decoration: none;
 }
-/* Theme toggle */
+/* Theme toggle — the one piece of permanent chrome: fixed to the viewport corner so it survives
+   scroll instead of leaving with the brand mark. */
 .theme-toggle {
-  grid-column: 3;
-  justify-self: end;
+  position: fixed;
+  inset-block-start: var(--space-4);
+  inset-inline-end: var(--space-5);
+  z-index: var(--z-header);
   display: inline-flex; gap: 2px; align-items: center;
   padding: 3px;
   background: var(--bg-sunken);
@@ -72,7 +67,7 @@
    outer 23 coins out. On phone the disc stacks ON TOP, the text below (flex column-reverse). */
 .hero {
   position: relative;
-  height: 300vh;                 /* ~2 screens of scroll across the 7 year-stops (2019→2025) */
+  height: 300dvh;                /* ~2 screens of scroll across the 7 year-stops (2019→2025); dvh matches the pin so the mobile URL-bar resize doesn't scrub the hero against a mismatched track */
   margin: 0;
 }
 .hero__pin {
@@ -162,20 +157,6 @@
    Scoped to the footer only; chart chapters need live getBoundingClientRect sizing + scroll motion. */
 .site-footer { content-visibility: auto; contain-intrinsic-size: 0 420px; }
 
-/* Standfirst byline (lives below the hero, inside #story) */
-.standfirst-byline {
-  font-family: var(--font-ui);
-  font-size: var(--fs-200);
-  color: var(--ink-soft);
-  line-height: var(--lh-snug);
-  border-block-start: 1px solid var(--rule);
-  padding-block-start: var(--space-3);
-  margin-block-start: var(--space-6);
-  max-inline-size: var(--w-prose);
-}
-.standfirst-byline b { color: var(--ink); font-weight: 600; }
-.standfirst-byline .standfirst-src { display: block; color: var(--ink-faint); font-size: var(--fs-100); margin-block-start: var(--space-2); }
-
 /* About section (right after the hero) — centred credit block + one short inflation paragraph (owner review PART C). */
 .section-about { text-align: center; }
 .about-credit { margin-block: var(--space-7) var(--space-7); }
@@ -222,77 +203,19 @@
 }
 
 
-/* ---------- Act divider — the coin-glyph "page turn" (MASTER-PLAN PART 8.11/8.12) ----------
-   Replaces the retired photographic dividers + act-intro panels. One hand-made world: the hero's
-   coin, aging (tarnishing) act by act, on the paper ground. Inline SVG only — zero image bytes. */
-.act-divider {
-  position: relative;
-  min-block-size: clamp(52dvh, 64vh, 72dvh);
-  display: grid;
-  place-items: center;
-  text-align: center;
-  padding-block: var(--space-10);
-  border-block: 1px solid var(--rule-soft);
-  isolation: isolate;
-  content-visibility: auto;
-  contain-intrinsic-size: auto 600px;
-}
-/* Very low-opacity per-act severity wash — the era breathing behind the coin (kept subtle). */
-.act-divider::before {
-  content: "";
-  position: absolute; inset: 0; z-index: -1; pointer-events: none;
-  background: var(--act-wash, transparent);
-}
-.act-divider--2 { --act-wash: radial-gradient(58% 78% at 50% 42%, var(--event-energy), transparent 74%); }
-.act-divider--3 { --act-wash: radial-gradient(60% 80% at 50% 42%, var(--event-energy), transparent 72%); }
-.act-divider--4 { --act-wash: radial-gradient(58% 78% at 50% 42%, var(--event-policy), transparent 76%); }
-.act-divider--5 { --act-wash: radial-gradient(56% 76% at 50% 42%, var(--event-policy), transparent 78%); }
-.act-divider__inner {
-  display: flex; flex-direction: column; align-items: center;
-  gap: var(--space-4);
-  max-inline-size: 54ch;
-  padding-inline: var(--space-5);
-}
-.act-divider__coin {
-  inline-size: clamp(112px, 13vw, 152px);
-  aspect-ratio: 1;
-  margin-block-end: var(--space-3);
-  opacity: 0;
-  transform: scale(0.92);
-  transition: opacity var(--motion-slow) var(--ease-emphasized),
-              transform var(--motion-slow) var(--ease-emphasized);
-}
-.act-divider[data-in-view="true"] .act-divider__coin { opacity: 1; transform: scale(1); }
-.act-divider__coin svg { inline-size: 100%; height: auto; display: block; overflow: visible; }
-@media (prefers-reduced-motion: reduce) {
-  .act-divider__coin { opacity: 1; transform: none; transition: none; }
-}
-
-.act-num {
-  font-family: var(--font-ui);
-  font-size: var(--fs-100);
-  font-weight: 600;
-  letter-spacing: 0.28em;
-  text-transform: uppercase;
-  color: var(--accent);
-  margin: 0;
-}
-.act-title {
-  font-size: clamp(var(--fs-700), 5vw, var(--fs-900));
-  margin: 0;
-}
-.act-lede {
-  font-size: var(--fs-400);
-  color: var(--ink-soft);
-  max-inline-size: 46ch;
-  margin: 0;
-}
-
 /* ---------- Generic prose section ---------- */
 .section-prose {
   padding-block: var(--space-10);
 }
 .section-prose .container { max-width: var(--w-prose); }
+/* Methodology subhead (replaces an inline style= on the #methodology h3). */
+.methodology-subhead {
+  margin-block-start: var(--space-6);
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: var(--fs-500);
+  font-weight: 380;
+}
 
 /* ---------- Footer ---------- */
 .site-footer {
@@ -329,65 +252,3 @@
   display: flex; justify-content: space-between; flex-wrap: wrap; gap: var(--space-4);
 }
 
-/* ---------- Pill / button ---------- */
-.btn {
-  display: inline-flex; gap: var(--space-2); align-items: center;
-  padding: var(--space-2) var(--space-5);
-  background: var(--ink);
-  color: var(--bg-elev);
-  border-radius: 999px;
-  font-size: var(--fs-200);
-  font-weight: 500;
-  letter-spacing: 0.02em;
-  transition: transform var(--dur-2) var(--ease-out), background-color var(--dur-2) var(--ease-out);
-}
-.btn:hover { transform: translateY(-1px); background: var(--accent); }
-.btn--ghost { background: transparent; color: var(--ink); border: 1px solid var(--rule); }
-.btn--ghost:hover { background: var(--bg-sunken); border-color: var(--rule-bold); }
-
-/* ---------- Tag / badge ---------- */
-.tag {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 2px 10px;
-  background: var(--accent-veil);
-  color: var(--accent);
-  border-radius: 999px;
-  font-size: var(--fs-100);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  font-weight: 500;
-}
-
-/* ---------- Number / stat block ---------- */
-.stat {
-  display: flex; flex-direction: column;
-  font-family: var(--font-display);
-}
-.stat .num {
-  font-size: clamp(var(--fs-800), 5vw, var(--fs-max));
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  color: var(--ink-strong);
-}
-.stat .num.up   { color: var(--seq-4); }
-.stat .num.down { color: var(--seq-1); }
-.stat .label {
-  font-family: var(--font-body);
-  font-size: var(--fs-100);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--ink-faint);
-  margin-block-start: var(--space-2);
-}
-
-/* ---------- Pull-quote ---------- */
-.pull-quote {
-  margin-block: var(--space-9);
-  text-align: center;
-}
-.pull-quote q {
-  font-family: var(--font-display);
-  font-size: clamp(var(--fs-600), 3.4vw, var(--fs-800));
-  font-style: italic;
-  color: var(--ink);
-}
