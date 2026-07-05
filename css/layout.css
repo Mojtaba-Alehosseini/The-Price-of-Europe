@@ -60,14 +60,15 @@
 }
 .theme-toggle svg { inline-size: 14px; block-size: 14px; }
 
-/* ---------- Hero — "a coin made of coins": 100 × €1 = €100 of Jan 2019 (owner STEP-1) ----------
-   Asymmetric editorial split: the finding text sits LEFT, the sunflower disc of 100 real €1-coin
-   images sits RIGHT (~two-thirds). The section is a tall track; the inner .hero__pin is sticky, so
-   the PAGE DOES NOT MOVE while the reader scrolls — Hero.js scrubs the count €100→€77 and drifts the
-   outer 23 coins out. On phone the disc stacks ON TOP, the text below (flex column-reverse). */
+/* ---------- Hero — "The Receipt" (D43): one month of living, Jan 2019 → Dec 2025 ----------
+   Asymmetric editorial split: framing text LEFT, the receipt RIGHT. The section is a tall track;
+   the inner .hero__pin is sticky, so the PAGE DOES NOT MOVE while ReceiptHero.js scrubs the
+   register — the date ticks month-by-month and every line climbs along its real Eurostat HICP
+   category index (EU-27), TOTAL €100.00 → €135.64. Phone: receipt on top, text below.
+   Reduced-motion: one static end-state screen (Dec 2025, struck 2019 prices, stamp drawn). */
 .hero {
   position: relative;
-  height: 300dvh;                /* ~2 screens of scroll across the 7 year-stops (2019→2025); dvh matches the pin so the mobile URL-bar resize doesn't scrub the hero against a mismatched track */
+  height: 600dvh;                /* ~5 screens of scrub across 84 months — 340→480→600dvh (owner: ticking still too fast); dvh matches the pin so the mobile URL-bar resize doesn't scrub the register against a mismatched track */
   margin: 0;
 }
 .hero__pin {
@@ -80,77 +81,219 @@
   padding-block: var(--space-6);
   overflow: hidden;
 }
-/* LEFT — the finding text: eyebrow, struck €100, big upright counting number, label, scroll cue. */
+/* LEFT — the framing text: eyebrow, headline, the €100 framing sentence, the closing question. */
 .hero__text {
-  flex: 1 1 30%;
-  max-inline-size: 42ch;
+  flex: 1 1 38%;
+  max-inline-size: 46ch;
   min-inline-size: 0;
   display: flex; flex-direction: column; align-items: flex-start;
-  gap: var(--space-2);
+  gap: var(--space-4);
   text-align: start;
 }
-.hero__big { margin: 0; line-height: 1; }
-#hero-bignum {
-  font-family: var(--font-display);
-  font-style: normal;                 /* UPRIGHT — owner override, not faint italic */
-  font-weight: 700;
-  font-size: clamp(64px, 9vw, 116px);
-  line-height: 1;
-  letter-spacing: -0.015em;
-  color: var(--accent);
-  font-variant-numeric: tabular-nums;
-  display: inline-block;
+.hero__eyebrow {
+  font-family: var(--font-ui); font-size: var(--fs-200); font-weight: 600;
+  letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent); margin: 0;
 }
-/* Lead-in above the number, and the synced YEAR below — together "€100 of 2019 is worth €X in {year}". */
+/* Minimal hero (D45): NO visual headline — the h1 is .sr-only. The QUESTION owns the vacated
+   headline slot: it sits above the lead in the DOM and lands at headline scale at q≥0.96,
+   AFTER the stamp finishes — the screen resolves into the question the essay answers. */
 .hero__lead {
-  font-family: var(--font-ui); font-size: var(--fs-300); color: var(--ink-soft);
-  margin: 0; max-inline-size: 30ch;
+  font-family: var(--font-body); font-size: var(--fs-400); line-height: var(--lh-relaxed);
+  color: var(--ink); margin: 0; max-inline-size: 36ch;
 }
-.hero__year {
-  font-family: var(--font-ui); font-size: var(--fs-400); color: var(--ink-soft); margin: 0;
+.hero__lead strong { color: var(--ink-strong); }
+.hero__question {
+  font-family: var(--font-display); font-style: italic;
+  font-size: clamp(26px, 2.9vw, 38px); line-height: 1.28; letter-spacing: -0.005em;
+  color: var(--ink-strong); margin: 0; max-inline-size: 20ch;
+  opacity: 0; transform: translateY(14px);
+  transition: opacity var(--dur-5) var(--ease-out), transform var(--dur-5) var(--ease-out);
 }
-.hero__year span { font-weight: 600; color: var(--ink-strong); font-variant-numeric: tabular-nums; }
-/* RIGHT — the disc: a square box holding 100 absolutely-positioned €1-coin <img> tiles (Hero.js). */
+.hero__question em { color: var(--accent); font-style: inherit; }
+.hero__question.is-in { opacity: 1; transform: none; }
+/* RIGHT — the receipt: a lit thermal-paper object dropped on the FT page (live type, no image),
+   with the timeline scrubber beneath it (D45). */
 .hero__stage {
-  flex: 1 1 64%; margin: 0;
-  display: flex; justify-content: center; align-items: center;
+  flex: 1 1 56%; margin: 0;
+  display: flex; flex-direction: column; justify-content: center; align-items: center;
+  gap: 22px;
   min-inline-size: 0;
 }
-.hero-coins {
+.receipt {
   position: relative;
-  inline-size: min(100%, 92vh, 960px);
-  aspect-ratio: 1 / 1;
-  margin: 0;
+  inline-size: clamp(300px, 27vw, 380px);
+  transform: rotate(-1.2deg);
+  filter: drop-shadow(0 18px 28px rgba(60,42,12,.16)) drop-shadow(0 3px 8px rgba(60,42,12,.12));
 }
-.hero-coin {
-  position: absolute;
-  border-radius: 50%;                 /* clip the coin image to a clean circle */
-  object-fit: cover;
-  transform: translate(-50%, -50%);
-  /* Coins snap to a year-stop (Hero.js); THIS transition IS the drift-out animation, so its duration
-     sets how slowly coins glide away as each year ticks. base.css zeroes it under prefers-reduced-motion. */
-  transition: transform 1100ms var(--ease-out), opacity 1100ms var(--ease-out);
-  will-change: transform, opacity;
-  -webkit-user-drag: none;
-  filter: drop-shadow(0 1px 1.5px rgba(60,42,12,.30));
+.rc-defs { position: absolute; inline-size: 0; block-size: 0; overflow: hidden; }
+.receipt__paper {
+  position: relative;
+  background: var(--receipt-paper); color: var(--receipt-ink);
+  padding: 28px 26px 20px;
+}
+/* Perforated / torn zigzag edges (pure CSS sawtooth, receipt-paper on transparent). */
+.receipt__paper::before, .receipt__paper::after {
+  content: ""; position: absolute; inset-inline: 0; block-size: 11px;
+  background-size: 16px 11px; background-repeat: repeat-x;
+}
+.receipt__paper::before {
+  inset-block-start: -11px;
+  background-image:
+    linear-gradient(135deg, transparent 8px, var(--receipt-paper) 8px),
+    linear-gradient(-135deg, transparent 8px, var(--receipt-paper) 8px);
+}
+.receipt__paper::after {
+  inset-block-end: -11px;
+  background-image:
+    linear-gradient(45deg, transparent 8px, var(--receipt-paper) 8px),
+    linear-gradient(-45deg, transparent 8px, var(--receipt-paper) 8px);
+}
+/* NOTE: base.css paints p/ul with --ink-soft (which flips LIGHT in dark mode) — every receipt
+   element states its ink explicitly so the print never washes out (owner attack, 2026-07-04). */
+.receipt__head {
+  font-family: var(--font-ui); font-size: 11px; font-weight: 600; color: var(--receipt-ink);
+  letter-spacing: 0.24em; text-transform: uppercase; text-align: center; margin: 0;
+}
+.receipt__date {
+  font-family: var(--font-mono); font-size: 21px; font-weight: 700; color: var(--receipt-ink);
+  letter-spacing: 0.08em; text-align: center; margin: 10px 0 4px;
+  font-variant-numeric: tabular-nums;
+}
+.receipt__rule { border: 0; border-block-start: 1.5px dashed var(--receipt-rule); margin: 10px 0 12px; }
+/* Register message — events PRINT on the receipt like a till message (replaces the floating
+   side-annotation the owner couldn't catch). Fixed one-line slot: no reflow, always same spot. */
+.receipt__msg {
+  font-family: var(--font-mono); font-size: 10.5px; font-weight: 700;
+  letter-spacing: 0.09em; text-transform: uppercase; text-align: center;
+  color: var(--receipt-ink); min-block-size: 15px; margin: 2px 0 0; opacity: 0;
+}
+.receipt__lines { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; color: var(--receipt-ink); }
+.receipt__line {
+  display: flex; align-items: center; gap: 8px; margin: 0;
+  font-family: var(--font-ui); font-size: 12.5px; font-weight: 600;
+  letter-spacing: 0.05em; text-transform: uppercase;
+}
+.rc-glyph { inline-size: 17px; block-size: 17px; flex: none; color: var(--receipt-ink); }
+.rc-name { white-space: nowrap; }
+.rc-dots { flex: 1; min-inline-size: 12px; border-block-end: 2px dotted var(--receipt-rule); margin-block-end: 3px; }
+.rc-price {
+  font-family: var(--font-mono); font-size: 13.5px; font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+/* The Jan-2019 price, struck through — shown only in the static (reduced-motion) end state. */
+.rc-was {
+  display: none;
+  font-family: var(--font-mono); font-size: 10.5px; color: var(--receipt-ink-soft);
+  text-decoration: line-through; margin-inline-start: 2px;
+}
+.receipt__total { display: flex; align-items: baseline; gap: 10px; margin-block-start: 2px; position: relative; }
+.receipt__total .rc-name {
+  font-family: var(--font-ui); font-size: 13px; font-weight: 700;
+  letter-spacing: 0.2em; text-transform: uppercase;
+}
+.rc-total-num {
+  font-family: var(--font-mono); font-weight: 700;
+  font-size: clamp(30px, 2.7vw, 38px); letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+/* The claret stamp — a hand-drawn ellipse around the total; ReceiptHero.js scrubs the dash. */
+.rc-stamp {
+  position: absolute; pointer-events: none; overflow: visible;
+  inline-size: 62%; block-size: 200%;
+  inset-inline-end: -4%; inset-block-start: -55%;
+  transform: rotate(-3deg);
+}
+.rc-stamp ellipse {
+  fill: none; stroke: var(--receipt-stamp); stroke-width: 3;
+  stroke-linecap: round; opacity: 0.9;
+}
+.receipt__note {
+  font-family: var(--font-ui); font-size: 9px; line-height: 1.55; letter-spacing: 0.04em;
+  color: var(--receipt-ink-soft); text-align: center; margin: 16px 0 0;
 }
 
-/* Phone / narrow — stack with the DISC ON TOP, text below (column-reverse: figure is 2nd in the DOM). */
+/* ===== CODA — the receipt, six years on (brief §7). Reuses .receipt ~70%; static, no scrub. ===== */
+.section-prose--tight { padding-block: var(--space-6) 0; }
+.section-coda { text-align: center; }
+.coda-lede {
+  font-family: var(--font-display); font-style: italic; font-weight: 600;
+  font-size: var(--fs-700); line-height: 1.12; color: var(--ink-strong);
+  margin: 0 auto var(--space-8); max-inline-size: 22ch;
+}
+.coda-receipt { display: flex; justify-content: center; margin-block-end: var(--space-8); }
+.receipt--coda { inline-size: min(84vw, 288px); transform: rotate(-1deg); }
+.receipt--coda .rc-was { display: inline; }             /* the struck 2019 column, always shown here */
+.section-coda .about-lede { margin-inline: auto; }
+@media (prefers-reduced-motion: reduce) { .receipt--coda { transform: none; } }
+/* Timeline scrubber (D45) — hairline 2019→2025 under the receipt: ▸/■ icon button (no words),
+   claret playhead synced to the eased register clock, event ticks, click-to-seek. FT grammar. */
+.hero__timeline {
+  display: flex; align-items: center; gap: 12px;
+  inline-size: clamp(300px, 27vw, 380px);
+  font-family: var(--font-mono);
+  transform: rotate(-1.2deg);           /* same tilt as the receipt — one object family (D46) */
+}
+.rc-tl-play {
+  inline-size: 30px; block-size: 30px; flex: none; padding: 0;
+  display: grid; place-items: center;
+  background: transparent; color: var(--ink);
+  border: 1.5px solid var(--rule-bold); border-radius: 999px; cursor: pointer;
+  transition: color var(--dur-2) var(--ease-out), border-color var(--dur-2) var(--ease-out);
+}
+.rc-tl-play:hover { color: var(--accent); border-color: var(--accent); }
+.rc-tl-play svg { inline-size: 11px; block-size: 11px; fill: currentColor; }
+.rc-tl-play .rc-tl-ic-stop { display: none; }
+.rc-tl-play[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
+.rc-tl-play[aria-pressed="true"] .rc-tl-ic-play { display: none; }
+.rc-tl-play[aria-pressed="true"] .rc-tl-ic-stop { display: block; }
+.rc-tl-year { font-size: 9.5px; letter-spacing: 0.06em; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
+.rc-tl-line { position: relative; flex: 1; block-size: 20px; cursor: pointer; touch-action: none; }
+.rc-tl-line:active { cursor: grabbing; }
+.rc-tl-line::before {
+  content: ""; position: absolute; inset-inline: 0; inset-block-start: 50%;
+  block-size: 1.5px; background: var(--rule);
+}
+.rc-tl-tick {
+  position: absolute; inset-block-start: 50%;
+  inline-size: 4px; block-size: 4px; margin: -2px 0 0 -2px;
+  border-radius: 50%; background: var(--ink-fainter);
+}
+.rc-tl-head {
+  position: absolute; inset-block-start: 50%;
+  inline-size: 9px; block-size: 9px; margin: -4.5px 0 0 -4.5px;
+  border-radius: 50%; background: var(--accent);
+  box-shadow: 0 0 0 3px var(--bg);
+}
+
+/* Phone / narrow — stack with the RECEIPT ON TOP, text below (column-reverse: figure is 2nd in the DOM). */
 @media (max-width: 860px) {
-  .hero__pin { flex-direction: column-reverse; gap: var(--space-6); }
-  .hero__text { flex-basis: auto; max-inline-size: 100%; align-items: center; text-align: center; }
-  .hero__lead { max-inline-size: 32ch; }
-  .hero__stage { flex-basis: auto; }
-  .hero-coins { inline-size: min(90vw, 56vh, 540px); }
+  .hero__pin { flex-direction: column-reverse; gap: var(--space-4); }
+  .hero__text { flex-basis: auto; max-inline-size: 100%; align-items: center; text-align: center; gap: var(--space-2); }
+  .hero__lead { font-size: var(--fs-300); max-inline-size: 34ch; }
+  .hero__question { font-size: clamp(19px, 5.4vw, 24px); max-inline-size: 24ch; }
+  .hero__stage { flex-basis: auto; gap: 14px; }
+  .receipt { inline-size: min(78vw, 300px); }
+  .receipt__paper { padding: 20px 20px 14px; }
+  .receipt__lines { gap: 7px; }
+  .rc-total-num { font-size: 27px; }
+  .hero__timeline { inline-size: min(78vw, 300px); }
 }
 
-/* Reduced-motion (or .hero--static set by Hero.js): no pin, no dead scroll track — one static
-   screen at the resolved end-state (EUR77, rim already drifted out). */
+/* Reduced-motion (or .hero--static set by ReceiptHero.js): no pin, no dead scroll track — one
+   static screen at the resolved end-state (DEC 2025, struck 2019 column, stamp drawn, question shown). */
 .hero--static { height: auto; min-block-size: 100vh; }
 .hero--static .hero__pin { position: static; block-size: auto; min-block-size: 100vh; }
+.hero--static .rc-was { display: inline; }
+.hero--static .hero__question { opacity: 1; transform: none; }
+.hero--static .receipt__msg { display: none; }
+.hero--static .hero__timeline { display: none; }
 @media (prefers-reduced-motion: reduce) {
   .hero { height: auto; min-block-size: 100vh; }
   .hero__pin { position: static; block-size: auto; min-block-size: 100vh; }
+  .rc-was { display: inline; }
+  .hero__question { opacity: 1; transform: none; }
+  .receipt__msg { display: none; }
+  .hero__timeline { display: none; }
 }
 
 /* Perf (owner STEP-1) — keep the footer (below the fold, static) out of the initial render budget.
@@ -195,10 +338,12 @@
   .reveal-up { opacity: 1; transform: none; transition: none; }
 }
 
-/* Very short screens — keep the pinned disc + number within one viewport. */
+/* Very short screens — keep the pinned receipt within one viewport. */
 @media (max-height: 640px) {
-  .hero-coins { inline-size: min(52vh, 80vw, 420px); }
-  #hero-bignum { font-size: clamp(40px, 7vw, 64px); }
+  .receipt { inline-size: min(46vh, 80vw, 330px); }
+  .receipt__paper { padding: 20px 22px 16px; }
+  .receipt__lines { gap: 7px; }
+  .rc-total-num { font-size: 28px; }
   .hero__pin { gap: var(--space-4); }
 }
 

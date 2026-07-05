@@ -12,6 +12,8 @@ export class ScrollController {
     this.ctx = ctx;
     this._stepChapters = [];         // [{chap, key}] — chapters with steps, for re-setup after layout
     this._scrollerByKey = new Map(); // key -> live scrollama instance (destroyed before each re-setup)
+    this._railByKey = new Map();     // [amendment §A.4] key -> the built .step-rail element
+    this._railIdxMap = new Map();    // key -> [scrollama step index -> dot index] (dwell steps fold back)
     this.mounted = new Set();
     this._dock = null;            // [R2·1b] fixed mobile step-dock element
     this._visibleChapters = new Set();
@@ -82,6 +84,7 @@ export class ScrollController {
     // chapters with no steps (e.g. the compare map) — scrollama logs a console error on empty steps.
     if (chap.querySelector(".scroller__step")) {
       this._stepChapters.push({ chap, key });
+      this._buildRail(chap, key);   // [amendment §A.4] build the step rail once from the static step markup
       this._wireSteps(chap, key);
     }
 
@@ -112,10 +115,71 @@ export class ScrollController {
         chap.querySelectorAll(".scroller__step").forEach(s => s.classList.remove("is-active"));
         element.classList.add("is-active");
         this._updateDock(element);
+        this._updateRail(key, index);   // [amendment §A.4] active/read/ahead dot states
         const chart = this.charts[key];
         if (chart && chart.rendered && typeof chart.onStep === "function") chart.onStep(index, element);
       });
     this._scrollerByKey.set(key, scroller);
+  }
+
+  // [amendment §A.4] STEP RAIL — a thin sticky column of dots, one per step, left of the step
+  // column. Built once from the static step markup (eyebrow + h4 → aria-label + hover microlabel).
+  // Click/Enter smooth-scrolls the page to that step's scrollama trigger (offset 0.55) so the chart
+  // stays in sync with the words — never a popup. Active state is driven by onStepEnter (_updateRail).
+  _buildRail(chap, key) {
+    const text = chap.querySelector(".scroller__text");
+    const steps = [...chap.querySelectorAll(".scroller__step:not(.scroller__step--dwell)")];  // dwell = empty spacer, no dot
+    if (!text || !steps.length) return;
+    // scrollama indexes ALL .scroller__step (incl. dwell); map each to its dot (dwell → the previous dot).
+    const allSteps = [...chap.querySelectorAll(".scroller__step")];
+    const idxMap = []; let dotI = -1;
+    allSteps.forEach(s => { if (!s.classList.contains("scroller__step--dwell")) dotI++; idxMap.push(Math.max(0, dotI)); });
+    this._railIdxMap.set(key, idxMap);
+    const existing = text.querySelector(".step-rail");
+    if (existing) existing.remove();
+    const rail = document.createElement("nav");
+    rail.className = "step-rail";
+    rail.setAttribute("aria-label", "Jump to a step in this chapter");
+    steps.forEach((step, i) => {
+      const eyebrow = (step.querySelector(".step-eyebrow")?.textContent || "").trim();
+      const h4 = (step.querySelector("h4")?.textContent || "").trim();
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "rail-dot" + (i === 0 ? " is-active" : " is-ahead");
+      btn.dataset.railStep = String(i);
+      btn.setAttribute("aria-label", [eyebrow, h4].filter(Boolean).join(" — ") || `Step ${i + 1}`);
+      if (i === 0) btn.setAttribute("aria-current", "step");
+      const micro = document.createElement("span");
+      micro.className = "rail-microlabel";
+      micro.textContent = eyebrow || `Step ${i + 1}`;
+      btn.appendChild(micro);
+      btn.addEventListener("click", () => this._scrollToStep(step));
+      rail.appendChild(btn);
+    });
+    text.prepend(rail);
+    this._railByKey.set(key, rail);
+  }
+
+  _updateRail(key, activeIndex) {
+    const rail = this._railByKey.get(key);
+    if (!rail) return;
+    const map = this._railIdxMap.get(key);
+    const dots = rail.querySelectorAll(".rail-dot");
+    const idx = map ? (map[activeIndex] ?? (dots.length - 1)) : activeIndex;   // dwell steps fold onto the previous dot
+    dots.forEach((dot, i) => {
+      dot.classList.toggle("is-active", i === idx);
+      dot.classList.toggle("is-read", i < idx);
+      dot.classList.toggle("is-ahead", i > idx);
+      if (i === idx) dot.setAttribute("aria-current", "step");
+      else dot.removeAttribute("aria-current");
+    });
+  }
+
+  // Smooth-scroll so the step's top sits at the scrollama trigger line (offset 0.55 of the viewport),
+  // which activates that step — the chart reacts through the normal onStepEnter path.
+  _scrollToStep(step) {
+    const top = step.getBoundingClientRect().top + scrollY - innerHeight * 0.55 + 2;
+    scrollTo({ top, behavior: "smooth" });
   }
 
   // [R2·1b] Mobile step-dock — a single fixed card at the bottom mirroring the active step's

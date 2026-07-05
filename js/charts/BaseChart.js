@@ -53,21 +53,20 @@ export class BaseChart {
     // If the svg was detached (e.g. parent innerHTML="" wiped it) drop the stale ref.
     if (this.svg && !this.svg.node()?.isConnected) { this.svg = null; this.g = null; }
     if (!this.svg) {
-      const titleId = `${this.selector.replace(/[^\w]/g, "")}-title`;
+      // [A2 §D.1] Accessible name via aria-label, NOT a child <title> — an SVG <title> renders as a
+      // native browser hover tooltip (owner: confusing). aria-label keeps the a11y name, no tooltip.
+      const figure  = this.container.closest("figure");
+      const chapter = this.container.closest(".chapter");
+      const titleText = figure?.querySelector("h3")?.textContent
+                     || chapter?.querySelector("h3")?.textContent
+                     || "Chart";
       this.svg = d3.select(this.container)
         .append("svg")
         .attr("class", "chart-svg")
         .attr("viewBox", `0 0 ${width} ${height}`)
         .attr("preserveAspectRatio", "xMidYMid meet")
         .attr("role", "img")
-        .attr("aria-labelledby", titleId);
-      // Prefer the figure's own h3 (chart title); fall back to first h3 in chapter
-      const figure  = this.container.closest("figure");
-      const chapter = this.container.closest(".chapter");
-      const titleText = figure?.querySelector("h3")?.textContent
-                     || chapter?.querySelector("h3")?.textContent
-                     || "Chart";
-      this.svg.append("title").attr("id", titleId).text(titleText);
+        .attr("aria-label", titleText);
       this.g = this.svg.append("g")
         .attr("transform", `translate(${this.opts.margin.left},${this.opts.margin.top})`);
     } else {
@@ -84,9 +83,24 @@ export class BaseChart {
   onStep(index, element) { /* default: no-op */ }
   onThemeChange() { if (this.rendered) this.render(); }
 
+  // [A2 §B.4] Run resetFn when the chapter un-pins (scrolls out of view), but ONLY after it has been
+  // visible — the IO's initial not-yet-in-view callback must never fire the reset (that would
+  // pre-complete/neutralise the chart before the reader ever reaches it).
+  _watchUnpin(chapterEl, resetFn) {
+    if (!chapterEl) return;
+    if (this._unpinIO) this._unpinIO.disconnect();
+    this._unpinSeen = false;
+    this._unpinIO = new IntersectionObserver(es => es.forEach(e => {
+      if (e.isIntersecting) this._unpinSeen = true;
+      else if (this._unpinSeen) { try { resetFn(); } catch (err) { /* neutral reset failed; ignore */ } }
+    }), { threshold: 0 });
+    this._unpinIO.observe(chapterEl);
+  }
+
   destroy() {
     this._themeUnsub && this._themeUnsub();
     this._unsub && this._unsub();   // BUG-2/BUG-8 — cancel ChartMotion.watchChapterProgress scroll/resize listeners
+    this._unpinIO && this._unpinIO.disconnect();
     if (this.container) this.container.innerHTML = "";
     this.svg = null;
     this.g = null;

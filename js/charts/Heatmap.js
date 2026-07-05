@@ -1,203 +1,221 @@
 /* ============================================================
-   Heatmap — 27 EU countries (rows) x years (cols), annual headline
-   (CP00) inflation. REDESIGN (R5·P10): the WHOLE field is shown at
-   once (no year-slider scrub — DESIGN-REVIEW #11: a heatmap's power
-   is the whole field; scrubbing one year in/out hides the pattern
-   the title claims). Scroll HIGHLIGHTS within it: the 2022 column
-   lights → the Baltic rows → the single hottest cell. Rows sort by
-   2022 severity so the Baltics pin to the top (the finding).
-   [D25] Kept SVG rather than the plan's canvas substrate: at 189
-   cells canvas is pedagogical-only AND (being invisible to screen
-   readers) would force a separate data-table fallback; SVG <rect>s +
-   visible row/col labels are natively accessible and keep this chart
-   flawless. Colours are token-resolved HEX (kills the D15 oklch risk).
+   Heatmap — CH4 "The cruel lag" (REBUILD, brief §5 CH4).
+   rows = categories (Energy, Food, Services, Transport, Overall);
+   cols = months Jan 2021 – Dec 2024; cell colour = monthly YoY rate
+   on the --seq green→red ramp (HEX only — D15). Reads as five stacked
+   time-ribbons: the energy ribbon runs red-hot through 2022, then cools
+   while food stays hot — "Energy let go. Food never did."
+     reveal: columns sweep in left→right on scroll (latched clip)
+     steps:  a claret column-FRAME moves 2022 → spring 2023 → 2024
+     hover:  cell tooltip (category · month · rate); row label dims other rows
    ============================================================ */
 
 import { BaseChart } from "./BaseChart.js";
+import { watchChapterProgress, smooth } from "../modules/ChartMotion.js";
 
-const BALTICS = ["EE", "LT", "LV"];
-// Scroll step → what lights up within the full field (others recede to calm).
-const STEP_CONFIG = [
-  { focus: "all",     sub: "every country, every year 2019 – 2025 — the whole field at once" },
-  { focus: "y2022",   sub: "2022 — every country ran hot; even the coolest sat near 6%" },
-  { focus: "baltics", sub: "the Baltics burned — Estonia, Lithuania and Latvia at the top" },
-  { focus: "hottest", sub: "Estonia, 2022 — the single hottest cell in the essay" },
+const ROWS = [
+  { code: "NRG",  label: "Energy" },
+  { code: "FOOD", label: "Food" },
+  { code: "SERV", label: "Services" },
+  { code: "CP07", label: "Transport" },
+  { code: "CP00", label: "Overall" },
 ];
+
+// Step → the claret column-frame range (inclusive month keys) + kicker word.
+const FRAMES = {
+  "2022":   { from: "2022-01", to: "2022-12", kicker: "2022" },
+  "2023H1": { from: "2023-01", to: "2023-06", kicker: "2023" },
+  "2024":   { from: "2024-01", to: "2024-12", kicker: "2024" },
+};
+const FRAME_ORDER = ["2022", "2023H1", "2024"];
 
 export class Heatmap extends BaseChart {
   constructor(sel, data, ctx) {
-    super(sel, data, ctx, { margin: { top: 116, right: 18, bottom: 28, left: 124 }, aspect: 0.78 });
-    this._focus = "all";
-    this._appliedFocus = null;   // idempotent re-enter guard (scrollama re-fires)
+    super(sel, data, ctx, { margin: { top: 60, right: 20, bottom: 30, left: 96 }, aspect: 1.5 });
+    this._frame = "2022";
+    this._drawn = 0;
   }
 
-  // CP00 by-country ranges ≈ −1 … 19.4 (EE 2022); these breakpoints give the busy
-  // 2–15% band real spread (the eye reads structure) and park ≥20% at wine.
-  static SCALE_DOMAIN = [-2, 0, 2, 5, 10, 15, 20];
-  static SCALE_TICKS = [{ v: -2, t: "<0" }, { v: 2, t: "2" }, { v: 5, t: "5" }, { v: 10, t: "10" }, { v: 15, t: "15" }, { v: 20, t: "20+" }];
-
+  // seq green→red ramp. Domain spans −3…41 (energy peaks ~41); good resolution in the busy
+  // 0–15 band, red parked for the 25+ energy spikes.
+  static DOMAIN = [-3, 0, 4, 8, 15, 25, 41];
+  static TICKS = [{ v: 0, t: "0" }, { v: 10, t: "10" }, { v: 20, t: "20" }, { v: 41, t: "40+" }];
   _colorScale(pal) {
     const s = pal.seq;
-    return d3.scaleLinear()
-      .domain(Heatmap.SCALE_DOMAIN)
+    return d3.scaleLinear().domain(Heatmap.DOMAIN)
       .range([s[0], s[0], s[1], s[2], s[3], d3.interpolateLab(s[3], s[4])(0.5), s[4]])
       .interpolate(d3.interpolateLab).clamp(true);
   }
 
   size() {
-    if (!this.container) return { width: 600, height: 600 };
-    const w = this.container.clientWidth || 600;
-    const hAvail = this.container.clientHeight || 0;
-    if (w < 560) return { width: w, height: Math.max(380, hAvail || Math.round(w / this.opts.aspect)) };
-    return { width: w, height: Math.max(440, hAvail || Math.round(w / this.opts.aspect)) };
+    if (!this.container) return { width: 700, height: 480 };
+    const w = this.container.clientWidth || 700;
+    const h = this.container.clientHeight || Math.round(w / this.opts.aspect);
+    return { width: w, height: Math.max(320, h) };
   }
 
   render() {
     super.render();
     this.container.innerHTML = "";
-    this._appliedFocus = null;
-    const probeW = this.container.clientWidth || 600;
-    this.compact = probeW < 560;
-    this.opts.margin = this.compact
-      ? { top: 56, right: 10, bottom: 28, left: 40 }
-      : { top: 96, right: 18, bottom: 26, left: 124 };   // [owner D6] tightened (kicker now 19px, not 58) → larger grid
+    const isPhone = this.size().width < 560;
+    this._isPhone = isPhone;
+    this.opts.margin = isPhone
+      ? { top: 50, right: 12, bottom: 28, left: 62 }
+      : { top: 60, right: 20, bottom: 30, left: 96 };
     const { width, height } = this.ensureSvg();
     this.W = width; this.H = height;
-    const { width: iw, height: ih } = this.innerSize();
+    this.svg.attr("aria-label", "Monthly inflation by category, 2021–2024: the energy row runs red-hot through 2022 then cools, while food stays hot into 2023 and services linger.");
+    const M = this.opts.margin;
+    const iw = width - M.left - M.right, ih = height - M.top - M.bottom;
     this._iw = iw; this._ih = ih;
 
-    const years = this.data.yearsCP00().filter(y => y >= 2019 && y <= 2025);
-    this._years = years;
-    const codes = this.data.euCodes();
+    const eu = this.data.euAggregateCode();
+    const months = [];
+    for (const t of this.data.monthsCP00()) if (t >= "2021-01" && t <= "2024-12") months.push(t);
+    months.sort();
+    this._months = months;
+    const parse = d3.timeParse("%Y-%m");
+    this._parse = parse;
 
-    // matrix: CP00 per (country, year); sort rows by 2022 severity → Baltics to the top.
-    const rows = codes.map(code => {
-      const r = { code, name: this.data.countryName(code) };
-      years.forEach(y => { r[y] = this.data.hicpAnnual[code]?.CP00?.[String(y)] ?? null; });
-      return r;
-    }).filter(r => years.some(y => Number.isFinite(r[y])));
-    rows.sort((a, b) => (b[2022] ?? -Infinity) - (a[2022] ?? -Infinity));
-    this._rows = rows;
+    const x = d3.scaleBand().domain(months).range([0, iw]).padding(0);
+    const y = d3.scaleBand().domain(ROWS.map(r => r.code)).range([0, ih]).padding(0.06);
+    this._x = x; this._y = y;
+    this.color = this._colorScale(this.palette());
 
-    const x = d3.scaleBand().domain(years).range([0, iw]).padding(0.05);
-    const y = d3.scaleBand().domain(rows.map(r => r.code)).range([0, ih]).padding(0.05);
-    this.x = x; this.y = y; this.color = this._colorScale(this.palette());
+    // cell matrix
+    const bg = getCSS("--bg"), ink = getCSS("--ink"), noData = getCSS("--rule-soft");
+    const cells = [];
+    ROWS.forEach(r => months.forEach(t => cells.push({ code: r.code, label: r.label, t, v: this.data.hicpMonthly[eu]?.[r.code]?.[t] })));
+    this._cellData = cells;
 
-    // kicker (top-left)
-    const kY = this.compact ? 26 : 34, kSubY = this.compact ? 44 : 50;
-    this.kickerG = this.svg.append("g").attr("class", "year-kicker-g").attr("pointer-events", "none");
-    this.kickerY = this.kickerG.append("text").attr("class", "year-kicker").attr("x", 22).attr("y", kY).text("2019–25");
-    this.kickerSub = this.kickerG.append("text").attr("class", "year-kicker-sub").attr("x", 26).attr("y", kSubY).text(STEP_CONFIG[0].sub);
+    // defs — reveal clip (latched L→R column sweep)
+    const uid = this.selector.replace(/[^\w]/g, "");
+    const defs = this.svg.append("defs");
+    const revealId = `hm-reveal-${uid}`;
+    this._revealRect = defs.append("clipPath").attr("id", revealId)
+      .append("rect").attr("x", -1).attr("y", -6).attr("width", 0).attr("height", ih + 12);
 
-    // colour-scale legend (decodable without hover — WCAG)
-    if (this.compact) this._drawScaleLegend(this.color, 26, height - this.opts.margin.bottom + 24);
-    else this._drawScaleLegend(this.color, 26, kSubY + 16);
-
-    // year column headers
-    this.g.selectAll("text.hm-col-head").data(years).join("text").attr("class", "hm-col-head")
-      .attr("x", yr => x(yr) + x.bandwidth() / 2).attr("y", -8).attr("text-anchor", "middle")
-      .text(yr => this.compact ? `’${String(yr).slice(2)}` : yr);
-
-    this._drawGrid();
-    this._applyFocus();
-  }
-
-  _drawGrid() {
-    const { x, y, color, _rows: rows, _years: years } = this;
-    const noData = getCSS("--rule-soft");
-    const cellData = [];
-    rows.forEach(r => years.forEach(yr => cellData.push({ code: r.code, year: yr, v: r[yr], name: r.name })));
-
-    this.cells = this.g.selectAll("rect.hm-cell").data(cellData, d => `${d.code}-${d.year}`).join("rect")
-      .attr("class", "cell hm-cell")
-      .attr("x", d => x(d.year)).attr("y", d => y(d.code))
-      .attr("width", x.bandwidth()).attr("height", y.bandwidth()).attr("rx", 1)
-      .attr("fill", d => d.v == null ? noData : color(d.v))
-      .on("mouseenter", (e, d) => this._focusCell(e.currentTarget, d, e))
+    const gCells = this.g.append("g").attr("clip-path", `url(#${revealId})`);
+    this.cells = gCells.selectAll("rect.hm-cell").data(cells, d => `${d.code}-${d.t}`).join("rect")
+      .attr("class", "hm-cell")
+      .attr("x", d => x(d.t)).attr("y", d => y(d.code))
+      .attr("width", x.bandwidth()).attr("height", y.bandwidth())
+      .attr("fill", d => d.v == null ? noData : this.color(d.v))
+      .attr("stroke", bg).attr("stroke-width", 1)
+      .on("mouseenter", (e, d) => this._hoverCell(e.currentTarget, d, e))
       .on("mousemove", e => this.ctx.tooltip.move(e.clientX, e.clientY))
       .on("mouseleave", e => this._blurCell(e.currentTarget))
-      .on("pointerdown", (e, d) => { if (e.pointerType !== "mouse") this._focusCell(e.currentTarget, d, e); });
+      .on("pointerdown", (e, d) => { if (e.pointerType !== "mouse") this._hoverCell(e.currentTarget, d, e); });
 
-    // in-cell value labels (desktop, when cells are wide enough) — heatmap AND table.
-    const showVals = !this.compact && x.bandwidth() >= 30 && y.bandwidth() >= 10.5;
-    const ink = getCSS("--ink"), bg = getCSS("--bg");
-    if (showVals) {
-      this.g.selectAll("text.hm-val").data(cellData.filter(d => d.v != null), d => `${d.code}-${d.year}`).join("text")
-        .attr("class", "hm-val").attr("text-anchor", "middle").attr("dominant-baseline", "central")
-        .attr("x", d => x(d.year) + x.bandwidth() / 2).attr("y", d => y(d.code) + y.bandwidth() / 2)
-        .attr("fill", d => bestText(color(d.v), ink, bg)).text(d => fmtCell(d.v));
-    } else this.g.selectAll("text.hm-val").remove();
+    // thin year separator rules (left edge of each year)
+    ["2022-01", "2023-01", "2024-01"].forEach(t => {
+      this.g.append("line").attr("class", "hm-year-sep")
+        .attr("x1", x(t)).attr("x2", x(t)).attr("y1", -4).attr("y2", ih + 4);
+    });
 
-    // row labels — full country names (desktop) / ISO codes (compact)
-    this.g.selectAll("text.hm-row-label").data(rows, d => d.code).join("text")
-      .attr("class", "row-label hm-row-label").attr("text-anchor", "end")
-      .attr("x", -8).attr("y", d => y(d.code) + y.bandwidth() / 2 + 3)
-      .text(d => this.compact ? d.code : d.name);
+    // row labels (left, caps) — hover dims other rows
+    this.g.selectAll("text.hm-row-label").data(ROWS).join("text")
+      .attr("class", "hm-row-label").attr("text-anchor", "end")
+      .attr("x", -10).attr("y", d => y(d.code) + y.bandwidth() / 2 + 4)
+      .style("cursor", "pointer")
+      .text(d => isPhone ? d.label.slice(0, 4) : d.label)
+      .on("mouseenter", (e, d) => this._dimRows(d.code))
+      .on("mouseleave", () => this._dimRows(null));
 
-    // hottest-cell ring (Estonia 2022 — the essay max)
-    const peak = d3.greatest(cellData, d => d.v ?? -Infinity);
-    this._peak = peak;
-    if (peak) {
-      const r = Math.min(x.bandwidth(), y.bandwidth()) / 2 + 3;
-      this.g.selectAll("circle.hm-peak-ring").data([peak]).join("circle").attr("class", "hm-peak-ring")
-        .attr("cx", x(peak.year) + x.bandwidth() / 2).attr("cy", y(peak.code) + y.bandwidth() / 2)
-        .attr("r", r).attr("fill", "none");
+    // column labels at year starts only
+    ["2021", "2022", "2023", "2024"].forEach(yr => {
+      const t = `${yr}-01`;
+      this.g.append("text").attr("class", "hm-col-head")
+        .attr("x", x(t) + x.bandwidth() / 2).attr("y", ih + 16).attr("text-anchor", "start").text(yr);
+    });
+
+    // claret column-frame (moves per step)
+    this._frameRect = this.g.append("rect").attr("class", "hm-frame")
+      .attr("y", -4).attr("height", ih + 8).attr("rx", 2).style("opacity", 0);
+
+    // kicker + legend
+    this._kickNum = this.svg.append("text").attr("class", "kick-num")
+      .attr("x", M.left - 2).attr("y", isPhone ? 34 : 42)
+      .style("font-size", isPhone ? "26px" : "34px").text(FRAMES[this._frame].kicker);
+    this._drawScaleLegend(width - M.right, isPhone ? 20 : 26, isPhone);
+
+    // reveal + frame
+    this._drawn = 0;
+    if (this.ctx.motion.reduced) {
+      this._revealTo(1);
+      this._moveFrame("2024", true);
+      this._kickNum.text(FRAMES["2024"].kicker);
+    } else {
+      this._moveFrame(this._frame, true);
+      this._wireScroll();
     }
   }
 
-  // Scroll-highlight: the lit set stays full, everything else recedes to calm context.
-  _applyFocus() {
-    const focus = this._focus, peak = this._peak;
-    const lit = (d) => {
-      if (focus === "y2022") return d.year === 2022;
-      if (focus === "baltics") return BALTICS.includes(d.code);
-      if (focus === "hottest") return peak && d.code === peak.code && d.year === peak.year;
-      return true; // "all"
-    };
-    const reduced = this.ctx?.motion?.reduced;
-    if (this.cells) {
-      if (reduced) this.cells.attr("opacity", d => lit(d) ? 1 : 0.16);
-      else this.cells.transition("hl").duration(520).ease(d3.easeCubicOut).attr("opacity", d => lit(d) ? 1 : 0.16);
-    }
-    this.g.selectAll("text.hm-val").attr("opacity", d => lit(d) ? 1 : 0.1);
-    this.g.selectAll("circle.hm-peak-ring").attr("opacity", focus === "hottest" ? 1 : (focus === "all" ? 0.85 : 0));
-    this.g.selectAll("text.hm-row-label").classed("hm-row-label--peak", d =>
-      (focus === "baltics" && BALTICS.includes(d.code)) || (focus === "hottest" && peak && d.code === peak.code));
+  _wireScroll() {
+    if (this._unwatch) this._unwatch();
+    const chapter = this.container.closest(".chapter");
+    this._unwatch = watchChapterProgress(chapter, p => this._onProgress(p));
+    this._watchUnpin(chapter, () => { this._revealTo(1); this._moveFrame("2024", true); this._kickNum.text(FRAMES["2024"].kicker); });   // [A2 §B.4]
   }
 
-  onStep(idx) {
-    const cfg = STEP_CONFIG[Math.max(0, Math.min(STEP_CONFIG.length - 1, idx))];
-    if (cfg.focus === this._appliedFocus) return;   // idempotent on re-enter / reverse
-    this._focus = cfg.focus;
-    this._appliedFocus = cfg.focus;
-    if (this.kickerSub) this.kickerSub.text(cfg.sub);
-    this._applyFocus();
+  _revealTo(np) {
+    this._drawn = Math.max(this._drawn || 0, np);
+    if (this._revealRect) this._revealRect.attr("width", Math.max(0, this._drawn * (this._iw + 2)));
   }
 
-  _focusCell(node, d, ev) {
+  _onProgress(p) {
+    // The column sweep is the chapter's ENTRANCE — complete it early (by ~p=0.14) so the whole grid
+    // is drawn before the first frame step activates (~p=0.22); otherwise the claret 2022 frame would
+    // sit over still-blank columns. Latched, so re-scrolling never un-draws it.
+    const target = smooth(Math.max(0, Math.min(1, p / 0.14)));
+    if (target > this._drawn) this._revealTo(target);
+  }
+
+  onStep(index, el) {
+    const frame = (el && el.dataset.frame) || FRAME_ORDER[Math.max(0, Math.min(FRAME_ORDER.length - 1, index))];
+    this._frame = frame;
+    if (this.container) { this.container.setAttribute("data-active-frame", frame); this.container.setAttribute("data-onstep", index); }
+    if (this._kickNum) this._kickNum.text(FRAMES[frame]?.kicker || "");
+    this._moveFrame(frame, false);
+  }
+
+  _moveFrame(frame, immediate) {
+    const f = FRAMES[frame]; if (!f || !this._frameRect) return;
+    const x = this._x;
+    const x0 = x(f.from), x1 = x(f.to) + x.bandwidth();
+    const sel = immediate || this.ctx.motion.reduced ? this._frameRect : this._frameRect.interrupt().transition().duration(600).ease(d3.easeCubicInOut);
+    sel.attr("x", x0 - 1).attr("width", (x1 - x0) + 2).style("opacity", 1);
+  }
+
+  _dimRows(code) {
+    if (!this.cells) return;
+    this.cells.interrupt("dim").transition("dim").duration(200)
+      .attr("opacity", d => !code || d.code === code ? 1 : 0.18);
+    this.g.selectAll("text.hm-row-label").classed("hm-row-label--peak", d => code && d.code === code);
+  }
+
+  _hoverCell(node, d, ev) {
     d3.select(node).raise().classed("hm-cell--focus", true);
+    const dt = d3.timeFormat("%B %Y")(this._parse(d.t));
     this.ctx.tooltip.show(
-      `<h5>${d.name}</h5>
-       <div class="row"><span class="key">Headline ${d.year}</span><span class="val">${d.v == null ? "—" : d.v.toFixed(1) + "%"}</span></div>`,
+      `<h5>${d.label}</h5><div class="row"><span class="key">${dt}</span><span class="val">${d.v == null ? "—" : (d.v >= 0 ? "+" : "") + d.v.toFixed(1) + "%"}</span></div>`,
       ev?.clientX ?? 0, ev?.clientY ?? 0);
   }
   _blurCell(node) { d3.select(node).classed("hm-cell--focus", false); this.ctx.tooltip.hide(); }
 
-  // Continuous colour ramp so the encoding is decodable without hover (WCAG).
-  _drawScaleLegend(color, x0, yTop) {
-    const ticks = Heatmap.SCALE_TICKS;
-    const barW = this.compact ? 132 : 120, barH = 8;
-    const g = this.svg.append("g").attr("class", "anno-legend hm-scale-legend")
-      .attr("transform", `translate(${x0}, ${yTop})`).attr("pointer-events", "none");
-    g.append("text").attr("class", "hm-scale-unit").attr("x", 0).attr("y", -4).text("ANNUAL HICP %");
-    const D = Heatmap.SCALE_DOMAIN, lo = D[0], hi = D[D.length - 1];
+  _drawScaleLegend(xRight, yTop, isPhone) {
+    const barW = isPhone ? 96 : 128, barH = 8;
+    const g = this.svg.append("g").attr("class", "hm-scale-legend")
+      .attr("transform", `translate(${xRight - barW}, ${yTop})`).attr("pointer-events", "none");
+    g.append("text").attr("class", "hm-scale-unit").attr("x", barW).attr("y", -5).attr("text-anchor", "end").text("ANNUAL %");
+    const D = Heatmap.DOMAIN, lo = D[0], hi = D[D.length - 1];
     const px = v => ((v - lo) / (hi - lo)) * barW;
-    const gradId = `hm-grad-${this.compact ? "c" : "d"}`;
+    const gradId = `hm-grad-${this.selector.replace(/[^\w]/g, "")}`;
     const grad = g.append("defs").append("linearGradient").attr("id", gradId).attr("x1", "0%").attr("x2", "100%");
     const N = 24;
-    for (let i = 0; i <= N; i++) grad.append("stop").attr("offset", `${(i / N) * 100}%`).attr("stop-color", color(lo + (hi - lo) * (i / N)));
-    g.append("rect").attr("class", "hm-scale-bar").attr("x", 0).attr("y", 0).attr("width", barW).attr("height", barH).attr("fill", `url(#${gradId})`).attr("rx", 1.5);
-    ticks.forEach(s => {
+    for (let i = 0; i <= N; i++) grad.append("stop").attr("offset", `${(i / N) * 100}%`).attr("stop-color", this.color(lo + (hi - lo) * (i / N)));
+    g.append("rect").attr("class", "hm-scale-bar").attr("x", 0).attr("y", 0).attr("width", barW).attr("height", barH).attr("rx", 1.5).attr("fill", `url(#${gradId})`);
+    Heatmap.TICKS.forEach(s => {
       const tx = px(s.v);
       g.append("line").attr("class", "hm-scale-tickmark").attr("x1", tx).attr("x2", tx).attr("y1", 0).attr("y2", barH + 2);
       g.append("text").attr("class", "hm-scale-tick").attr("x", tx).attr("y", barH + 12)
@@ -205,13 +223,8 @@ export class Heatmap extends BaseChart {
     });
   }
 
+  destroy() { if (this._unwatch) this._unwatch(); super.destroy(); }
   onThemeChange() { this.render(); }
 }
 
 function getCSS(name) { const m = name.match(/var\((--[^)]+)\)/); const n = m ? m[1] : name; return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
-function fmtCell(v) { return v == null ? "" : String(Math.round(v)); }
-// higher-WCAG-contrast text colour against the cell fill (tokens-only, AA, both themes).
-function bestText(bgHex, a, b) { return contrast(bgHex, a) >= contrast(bgHex, b) ? a : b; }
-function contrast(h1, h2) { const l1 = relLum(h1), l2 = relLum(h2); const hi = Math.max(l1, l2), lo = Math.min(l1, l2); return (hi + 0.05) / (lo + 0.05); }
-function relLum(col) { const rgb = toRgb(col); if (!rgb) return 0; const ch = rgb.map(c => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }); return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2]; }
-function toRgb(col) { if (!col) return null; const s = String(col).trim(); const hx = s.match(/^#([0-9a-f]{6})$/i); if (hx) { const n = parseInt(hx[1], 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; } const rg = s.match(/rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/i); if (rg) return [+rg[1], +rg[2], +rg[3]]; return null; }

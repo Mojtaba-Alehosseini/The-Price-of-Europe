@@ -450,6 +450,7 @@ export class BoxPlot extends BaseChart {
     const cfg = STEP_CONFIG[Math.max(0, Math.min(STEP_CONFIG.length - 1, idx))];
     this._focusYear = cfg.focus;
     this._stepCaption = cfg.caption;
+    if (this.container) this.container.setAttribute("data-onstep", idx);   // scroll-sync hook (§8.2 probe)
     this._applyFocus();
   }
 

@@ -54,26 +54,15 @@ export class DivergingBar extends BaseChart {
     // keeps its height (round-1 pixels showed the bars crushed under the kicker).
     const cmp = this.compact;
     this.opts.margin = cmp
-      ? { top: 62, right: 86, bottom: 36, left: 92 }
-      : { top: 92, right: 132, bottom: 40, left: 120 };
+      ? { top: 62, right: 86, bottom: 42, left: 92 }
+      : { top: 92, right: 132, bottom: 46, left: 120 };
     const { width, height } = this.ensureSvg();
     this.W = width; this.H = height;
     const { width: iw, height: ih } = this.innerSize();
 
-    const rows = [];
-    this.data.countriesByCode.forEach((meta, code) => {
-      if (!meta.minWage) return;
-      const w0 = this.data.minWages[code]?.["2019-S1"] ?? this.data.minWages[code]?.["2019-S2"];
-      const w1 = this.data.minWages[code]?.["2024-S1"] ?? this.data.minWages[code]?.["2024-S2"] ?? this.data.minWages[code]?.["2023-S2"];
-      const p0 = this.data.hicpIndex[code]?.CP00?.["2019-01"];
-      const p1 = this.data.hicpIndex[code]?.CP00?.["2024-01"] ?? this.data.hicpIndex[code]?.CP00?.["2023-12"];
-      if ([w0, w1, p0, p1].some(v => v == null)) return;
-      const nom = ((w1 - w0) / w0);
-      const hicp = ((p1 - p0) / p0);
-      const real = ((1 + nom) / (1 + hicp) - 1) * 100;
-      rows.push({ code, name: meta.name, nominal: nom * 100, hicp: hicp * 100, real, w0, w1 });
-    });
-    rows.sort((a, b) => b.real - a.real);
+    // Real-wage rows come from the shared DataManager computation (same one ScoreMap uses in CH9,
+    // so the 15/6 split can never diverge between the ledger and the map — brief "do not fork").
+    const rows = this.data.realWageRows();
     this._rows = rows;
 
     // Summary stats — the headline framing is derived, never hard-coded.
@@ -119,12 +108,12 @@ export class DivergingBar extends BaseChart {
     this.g.append("line").attr("class", "zero-line db-zero-line")
       .attr("x1", x(0)).attr("x2", x(0)).attr("y1", -6).attr("y2", ih + 4);
     const zAnchor = this.g.append("g").attr("class", "db-zero-anchor")
-      .attr("transform", `translate(${x(0)}, ${ih + (cmp ? 22 : 26)})`)
+      .attr("transform", `translate(${x(0)}, ${ih + (cmp ? 30 : 34)})`)
       .attr("pointer-events", "none");
     zAnchor.append("text").attr("class", "db-zero-label").attr("text-anchor", "middle")
       .attr("y", 0).text("BROKE EVEN");
     zAnchor.append("text").attr("class", "db-zero-sub").attr("text-anchor", "middle")
-      .attr("y", 13).text("pay = prices");
+      .attr("y", 11).text("pay = prices");
     // bars
     const bw = yScale.bandwidth();
     this.bars = this.g.selectAll("g.barg").data(rows, d => d.code).join("g")
@@ -245,15 +234,15 @@ export class DivergingBar extends BaseChart {
       return;
     }
 
-    const rowY = [40, 76];
+    const rowY = [30, 84];   // wider gap so the two big scoreboard numbers' boxes never touch (§2b)
     const numX = left, labX = left + 56;
     const mk = (i, sign, n, verb, dir) => {
       const row = g.append("g").attr("class", `db-head-row db-head-row--${sign}`).attr("data-sign", sign);
       row.append("text").attr("class", `db-head-num db-head-num--${sign}`)
         .attr("x", numX).attr("y", rowY[i]).text(n);
-      const lab = row.append("text").attr("class", "db-head-label").attr("x", labX).attr("y", rowY[i] - 9);
+      const lab = row.append("text").attr("class", "db-head-label").attr("x", labX).attr("y", rowY[i] - 12);
       lab.append("tspan").attr("class", "db-head-strong").text(verb);
-      row.append("text").attr("class", "db-head-sub").attr("x", labX).attr("y", rowY[i] + 4)
+      row.append("text").attr("class", "db-head-sub").attr("x", labX).attr("y", rowY[i] + 8)
         .text(sign === "pos" ? "pay outran prices  ▸" : "◂  prices outran pay");
       return row;
     };
@@ -320,6 +309,7 @@ export class DivergingBar extends BaseChart {
   onStep(idx) {
     const cfg = STEP_CONFIG[Math.max(0, Math.min(STEP_CONFIG.length - 1, idx))];
     this._focus = cfg.focus;
+    if (this.container) this.container.setAttribute("data-onstep", idx);   // scroll-sync hook (§8.2 probe)
     this._applyFocus();
   }
 

@@ -53,11 +53,14 @@
   background: var(--bg-elev);
   box-shadow: var(--shadow-2);
 }
-.scroller__step h3 {
+.scroller__step h3,
+.scroller__step h4 {
   font-family: var(--font-display);
   font-size: var(--fs-500);
+  font-weight: 600;
   margin-block-end: var(--space-3);
   letter-spacing: -0.01em;
+  line-height: var(--lh-snug);
 }
 .scroller__step .step-eyebrow {
   font-size: var(--fs-100);
@@ -144,10 +147,12 @@
    → 432px CLEAN. (A residual ~21px sits in the source's auto track — its min-content reserves ~2
    lines though it renders one; left as a small bottom margin rather than risk the map's clean fill.) */
 .scroller__chart[data-chart-mount="choropleth"] {
-  padding-block: var(--space-2);
+  padding-block: 0;
+  gap: 2px;
 }
+.scroller__chart[data-chart-mount="choropleth"] .chart-source { line-height: 1.15; margin: 0; }
 .scroller__chart[data-chart-mount="choropleth"] .choro-header {
-  gap: var(--space-1);
+  gap: 1px;
   padding-block-end: 0;
 }
 .scroller__chart[data-chart-mount="choropleth"] .choro-header__top {
@@ -218,3 +223,211 @@
 
 /* (The header progress-coin was removed in the round-5 debug pass — the header deliberately scrolls
    away, so a coin there can't function as a scroll compass. See LOG 2026-06-21 Session 19.) */
+
+/* ============================================================
+   LAYOUT DOCTRINE v2 (amendment §A) — scoped to .chapter--v2 so it rolls out
+   chapter-by-chapter (F1 = CH1 reference; F2 = the rest). Centered full-width
+   title, persistent left-column subtitle, step rail, breathing air.
+   ============================================================ */
+
+/* §A.1 · Title — centered, full chapter width, at the top (above the scroller). */
+.chapter--v2 > .chapter-title {
+  font-family: var(--font-display);
+  font-size: var(--fs-500);
+  font-weight: 600;
+  line-height: var(--lh-snug);
+  letter-spacing: -0.01em;
+  color: var(--ink-strong);
+  text-align: center;
+  max-inline-size: var(--w-content);
+  margin: 0 auto var(--space-6);
+  padding-inline: var(--space-5);
+}
+
+/* Left column becomes a grid: [rail] [flow(subtitle + steps)]. */
+.chapter--v2 .scroller__text {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: var(--space-4);
+  gap: 0;
+  padding-block: 0;
+}
+.chapter--v2 .scroller__flow { grid-column: 2; min-inline-size: 0; }
+
+/* §A.2 · Subtitle — persistent, pinned at the top of the left column. */
+.chapter--v2 .chapter-subtitle {
+  position: sticky;
+  inset-block-start: var(--space-5);
+  z-index: 3;
+  font-family: var(--font-ui);
+  font-size: var(--fs-200);
+  color: var(--ink-soft);
+  line-height: var(--lh-snug);
+  max-inline-size: 34ch;
+  margin: 0;
+  padding-block: var(--space-2) var(--space-3);
+  background: var(--bg);
+}
+
+/* §A.3 · Steps — one at a time below the persistent subtitle (unchanged rhythm). */
+.chapter--v2 .scroller__steps {
+  display: flex;
+  flex-direction: column;
+  gap: 80dvh;
+  padding-block: 6dvh 52dvh;
+}
+
+/* §A.4 · Step rail — thin vertical dot column, sticky, left of the steps. */
+.step-rail { display: none; }               /* hidden until a chapter opts into v2 */
+.chapter--v2 .step-rail {
+  grid-column: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  position: sticky;
+  inset-block-start: 42vh;
+  align-self: start;
+  margin: 0;
+  padding: 0;
+}
+.rail-dot {
+  position: relative;
+  inline-size: 22px;
+  block-size: 22px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+.rail-dot::before {
+  content: "";
+  inline-size: 8px;
+  block-size: 8px;
+  border-radius: 50%;
+  background: var(--ink-fainter);          /* ahead (default) */
+  transition: background var(--dur-2) var(--ease-out), transform var(--dur-2) var(--ease-out);
+}
+.rail-dot.is-read::before { background: var(--ink); }
+.rail-dot.is-active::before { background: var(--accent); transform: scale(1.6); }
+.rail-dot:hover::before,
+.rail-dot:focus-visible::before { transform: scale(1.6); }
+.rail-dot:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; border-radius: 50%; }
+.rail-microlabel {
+  position: absolute;
+  inset-inline-start: 20px;
+  inset-block-start: 50%;
+  transform: translateY(-50%);
+  white-space: nowrap;
+  font-family: var(--font-ui);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  background: var(--bg);
+  padding: 2px 7px;
+  border-radius: var(--radius-1);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-2) var(--ease-out);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.08);
+}
+.rail-dot:hover .rail-microlabel,
+.rail-dot:focus-visible .rail-microlabel { opacity: 1; }
+
+/* §A.5 · Breathing — the chart must not touch the panel edges (no header in v2 figures).
+   Target svgH/panelH 0.84–0.92 with ≥24px air above the chart body and ≥20px below. */
+.chapter--v2 .scroller__chart { grid-template-rows: 1fr auto auto; }
+.chapter--v2 .scroller__chart .chart-body { margin-block: 34px 26px; }
+
+/* ============================================================
+   AMENDMENT-2 §A — sticky-zone layout (scoped .chapter--a2; F1=CH1, F3=rest).
+   Title + legend pinned INSIDE the panel; subtitle no-box own slot; rail −28px
+   from the card column, vertically centered; footer strip source-left/controls-right.
+   Placed after the .chapter--v2 block so it wins the equal-specificity overrides.
+   ============================================================ */
+.chapter--a2 .scroller__chart { grid-template-rows: auto 1fr auto; gap: 0; padding: 0; }
+
+/* §A.1 · panel head — title top-center, legend top-right, both pinned with the panel */
+.chapter--a2 .panel-head { position: relative; text-align: center; min-block-size: 0; }
+.chapter--a2 .panel-head .chart-title {
+  font-family: var(--font-display); font-size: var(--fs-500); font-weight: 600;
+  line-height: var(--lh-snug); letter-spacing: -0.01em; color: var(--ink-strong); margin: 0;
+}
+/* §A3 §3 · Legend reserved slot — drops below the fixed theme toggle (pins at the viewport
+   top-right ~y54) so the two never overlap; 16px in from the panel edge, capped width so it
+   never runs into the toggle or off the panel. Consumer census: `.chart-legend` markup exists
+   in exactly ONE place in index.html (CH1) — this selector is textually shared-looking but has
+   a single real consumer, confirmed by grep. */
+.chapter--a2 .panel-head .chart-legend {
+  position: absolute; inset-inline-end: 16px; inset-block-start: 44px; text-align: right;
+  max-inline-size: 200px; display: flex; flex-direction: column; line-height: 1.2;
+}
+.chapter--a2 .chart-legend .legend-title { font-family: var(--font-ui); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-soft); }
+.chapter--a2 .chart-legend .legend-sub { font-family: var(--font-ui); font-size: 9.5px; color: var(--ink-faint); }
+
+/* §A.4 · breathing — 24px above the plot, 20px below (before the footer strip) */
+.chapter--a2 .scroller__chart .chart-body { margin-block: 24px 0; }
+
+/* §A.5 · footer strip — source LEFT, controls RIGHT, one row, no collision */
+.chapter--a2 .panel-foot { display: flex; justify-content: space-between; align-items: center; gap: var(--space-5); margin-block-start: 20px; }
+.chapter--a2 .panel-foot .chart-source { margin: 0; text-align: left; flex: 0 1 auto; font-size: 10px; }
+.chapter--a2 .panel-foot .chart-controls { margin: 0; justify-content: flex-end; flex-wrap: nowrap; flex: 0 0 auto; gap: var(--space-2); }
+
+/* CH1 has the longest control cluster (compare picker + up to 4 chips + reset + zoom). Give
+   the source a fixed slice so the controls get a predictable remaining width: one row at 0–3
+   chips (foot stays compact → plot within the §A.4 breathing floor), wrapping to a 2nd row
+   only at the 4-chip max. Scoped to CH1 so the source-only footers elsewhere are untouched. */
+.chapter[data-chart="annotatedLine"] .panel-foot .chart-source { flex: 0 1 300px; }
+/* row-gap tightened 9→5px (measured: the 4-chip case wraps to 2 rows; every px saved here
+   feeds directly into the §2.4 fixed footer reservation instead of coming out of the plot). */
+.chapter[data-chart="annotatedLine"] .panel-foot .chart-controls { flex: 1 1 auto; min-inline-size: 0; flex-wrap: wrap; row-gap: 5px; }
+.chapter[data-chart="annotatedLine"] .ac-reset, .chapter[data-chart="annotatedLine"] .ac-zoom-btn { padding-block: 2px; }
+
+/* [AMENDMENT-3 §4] Footer rhythm, CH1: x-axis → 12px → brush strip → 16px → footer row → 12px
+   → panel bottom (measured; the old 74px SVG bottom-margin + 20px CSS margin left ~75px of dead
+   space no rule ever explained — see AnnotatedLine.js margin.bottom 74→20 for the SVG-side half
+   of this fix). 16px replaces the shared rule's 20px, CH1-scoped only (the shared `.chapter--a2
+   .panel-foot` 20px still governs the other 10 a2 chapters — F3 rolls the rhythm to them with
+   their own consumer-gated change, not silently here).
+   [AMENDMENT-3 §2.4] min-block-size reserves the WORST-CASE footer height (measured: 4 chips
+   wrap the controls to 2 rows, ~69px) so the "auto" grid row never grows/shrinks the plot's
+   "1fr" row as chips are added/removed — the plot's svg height gate is ±2px @0 vs @4 chips. */
+.chapter[data-chart="annotatedLine"] .panel-foot { margin-block-start: 14px; min-block-size: 64px; }
+/* [AMENDMENT-3 §4] "→12px→panel bottom" — the panel had 0 bottom breathing before this. */
+.chapter[data-chart="annotatedLine"] .scroller__chart { padding-block-end: 10px; }
+
+/* §A.2 · subtitle — NO box, plain text, own slot; 3-line max; z BELOW cards */
+.chapter--a2 .scroller__text { display: grid; grid-template-columns: 0 minmax(0, 1fr); column-gap: 0; padding-block: 0; }
+.chapter--a2 .scroller__flow { grid-column: 2; min-inline-size: 0; }
+.chapter--a2 .chapter-subtitle {
+  position: sticky; inset-block-start: var(--space-4); z-index: 1;
+  background: none; padding: 0; margin: 0;
+  font-family: var(--font-ui); font-size: 13px; color: var(--ink-soft);
+  line-height: 1.45; max-inline-size: 34ch; text-align: left;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+.chapter--a2 .scroller__steps { margin-block-start: calc(3 * 1.45 * 13px + 24px); position: relative; z-index: 2; }
+.chapter--a2 .scroller__step { position: relative; z-index: 2; }
+
+/* §A.3 · step rail — dots −28px from the card column, vertically centered as a group */
+.chapter--a2 .step-rail {
+  grid-column: 1; position: sticky; inset-block-start: 50vh; align-self: start;
+  transform: translateY(-50%); margin-inline-start: -28px; gap: 20px;
+}
+
+/* Choropleth keeps a JS-populated legend slot in its figure header → row order stays auto/1fr/auto,
+   and the near-full-bleed vignette map wants only a small margin (not the shared 34/26). */
+.chapter--v2 .scroller__chart[data-chart-mount="choropleth"] { grid-template-rows: auto 1fr auto; }
+.chapter--v2 .scroller__chart[data-chart-mount="choropleth"] .chart-body { margin-block: 16px 22px; }
+
+/* Step-less compare chapter: no left column to pin to → title + subtitle centered above the map. */
+.chapter--compare .chapter-subtitle--center {
+  position: static;
+  text-align: center;
+  max-inline-size: 52ch;
+  margin: 0 auto var(--space-6);
+  padding-inline: var(--space-5);
+  background: none;
+}

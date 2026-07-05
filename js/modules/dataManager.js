@@ -19,7 +19,8 @@ const CRITICAL_PATHS = {
 const DEFERRED_PATHS = {
   hicpMonthly  : "data/processed/hicp_monthly.json",
   hicpIndex    : "data/processed/hicp_index.json",
-  minWages     : "data/processed/minimum_wages.json"
+  minWages     : "data/processed/minimum_wages.json",
+  hpi          : "data/processed/house_price_index.json"   // respin CH7: house price index (prc_hpi, base 2015)
 };
 // Which DEFERRED datasets each chart needs before it can render. Charts not listed
 // (compareMap, heatmap, boxplot) need only CRITICAL data and render immediately.
@@ -27,11 +28,15 @@ const CHART_NEEDS = {
   choropleth: ["hicpMonthly", "hicpIndex"],
   compareMap: [],   // annual HICP + topology are boot-loaded
   smallMultiples: ["hicpMonthly"],
-  annotatedLine: ["hicpMonthly", "hicpIndex"],   // index = the value-of-€100 second line (round-5 dual-axis)
-  heatmap: [],
+  annotatedLine: ["hicpMonthly"],   // respin CH1: single EU-27 YoY line (the dual-axis €100 line moved to the receipt + CH5)
+  heatmap: ["hicpMonthly"],   // respin CH4: category×month cut of the EU-27 monthly YoY
   divergingBar: ["minWages", "hicpIndex"],
   waffle: ["hicpIndex"],
-  boxplot: []
+  boxplot: [],
+  rateLevel: ["hicpMonthly", "hicpIndex"],   // respin CH5: top = monthly YoY, bottom = rebased index level
+  housing: ["hpi", "hicpIndex"],   // respin CH7: house price index vs HICP, rebased
+  race: ["minWages", "hicpIndex"],   // respin CH8: median min-wage index vs prices
+  scoreMap: ["minWages", "hicpIndex"]   // respin CH9: two-tone map of real-wage change (shares realWageRows)
 };
 
 // Eurostat uses EL for Greece; TopoJSON uses GR
@@ -142,6 +147,7 @@ export class DataManager {
     this.hicpMonthly = this.hicpMonthly || {};
     this.hicpIndex   = this.hicpIndex   || {};
     this.minWages    = this.minWages    || {};
+    this.hpi         = this.hpi         || {};
   }
 
   /** Build the nested index for one freshly-fetched DEFERRED dataset. */
@@ -163,6 +169,17 @@ export class DataManager {
         if (!this.minWages[r.geo]) this.minWages[r.geo] = {};
         this.minWages[r.geo][time] = r.value;
       });
+    } else if (key === "hpi") {
+      // house_price_index rows are {geo, year, quarter, value}; nest to geo -> {year -> annual avg
+      // of the available quarters}. Eurostat prc_hpi base is 2015; charts rebase as needed.
+      const acc = {};
+      (this._hpi || []).forEach(r => {
+        if (r.value == null) return;
+        if (!acc[r.geo]) acc[r.geo] = {};
+        (acc[r.geo][r.year] = acc[r.geo][r.year] || []).push(r.value);
+      });
+      this.hpi = {};
+      for (const g in acc) { this.hpi[g] = {}; for (const y in acc[g]) { const a = acc[g][y]; this.hpi[g][y] = a.reduce((s, v) => s + v, 0) / a.length; } }
     }
   }
 
@@ -214,6 +231,30 @@ export class DataManager {
     const b = this.hicpIndex[code]?.[cat]?.[to];
     if (a == null || b == null) return null;
     return ((b - a) / a) * 100;
+  }
+
+  /** Real minimum-wage change 2019 → 2024 per country, sorted desc by `real`.
+   *  real = (1 + nominal wage Δ) / (1 + HICP Δ) − 1, ×100. The SINGLE source of this
+   *  computation — DivergingBar (the ledger) and ScoreMap (the map) both call this so
+   *  their 15-gained / 6-lost split can never diverge (respin CH9, brief "do not fork").
+   *  2024 window (not 2025) because that is the window the essay's verbatim "Fifteen
+   *  gained. Six lost." + "Lithuania −0.02%" copy describes; 2019→2025 gives 16/5. */
+  realWageRows() {
+    const rows = [];
+    this.countriesByCode.forEach((meta, code) => {
+      if (!meta.minWage) return;
+      const w0 = this.minWages[code]?.["2019-S1"] ?? this.minWages[code]?.["2019-S2"];
+      const w1 = this.minWages[code]?.["2024-S1"] ?? this.minWages[code]?.["2024-S2"] ?? this.minWages[code]?.["2023-S2"];
+      const p0 = this.hicpIndex[code]?.CP00?.["2019-01"];
+      const p1 = this.hicpIndex[code]?.CP00?.["2024-01"] ?? this.hicpIndex[code]?.CP00?.["2023-12"];
+      if ([w0, w1, p0, p1].some(v => v == null)) return;
+      const nom = ((w1 - w0) / w0);
+      const hicp = ((p1 - p0) / p0);
+      const real = ((1 + nom) / (1 + hicp) - 1) * 100;
+      rows.push({ code, name: meta.name, nominal: nom * 100, hicp: hicp * 100, real, w0, w1 });
+    });
+    rows.sort((a, b) => b.real - a.real);
+    return rows;
   }
 }
 

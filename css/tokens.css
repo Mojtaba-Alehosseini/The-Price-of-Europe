@@ -50,6 +50,12 @@
   --seq-5 : #D73027;   /* extreme >10% — red */
   --seq-target : #0F5499;   /* ECB 2% reference — FT oxford, 6.90:1 */
 
+  /* Comparison-line palette (AMENDMENT-2 §B.8) — country lines in selection order; EU stays claret. */
+  --cmp-1 : #0F5499;   /* oxford */
+  --cmp-2 : #0D7680;   /* teal */
+  --cmp-3 : #593380;   /* velvet */
+  --cmp-4 : #806B00;   /* olive-dark */
+
   /* Categorical — FT g-chartcolour. LOCK these; a category keeps its hue in EVERY chart. */
   --cat-overall   : #33302E;
   --cat-energy    : #FF8833;   /* mandarin — the "orange wall" */
@@ -63,6 +69,14 @@
   /* Coin metals (hero, PART 7) */
   --coin-gold-hi    : #F6E4B8;  --coin-gold    : #C8923D;  --coin-gold-lo    : #7A5A22;
   --coin-tarnish-hi : #D8D2C8;  --coin-tarnish : #B3A9A0;  --coin-tarnish-lo : #857F77;
+
+  /* Receipt hero (D43) — the receipt is a lit physical object; its ink does NOT flip in dark
+     mode (a real receipt stays printed). All hex (D15). Stamp = claret ink ON the receipt. */
+  --receipt-paper    : #FBF7F1;
+  --receipt-ink      : #211E1C;   /* near-black print — beats halation when the page goes dark */
+  --receipt-ink-soft : #6B635C;
+  --receipt-rule     : #D9CFC4;
+  --receipt-stamp    : #990F3D;
 
   /* Event bands — flat FT tints behind line charts (rgba, never color-mix) */
   --event-covid   : rgba(204,230,255,.30);   /* sky */
@@ -199,6 +213,12 @@
   --seq-5 : #F2564B;   /* red, lifted for >=3:1 on slate */
   --seq-target : #5BA3E0;
 
+  /* Comparison-line palette (AMENDMENT-2 §B.8) — dark theme */
+  --cmp-1 : #5BA3E0;
+  --cmp-2 : #3FB8C4;
+  --cmp-3 : #A98FD6;
+  --cmp-4 : #C7A800;   /* olive → brighter for dark */
+
   --cat-overall   : #FFF1E5;
   --cat-energy    : #FF9D52;
   --cat-food      : #B6D36F;
@@ -207,6 +227,10 @@
   --cat-wages     : #1FB36A;
   --cat-transport : #8FE6EE;
   --cat-other     : #C2B7AF;
+
+  /* Receipt hero on slate: tokens intentionally NOT overridden — the receipt is a lit object
+     (a receipt under a lamp on a dark counter). Dimming the paper caused halation-washed item
+     lines (owner attack, 2026-07-04); full paper + near-black ink keeps every line readable. */
 
   --event-covid   : rgba(120,180,235,.20);
   --event-energy  : rgba(255,136,51,.18);

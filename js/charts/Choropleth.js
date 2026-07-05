@@ -36,13 +36,10 @@ const CAPITALS = {
 // the old focus:"EE" desaturating all of Europe to spotlight one country, which read as a grey
 // field with a single red dot — the opposite of the narrative. The Baltic trio is already the
 // emphasis of step 1; the peak step is about the continent-wide blaze.
-const STEP_CONFIG = [
-  { year: 2019, focus: null,                  caption: null,        pulse: false },
-  { year: 2021, focus: ["EE", "LT", "LV"],    caption: "Estonia, Lithuania and Latvia peeled away first.", pulse: false },
-  { year: 2022, focus: null,                  caption: null,        pulse: false },
-  { year: 2024, focus: "ES",                  caption: "Spain cooled near the ECB target.", pulse: false },
-  { year: 2025, focus: null,                  caption: null,        pulse: false },
-];
+// Respin CH3 (brief §5): 4 steps — data-year (2019/2022/2024) recolour the map; data-mode="rank"
+// morphs it to the ranking; a subsequent data-year reverses the morph. Per-year camera focus gives
+// the "pans fire per step" beat — 2022 highlights the burning east, the calm years stay wide.
+const YEAR_FOCUS = { 2019: null, 2021: ["EE", "LT", "LV"], 2022: ["EE", "LT", "LV"], 2024: null, 2025: null };
 
 function getCSS(name) {
   const m = name.match(/var\((--[^)]+)\)/); const n = m ? m[1] : name;
@@ -349,11 +346,17 @@ export class Choropleth extends BaseChart {
     // subscribe to chapter scroll progress to drive the morph.
     this._buildBarLayer();
     if (this._chapterUnsub) { this._chapterUnsub(); this._chapterUnsub = null; }
+    if (this._morphRaf) { cancelAnimationFrame(this._morphRaf); this._morphRaf = null; }
+    this._morphP = 0.5;        // resting = pure map (respin: the morph is STEP-driven, see onStep/_animateMorph)
+    this._rankActive = false;
     if (this.ctx?.motion?.reduced) {
-      this._tickMorph(0);   // stay on map; reduced-motion users don't get the morph
+      this._tickMorph(0.5);    // map; reduced-motion users don't get the flubber morph
     } else {
+      // Step-driven morph: data-mode="rank" fires it forward, a data-year step reverses it — because
+      // respin CH3 puts a MAP step (2024) AFTER the ranking. Keep a light scroll listener ONLY to
+      // re-run _tickMorph's in-viewport gate so the fixed overlay hides when the chapter leaves view.
       const chapter = this.container.closest(".chapter");
-      this._chapterUnsub = watchChapterProgress(chapter, p => this._tickMorph(p));
+      this._chapterUnsub = watchChapterProgress(chapter, () => this._tickMorph(this._morphP ?? 0.5));
     }
 
     // [CH1 layout fix] _buildControls() (the ~132px timeline scrubber) lays out AFTER size()
@@ -1199,35 +1202,74 @@ export class Choropleth extends BaseChart {
   _unhover() { this.ctx.tooltip.hide(); }
 
   onStep(index, el) {
-    const cfg = STEP_CONFIG[Math.max(0, Math.min(STEP_CONFIG.length - 1, index))];
+    if (this.container) this.container.setAttribute("data-onstep", index);
+    const mode = el?.dataset?.mode;
+
+    // ── RANK step (data-mode="rank"): morph the map → ranking (forward) ──
+    if (mode === "rank") {
+      this._rankActive = true;
+      if (this.container) this.container.setAttribute("data-active-mode", "rank");
+      if (this.playing) this._togglePlay(false);
+      this._removeMapLabel();
+      this.svg?.selectAll(".multi-label-text").remove();
+      clearTimeout(this._labelTimeout);
+      if (this.ctx.motion.reduced) this._tickMorph(1); else this._animateMorph(1);
+      return;
+    }
+
+    // ── YEAR step (data-year): reverse the morph if we were ranked, then recolour + pan ──
+    const wasRanked = this._rankActive || (this._morphP ?? 0.5) > 0.5;
+    this._rankActive = false;
+    if (this.container) this.container.setAttribute("data-active-mode", el?.dataset?.year || "");
+    if (wasRanked) { if (this.ctx.motion.reduced) this._tickMorph(0.5); else this._animateMorph(0.5); }
+
     if (this.playing) this._togglePlay(false);
+    const yr = el?.dataset?.year ? +el.dataset.year : this.year;
     const prev = this.year;
-    this.year = cfg.year;
-    if (this.sl) this.sl.value = cfg.year;
-    this.focusCode = cfg.focus;
-    this._stepCaption = cfg.caption;
-    this._stepPulse = !!cfg.pulse;
+    this.year = yr;
+    if (this.sl) this.sl.value = yr;
+    this.focusCode = YEAR_FOCUS[yr] ?? null;
+    this._stepCaption = null;
+    this._stepPulse = false;
     this.lockedCode = null;
     this._animateYearChange(prev);
     this._updatePlayhead();
     this._applyFocus();
     this._cameraTo(this.focusCode);
 
-    // Auto-label the focused country so it stays in sync with the narrative.
-    // - Single string (e.g. "EE"): full editorial card (name + value + rank + sparkline).
-    // - Array (e.g. ["EE","LT","LV"]): light text labels at each centroid, one per country.
+    // Auto-label the focused country/countries so the map stays in sync with the narrative.
     this._removeMapLabel();
     this.svg?.selectAll(".multi-label-text").remove();
     clearTimeout(this._labelTimeout);
     if (this.focusCode) {
       const code = this.focusCode;
-      const delay = !this.ctx.motion.reduced ? 1150 : 0;
+      const delay = !this.ctx.motion.reduced ? 900 : 0;
       this._labelTimeout = setTimeout(() => {
         if (this.focusCode !== code || this.lockedCode) return;
         if (Array.isArray(code)) this._renderMultiLabels(code);
         else this._renderMapLabel(code);
       }, delay);
     }
+  }
+
+  // Step-driven morph: animate _morphP toward targetP (0.5 = pure map, 1 = full ranking), calling
+  // _tickMorph each frame. _tickMorph is a pure function of p, so driving 1 → 0.5 runs the flubber
+  // morph in REVERSE (ranking → map). This replaces the old raw-scroll driver so a MAP step (2024)
+  // can follow the rank step. A running loop reads this._morphTargetP each frame, so a new target
+  // mid-flight simply redirects it.
+  _animateMorph(targetP) {
+    this._morphTargetP = targetP;
+    if (this._morphRaf) return;
+    const tick = () => {
+      const cur = this._morphP ?? 0.5;
+      const t = this._morphTargetP;
+      const next = Math.abs(t - cur) < 0.006 ? t : cur + (t - cur) * 0.16;
+      this._morphP = next;
+      this._tickMorph(next);
+      if (next !== t) { this._morphRaf = requestAnimationFrame(tick); }
+      else { this._morphRaf = null; }
+    };
+    tick();
   }
 
   // ============================================================

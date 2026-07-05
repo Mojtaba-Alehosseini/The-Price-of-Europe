@@ -499,6 +499,14 @@
    (replaces an inline style="color:…" in DivergingBar.js). */
 .tooltip .db-tip-val--pos { color: var(--seq-1); }
 .tooltip .db-tip-val--neg { color: var(--seq-4); }
+/* [compare] multi-series crosshair tooltip — a colour swatch per line (EU + compared countries),
+   matching the CMP line colours. Inline-block so the .row layout is untouched for other charts. */
+.tooltip .ac-sw { display: inline-block; inline-size: 8px; block-size: 8px; border-radius: 2px; margin-inline-end: 6px; vertical-align: middle; }
+.tooltip .ac-sw--eu { background: var(--accent); }
+.tooltip .ac-sw--c0 { background: var(--cmp-1); }
+.tooltip .ac-sw--c1 { background: var(--cmp-2); }
+.tooltip .ac-sw--c2 { background: var(--cmp-3); }
+.tooltip .ac-sw--c3 { background: var(--cmp-4); }
 
 /* Crosshair — AnnotatedLine's vertical hover guide. Scoped to the live .chart-svg root;
    the old bare-.chart selector never matched (root is .chart-svg) so the line was invisible. */
@@ -507,6 +515,340 @@
   stroke-opacity: 0.45;
   stroke-dasharray: 2 3;
   pointer-events: none;
+}
+
+/* ============================================================
+   RESPIN shared editorial language (brief §5 item 2).
+   The kicker = the big italic Source Serif "key number/word" at the chart's
+   top-left (current year / country / mode). Reinstates the signature display
+   number the round-4 [D34] note had removed — the REBUILD-BRIEF governs the
+   respin and explicitly calls for it (logged D47). Shared by the respun charts.
+   ============================================================ */
+.chart-svg .kick-num {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 600;
+  font-size: 46px;
+  fill: var(--ink-strong);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.015em;
+  line-height: 1;
+  paint-order: stroke;
+  stroke: var(--bg);
+  stroke-width: 5px;
+  stroke-linejoin: round;
+}
+.chart-svg .kick-label {
+  font-family: var(--font-ui);
+  font-size: 10.5px;
+  font-weight: 600;
+  fill: var(--ink-faint);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  paint-order: stroke;
+  stroke: var(--bg);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+/* ===== CH1 · AnnotatedLine (respin) ===== */
+/* Whitespace doctrine §2a — kill panel padding + tighten the furniture so the chart body
+   (the 1fr grid row → the SVG) fills ≥90% of the sticky panel. The header title + 2-line
+   subtitle + source line are the only non-chart rows; drop the space-2 padding + shrink gaps. */
+.scroller__chart[data-chart-mount="annotatedLine"] {
+  padding-block: 0;
+  gap: 2px;
+}
+.scroller__chart[data-chart-mount="annotatedLine"] header { gap: 1px; }
+.scroller__chart[data-chart-mount="annotatedLine"] .chart-subtitle { line-height: 1.22; }
+.scroller__chart[data-chart-mount="annotatedLine"] .chart-source { line-height: 1.15; margin: 0; }
+.chart-svg .anno-band-label {
+  font-family: var(--font-ui);
+  font-size: 9.5px;
+  font-weight: 600;
+  fill: var(--ink-faint);
+  letter-spacing: 0.14em;
+  pointer-events: none;
+  paint-order: stroke;
+  stroke: var(--bg);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+.chart-svg .anno-ref-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+}
+.chart-svg .anno-tail-label {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  fill: var(--accent);
+  font-variant-numeric: tabular-nums;
+  paint-order: stroke;
+  stroke: var(--bg);
+  stroke-width: 3.5px;
+  stroke-linejoin: round;
+}
+
+/* ===== CH2 · SmallMultiplesLine (respin) — 2×3 shared-scale grid ===== */
+.scroller__chart[data-chart-mount="smallMultiples"] { padding-block: 0; gap: 2px; }
+.scroller__chart[data-chart-mount="smallMultiples"] header { gap: 1px; }
+.scroller__chart[data-chart-mount="smallMultiples"] .chart-subtitle { line-height: 1.22; }
+.scroller__chart[data-chart-mount="smallMultiples"] .chart-source { line-height: 1.15; margin: 0; }
+.chart-svg .sm-panel { transition: opacity var(--dur-4) var(--ease-out); }
+.chart-svg .sm-panel:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
+.chart-svg .sm-title {
+  font-family: var(--font-ui); font-size: 10.5px; font-weight: 700;
+  fill: var(--ink); letter-spacing: 0.08em;
+  paint-order: stroke; stroke: var(--bg); stroke-width: 3px; stroke-linejoin: round;
+}
+.chart-svg .sm-end-tag {
+  font-family: var(--font-mono); font-size: 11px; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  paint-order: stroke; stroke: var(--bg); stroke-width: 3px; stroke-linejoin: round;
+}
+.chart-svg .sm-zero { stroke: var(--rule-bold); stroke-width: 1; }
+.chart-svg .sm-grid { stroke: var(--rule-soft); stroke-width: 0.75; }
+.chart-svg .sm-ytick, .chart-svg .sm-xtick {
+  font-family: var(--font-mono); font-size: 9.5px; fill: var(--ink-faint);
+  font-variant-numeric: tabular-nums; letter-spacing: 0.01em;
+}
+.chart-svg .sm-hit { cursor: pointer; }
+.chart-svg .sm-scrim { cursor: zoom-out; }
+.chart-svg .sm-big-peak {
+  font-family: var(--font-display); font-style: italic; font-size: 13px; fill: var(--ink);
+  paint-order: stroke; stroke: var(--bg); stroke-width: 3.5px; stroke-linejoin: round;
+}
+.chart-svg .sm-big-end {
+  font-family: var(--font-mono); font-size: 12px; font-weight: 700; fill: var(--ink);
+  font-variant-numeric: tabular-nums;
+  paint-order: stroke; stroke: var(--bg); stroke-width: 3.5px; stroke-linejoin: round;
+}
+.chart-svg .sm-big-hint { font-family: var(--font-mono); font-size: 10px; fill: var(--ink-faint); letter-spacing: 0.04em; }
+
+/* ===== CH4 · Heatmap (respin) — category × month ===== */
+.scroller__chart[data-chart-mount="heatmap"] { padding-block: 0; gap: 2px; }
+.scroller__chart[data-chart-mount="heatmap"] header { gap: 1px; }
+.scroller__chart[data-chart-mount="heatmap"] .chart-subtitle { line-height: 1.22; }
+.scroller__chart[data-chart-mount="heatmap"] .chart-source { line-height: 1.15; margin: 0; }
+.chart-svg .hm-cell { cursor: pointer; }
+.chart-svg .hm-year-sep { stroke: var(--rule-bold); stroke-width: 1; stroke-opacity: 0.45; pointer-events: none; }
+.chart-svg .hm-frame { fill: none; stroke: var(--accent); stroke-width: 2.5; pointer-events: none; }
+/* respin row labels: 12px caps (overrides the old country×year 11px style — later rule wins) */
+.chart-svg .hm-row-label {
+  font-family: var(--font-ui); font-size: 12px; font-weight: 700;
+  fill: var(--ink); letter-spacing: 0.05em; text-transform: uppercase;
+}
+.chart-svg .hm-col-head { font-family: var(--font-mono); font-size: 10px; fill: var(--ink-faint); letter-spacing: 0.02em; }
+
+/* ===== CH5 · RateLevel (respin) — the KEY chart, two stacked panels ===== */
+.scroller__chart[data-chart-mount="rateLevel"] { padding-block: 0; gap: 2px; }
+.scroller__chart[data-chart-mount="rateLevel"] header { gap: 1px; }
+.scroller__chart[data-chart-mount="rateLevel"] .chart-subtitle { line-height: 1.22; }
+.scroller__chart[data-chart-mount="rateLevel"] .chart-source { line-height: 1.15; margin: 0; }
+.chart-svg .rl-area { fill: var(--accent-veil); }   /* --accent-veil is CSS-only (color-mix); never fed to d3 (D15) */
+.chart-svg .rl-ref-label { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.02em; }
+.chart-svg .rl-ytitle {
+  font-family: var(--font-ui); font-size: 10px; font-weight: 600;
+  fill: var(--ink-faint); letter-spacing: 0.13em; text-transform: uppercase;
+}
+.chart-svg .rl-baseline { stroke: var(--ink-soft); stroke-width: 1.2; stroke-opacity: 0.6; }
+.chart-svg .rl-baseline-label { font-family: var(--font-mono); font-size: 10px; fill: var(--ink-soft); letter-spacing: 0.02em; }
+.chart-svg .rl-peak-tag {
+  font-family: var(--font-mono); font-size: 11px; fill: var(--ink-soft); font-variant-numeric: tabular-nums;
+  paint-order: stroke; stroke: var(--bg); stroke-width: 3px; stroke-linejoin: round;
+}
+.chart-svg .rl-bracket { stroke: var(--accent); stroke-width: 1.4; }
+.chart-svg .rl-bracket-label {
+  font-family: var(--font-display); font-style: italic; font-size: 12.5px; fill: var(--accent-text);
+  paint-order: stroke; stroke: var(--bg); stroke-width: 3.5px; stroke-linejoin: round;
+}
+.chart-svg .rl-end-label {
+  font-family: var(--font-display); font-style: italic; font-weight: 600; font-size: 22px; fill: var(--accent);
+  font-variant-numeric: tabular-nums;
+  paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round;
+}
+.chart-svg .rl-cursor-line { stroke: var(--ink); stroke-opacity: 0.4; stroke-dasharray: 2 3; }
+.chart-svg .rl-cursor-dot { fill: var(--accent); stroke: var(--bg); stroke-width: 1.5; }
+.chart-svg .rl-cursor-label {
+  font-family: var(--font-mono); font-size: 10.5px; fill: var(--ink); font-variant-numeric: tabular-nums;
+  paint-order: stroke; stroke: var(--bg); stroke-width: 3px; stroke-linejoin: round;
+}
+
+/* ===== CH6 · WaffleChart / basket (respin) — two halves ===== */
+.scroller__chart[data-chart-mount="waffle"] { padding-block: 0; gap: 0; }
+.scroller__chart[data-chart-mount="waffle"] header { gap: 1px; }
+.scroller__chart[data-chart-mount="waffle"] .chart-subtitle { line-height: 1.22; }
+.scroller__chart[data-chart-mount="waffle"] .chart-source { font-size: 10.5px; line-height: 1.1; margin: 0; letter-spacing: 0.03em; }
+/* respin waffle: eroded cell = claret (the loss), survived = muted wheat (later rules override the old --on/--off) */
+.chart-svg .waffle-cell { stroke: var(--bg); stroke-width: 1.5; cursor: pointer; transition: fill var(--dur-3) var(--ease-out); }
+.chart-svg .waffle-cell--on  { fill: var(--bg-sunken); }
+.chart-svg .waffle-cell--off { fill: var(--accent); }
+.chart-svg .wf-bar-label { font-family: var(--font-ui); font-size: 11px; font-weight: 600; fill: var(--ink-soft); }
+.chart-svg .wf-bar-2019 { fill: var(--ink-fainter); }
+.chart-svg .wf-bar-2025 { fill: var(--accent); }
+.chart-svg .wf-bar-v2019 { font-family: var(--font-mono); font-size: 9.5px; fill: var(--ink-faint); font-variant-numeric: tabular-nums; }
+.chart-svg .wf-bar-v2025 {
+  font-family: var(--font-mono); font-size: 11.5px; font-weight: 700; fill: var(--accent); font-variant-numeric: tabular-nums;
+  paint-order: stroke; stroke: var(--bg); stroke-width: 3px; stroke-linejoin: round;
+}
+.scroller__chart[data-chart-mount="waffle"] .chart-controls { padding: 0; gap: var(--space-2); line-height: 1; }
+#chart-waffle-controls .waffle-ctrl {
+  display: inline-flex; gap: var(--space-2); align-items: center;
+  font-family: var(--font-body); font-size: 11px; color: var(--ink-soft);
+}
+#chart-waffle-controls select {
+  font-family: var(--font-body); font-size: 11px; padding: 2px 6px;
+  border: 1px solid var(--rule); background: var(--bg-elev); color: var(--ink); border-radius: 3px;
+}
+
+/* ===== CH7 · Housing (respin, NEW) — HPI vs HICP ===== */
+.scroller__chart[data-chart-mount="housing"] { padding-block: 0; gap: 2px; }
+.scroller__chart[data-chart-mount="housing"] header { gap: 1px; }
+.scroller__chart[data-chart-mount="housing"] .chart-subtitle { line-height: 1.22; }
+.scroller__chart[data-chart-mount="housing"] .chart-source { line-height: 1.15; margin: 0; }
+.chart-svg .hs-base { stroke: var(--ink-soft); stroke-width: 1; stroke-opacity: 0.5; stroke-dasharray: 3 3; }
+.chart-svg .hs-base-label { font-family: var(--font-mono); font-size: 9.5px; fill: var(--ink-faint); letter-spacing: 0.02em; }
+.chart-svg .hs-end-label { font-family: var(--font-mono); font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; paint-order: stroke; stroke: var(--bg); stroke-width: 3px; stroke-linejoin: round; }
+.chart-svg .hs-end-name { font-family: var(--font-ui); font-size: 10px; fill: var(--ink-soft); }
+.chart-svg .hs-end-dot { stroke: var(--bg); stroke-width: 1.4; }
+.chart-svg .hs-gap { fill: var(--accent); fill-opacity: 0.11; }   /* the housing-excess gap, faint claret (event-band style) */
+.chart-svg .hs-gap-label { font-family: var(--font-display); font-style: italic; font-size: 13px; fill: var(--ink-soft); paint-order: stroke; stroke: var(--bg); stroke-width: 3.5px; stroke-linejoin: round; }
+.chart-svg .hs-dot-title { font-family: var(--font-ui); font-size: 10.5px; font-weight: 600; fill: var(--ink-faint); letter-spacing: 0.13em; }
+.chart-svg .hs-dot-tick { font-family: var(--font-mono); font-size: 9px; fill: var(--ink-faint); font-variant-numeric: tabular-nums; }
+.chart-svg .hs-dot-name { font-family: var(--font-ui); font-size: 11.5px; font-weight: 600; fill: var(--ink); }
+.chart-svg .hs-dot-stem { stroke: var(--rule); stroke-width: 1; }
+.chart-svg .hs-dot { stroke: var(--bg); stroke-width: 1.4; }
+.chart-svg .hs-dot--top { fill: var(--accent); }
+.chart-svg .hs-dot--bot { fill: var(--seq-target); }
+.chart-svg .hs-dot-val { font-family: var(--font-mono); font-size: 11px; font-weight: 700; fill: var(--ink); font-variant-numeric: tabular-nums; paint-order: stroke; stroke: var(--bg); stroke-width: 2.5px; stroke-linejoin: round; }
+.chart-svg .hs-dot-sep { font-family: var(--font-ui); font-size: 10px; fill: var(--ink-fainter); letter-spacing: 0.04em; }
+
+/* ===== CH8 · RaceChart (respin, NEW) — pay vs prices ===== */
+.scroller__chart[data-chart-mount="race"] { padding-block: 0; gap: 0; }
+.scroller__chart[data-chart-mount="race"] header { gap: 1px; }
+.scroller__chart[data-chart-mount="race"] .chart-subtitle { line-height: 1.15; }
+.scroller__chart[data-chart-mount="race"] .chart-source { font-size: 10.5px; line-height: 1.1; margin: 0; letter-spacing: 0.03em; }
+.chart-svg .rc-base { stroke: var(--ink-soft); stroke-width: 1; stroke-opacity: 0.5; stroke-dasharray: 3 3; }
+.chart-svg .rc-base-label { font-family: var(--font-mono); font-size: 9.5px; fill: var(--ink-faint); letter-spacing: 0.02em; }
+.chart-svg .rc-gap-jade { fill: var(--cat-wages); fill-opacity: 0.14; }
+.chart-svg .rc-gap-claret { fill: var(--accent); fill-opacity: 0.14; }
+.chart-svg .rc-end-dot { stroke: var(--bg); stroke-width: 1.4; }
+.chart-svg .rc-end-name { font-family: var(--font-mono); font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; paint-order: stroke; stroke: var(--bg); stroke-width: 3px; stroke-linejoin: round; }
+.chart-svg .rc-beat-line { stroke: var(--ink); stroke-opacity: 0.35; stroke-dasharray: 4 3; }
+
+/* ===== CH8b · DivergingBar (respin re-copy) — panel-fill trim for the kept chart ===== */
+.scroller__chart[data-chart-mount="divergingBar"] { padding-block: 0; gap: 0; }
+.scroller__chart[data-chart-mount="divergingBar"] header { gap: 1px; }
+.scroller__chart[data-chart-mount="divergingBar"] .chart-subtitle { line-height: 1.18; }
+.scroller__chart[data-chart-mount="divergingBar"] .chart-source { font-size: 10.5px; line-height: 1.1; margin: 0; letter-spacing: 0.03em; }
+
+/* ===== CH9 · ScoreMap (respin, NEW) — two-tone real-wage map ===== */
+.scroller__chart[data-chart-mount="scoreMap"] { padding-block: 0; gap: 2px; }
+.scroller__chart[data-chart-mount="scoreMap"] header { gap: 1px; }
+.scroller__chart[data-chart-mount="scoreMap"] .chart-subtitle { line-height: 1.22; }
+.scroller__chart[data-chart-mount="scoreMap"] .chart-source { line-height: 1.15; margin: 0; }
+.scroller__chart[data-chart-mount="scoreMap"] .chart-body > svg.chart-svg { block-size: 100%; min-block-size: 0; max-block-size: none; }
+.chart-svg .sc-country { stroke: var(--bg); stroke-width: 0.6; transition: fill 500ms var(--ease-out); }
+.chart-svg .sc-country.sc-non-eu { fill: color-mix(in srgb, var(--ink-faint) 12%, transparent); opacity: 0.3; }
+.chart-svg .sc-country:not(.sc-non-eu):hover { stroke: var(--ink); stroke-width: 1.4; cursor: default; }
+.chart-svg .sc-legend-text { font-family: var(--font-ui); font-size: 10.5px; fill: var(--ink-soft); }
+
+/* ===== CH9b · BoxPlot (respin re-copy) — panel-fill trim for the kept chart ===== */
+.scroller__chart[data-chart-mount="boxplot"] { padding-block: 0; gap: 0; }
+.scroller__chart[data-chart-mount="boxplot"] header { gap: 1px; }
+.scroller__chart[data-chart-mount="boxplot"] .chart-subtitle { line-height: 1.18; }
+.scroller__chart[data-chart-mount="boxplot"] .chart-source { font-size: 10.5px; line-height: 1.1; margin: 0; letter-spacing: 0.03em; }
+
+/* ===== [Amendment §C.3] compare-chips + zoom-preset controls (annotatedLine / race / housing) ===== */
+.chart-controls .ac-add { display: inline-flex; align-items: center; gap: var(--space-2); }
+.chart-controls .ac-add-label { font-family: var(--font-ui); font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-faint); }
+.chart-controls .ac-select {
+  font-family: var(--font-ui); font-size: 12px; text-transform: none; letter-spacing: 0; color: var(--ink);
+  background: var(--bg-elev); border: 1px solid var(--rule); border-radius: var(--radius-1); padding: 3px 6px; cursor: pointer;
+}
+.chart-controls .ac-select:disabled { opacity: 0.5; cursor: not-allowed; }
+.chart-controls .ac-chips { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.chart-controls .ac-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-family: var(--font-ui); font-size: 11.5px; text-transform: none; letter-spacing: 0;
+  color: var(--ink); background: var(--bg-sunken); border-radius: 999px; padding: 2px 4px 2px 10px;
+}
+.chart-controls .ac-chip-x {
+  display: inline-grid; place-items: center; inline-size: 16px; block-size: 16px;
+  border: 0; border-radius: 50%; background: none; color: var(--ink-soft); cursor: pointer; font-size: 14px; line-height: 1;
+}
+.chart-controls .ac-chip-x:hover { background: var(--accent); color: var(--bg); }
+.chart-controls .ac-reset {
+  font-family: var(--font-ui); font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--link); background: none; border: 0; cursor: pointer; padding: 2px 4px;
+}
+.chart-controls .ac-zoom { display: inline-flex; margin-inline-start: auto; border: 1px solid var(--rule); border-radius: var(--radius-1); overflow: hidden; }
+.chart-controls .ac-zoom-btn {
+  font-family: var(--font-ui); font-size: 11px; letter-spacing: 0.02em; text-transform: none;
+  color: var(--ink-soft); background: var(--bg-elev); border: 0; cursor: pointer; padding: 3px 9px;
+}
+.chart-controls .ac-zoom-btn + .ac-zoom-btn { border-inline-start: 1px solid var(--rule); }
+.chart-controls .ac-zoom-btn.is-on { background: var(--accent); color: var(--bg); }
+.chart-controls .ac-zoom-btn:focus-visible,
+.chart-controls .ac-chip-x:focus-visible,
+.chart-controls .ac-reset:focus-visible,
+.chart-controls .ac-select:focus-visible { outline: 2px solid var(--link); outline-offset: 1px; }
+.chart-svg .anno-extra-label,
+.chart-svg .race-extra-label,
+.chart-svg .hz-extra-label { font-family: var(--font-mono); font-size: 11px; font-weight: 600; }
+
+/* ===== [AMENDMENT-2 §C] InfoPop — clickable-label popover (singleton) ===== */
+.infopop {
+  position: fixed; z-index: 60; max-inline-size: 240px;
+  background: var(--bg-elev); color: var(--ink);
+  border: 1px solid var(--rule); border-radius: var(--radius-2);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
+  padding: 12px 32px 12px 14px;
+  opacity: 0; transform: translateY(6px);
+  transition: opacity var(--dur-3) var(--ease-out), transform var(--dur-3) var(--ease-out);
+}
+.infopop.is-in { opacity: 1; transform: none; }
+.infopop[hidden] { display: none; }
+.infopop__text { font-family: var(--font-body); font-size: 13.5px; line-height: 1.5; color: var(--ink); margin: 0; }
+.infopop__close {
+  position: absolute; inset-block-start: 5px; inset-inline-end: 5px;
+  inline-size: 24px; block-size: 24px; display: grid; place-items: center;
+  border: 0; border-radius: 50%; background: none; color: var(--ink-soft); cursor: pointer; font-size: 17px; line-height: 1;
+}
+.infopop__close:hover { background: var(--bg-sunken); color: var(--ink); }
+/* clickable SVG labels: cursor help + dotted underline in the label colour + focus ring.
+   [AMENDMENT-3 §5.1 real-click fix] SVG text defaults to `pointer-events: visiblePainted` —
+   only the glyph INK is a hit target, not the reported bounding box. Short/sparse labels
+   (e.g. "COVID LOCKDOWNS") have real gaps between letters where a real click misses every
+   glyph and falls through to whatever's underneath. `bounding-box` makes the whole reported
+   box clickable, matching what a user visually aims at. */
+.chart-svg .infopop-trigger { text-decoration: underline dotted var(--ipu, currentColor); text-decoration-thickness: 1px; text-underline-offset: 2px; pointer-events: bounding-box; }
+.chart-svg .infopop-trigger:focus-visible { outline: 2px solid var(--link); outline-offset: 1px; }
+
+/* ===== [AMENDMENT-2 §B.5/§D.3] band labels inside bands + brush overview strip ===== */
+.chart-svg .anno-band-label { font-family: var(--font-ui); font-size: 10.5px; letter-spacing: 0.12em; fill: var(--ink-soft); }
+.chart-svg .anno-ref-label { font-family: var(--font-ui); font-size: 10.5px; letter-spacing: 0.06em; }
+.chart-svg .anno-ov-line { pointer-events: none; }
+.chart-svg .anno-brush .selection { fill: var(--accent); fill-opacity: 0.12; stroke: var(--accent); stroke-opacity: 0.55; shape-rendering: crispEdges; }
+.chart-svg .anno-brush .handle { fill: var(--accent); fill-opacity: 0.45; }
+.chart-svg .anno-brush .overlay { cursor: crosshair; }
+
+/* §B.9 chip × optically centered, hit target ≥ 20px */
+.chart-controls .ac-chip-x { inline-size: 20px; block-size: 20px; padding: 0; font-size: 15px; }
+
+/* ===== [AMENDMENT-2 §D.3] label typography unification (all charts) =====
+   band/reference labels → --font-ui 10.5px ls 0.12em caps (semantic colour kept);
+   value tags → --font-mono 11px. Stamp + axis keep their own patterns. */
+.chart-svg .anno-band-label, .chart-svg .anno-ref-label,
+.chart-svg .rl-ref-label, .chart-svg .rl-baseline-label,
+.chart-svg .rc-base-label, .chart-svg .hs-base-label {
+  font-family: var(--font-ui); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase;
+}
+.chart-svg .sm-end-tag, .chart-svg .rc-end-name,
+.chart-svg .hs-end-label, .chart-svg .rl-end-label {
+  font-family: var(--font-mono); font-size: 11px;
 }
 
 /* Chart data-load error fallback (replaces the inline style= in main.js + ScrollController). */
@@ -1127,6 +1469,15 @@
 .scroller__chart .choro-header {
   max-inline-size: 100%;
 }
+/* Legend slot in the choropleth panel-foot: give it a bounded, real width so the
+   absolutely-positioned gradient bar + tick track resolve to a finite span. Without
+   this the slot is a space-between flex item that shrinks to its (zero-intrinsic,
+   absolutely-positioned) content and collapses to 0px — fanning every tick label out
+   from one point and spilling the "< 0 %" label past the viewport at ≤768 (A2-F6). */
+.choro-legend-slot {
+  flex: 0 0 auto;
+  inline-size: min(220px, 42vw);
+}
 .choro-legend-html {
   display: flex;
   flex-direction: column;
@@ -1239,12 +1590,11 @@
   stroke-linejoin: round;
   pointer-events: none;
 }
-.chart-svg .anno-ref-label {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  fill: var(--seq-target);
-  letter-spacing: 0.04em;
-}
+/* [A2 audit] The stale `.anno-ref-label` rule (font-mono 10px seq-target) used to live
+   here and — being later in the file at equal specificity — silently DEFEATED the §D.3
+   unify rule above (line ~831), so CH1's "ECB target 2%" label rendered mono/blue while
+   rateLevel's identical label was correctly font-ui/ink-soft. Removed so §D.3 governs;
+   the label now inherits ink-soft from `.chart-svg text`, matching rateLevel. */
 /* [R2 elevate] Peak callout — the chapter's headline number. Big Fraunces italic
    (the "signature look": opsz 144, italic, light weight), terracotta, with a thin
    leader line to the exact peak dot and a small uppercase eyebrow. This is the

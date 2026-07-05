@@ -30,6 +30,18 @@
   .scroller__chart h3 { font-size: var(--fs-400); }
   .scroller__chart .chart-controls { font-size: var(--fs-100); }
 
+  /* [A2-F6] The §A.5 panel-foot is one nowrap flex line (source LEFT, compare-chips +
+     zoom/brush presets RIGHT). That row fits desktop + 768, but the presets (race
+     controls ~496px) leak past the viewport on phone. Let the foot and its controls
+     wrap so the preset cluster drops to its own line, and drop the ac-zoom auto-margin
+     so it flows inline instead of being pinned right on a wrapped line. */
+  .chapter--a2 .panel-foot { flex-wrap: wrap; }
+  /* flex-basis:100% forces the controls onto their own full-width row below the source;
+     without it the A2 `flex:0 0 auto` sizes the block to its content max (~479px on race:
+     add-country 255 + zoom 224) so its internal flex-wrap never engages and it overflows. */
+  .chapter--a2 .panel-foot .chart-controls { flex-wrap: wrap; justify-content: flex-start; flex: 1 1 100%; }
+  .chapter--a2 .panel-foot .ac-zoom { margin-inline-start: 0; }
+
   /* Heatmap → bar morph: on small screens, sparklines + event ticks would crowd. */
   .chart-svg .spark, .chart-svg .spark-event-tick { display: none; }
   .chart-svg .flag-glyph { width: 11px; height: 7px; }
@@ -69,6 +81,17 @@
      Pattern matches the chart 1 + 2 mobile passes: kicker smaller, sub smaller,
      axis labels tighter, legend caps muted. */
 
+  /* Chart 3b — Choropleth: the shared 44px mobile year kicker (y=56) collided with its
+     "EU avg · x%" sub-line (y=76) on phone — shrink it so the two clear. */
+  #chart-choropleth svg .year-kicker { font-size: 33px; }
+  #chart-choropleth svg .year-kicker-sub { font-size: 11px; }
+
+  /* Chart 5 — RateLevel: the ECB-2% label can't clear the rate line on the narrow phone top panel
+     (text-vs-marks). Drop it — the dashed 2% line + step copy carry it; desktop keeps it (§C.1, clear).
+     The 129.7 end label runs off the narrow phone right margin — drop it too; the kicker shows 129.7. */
+  #chart-rateLevel svg .rl-ref-label,
+  #chart-rateLevel svg .rl-end-label { display: none; }
+
   /* Chart 3 — AnnotatedLine */
   #chart-annotatedLine + * .year-kicker,
   #chart-annotatedLine svg .year-kicker { font-size: 32px; }
@@ -90,6 +113,13 @@
   /* [R5·dual] Phone: drop the rotated right-axis caption (the €100/€90/€80 ticks + the "Your €100 · €77"
      end label already mark the value axis); keeps the narrow 390px right edge from crowding. */
   #chart-annotatedLine svg .anno-yr-cap { display: none; }
+  /* [§B/§D.2 phone] The 390px plot can't hold these annotations off the line (text-vs-marks). Hide the
+     secondary ones — the step dock carries the words and the peak number stays as the single callout;
+     desktop keeps them all, collision-free per §B. */
+  #chart-annotatedLine svg .anno-ref-label { display: none; }
+  #chart-annotatedLine svg .anno-tail-label,
+  #chart-annotatedLine svg .anno-tail-leader { display: none; }
+  #chart-annotatedLine svg .stamp-sentence { display: none; }
 
   /* Chart 7 — Heatmap. Compact mode (JS, width < 560) swaps to 2-letter ISO
      row codes + short rotated headers so the 8×27 matrix stays legible on
@@ -256,6 +286,37 @@
 @media (max-width: 480px) {
   .scroller__chart { block-size: 56dvh; }
   .scroller__text { padding-block-start: 58dvh; }
+}
+
+/* ============================================================
+   [Amendment §A] Layout v2 on the single-column mobile overlay.
+   The desktop rail lives in the left column, which mobile overlays ON the
+   sticky chart — so the rail + persistent subtitle would float over the chart.
+   Hide both here (amendment §A.4 says hide the rail on narrow screens; the mobile
+   step-dock already carries persistent step context). The overlay clearance that
+   used to sit on .scroller__text now rides on .scroller__steps (steps moved into
+   .scroller__flow > .scroller__steps in v2). NOTE: hidden at ≤1024, not ≤860 as
+   the amendment literal says, because THIS codebase's single-column overlay
+   starts at 1024 — the rail must be gone wherever the two-column layout is (LOG F1).
+   ============================================================ */
+@media (max-width: 1024px) {
+  .chapter--v2 .scroller__text { display: block; }
+  .chapter--v2 .step-rail { display: none; }
+  .chapter--v2 .chapter-subtitle { display: none; }
+  .chapter--v2 .scroller__flow { padding-block: 0; }
+  .chapter--v2 .scroller__steps {
+    padding-block-start: 62dvh;
+    padding-block-end: 44dvh;
+    gap: 60dvh;
+  }
+  .chapter--v2 .scroller__chart .chart-body { margin-block: 8px 8px; }
+  /* Choropleth: let the near-full-bleed map fill the short mobile panel (its desktop 16/22 margin
+     shrinks the mobile map enough that the in-SVG year kicker + EU-avg legend collide). */
+  .chapter--v2 .scroller__chart[data-chart-mount="choropleth"] .chart-body { margin-block: 2px 2px; }
+}
+@media (max-width: 480px) {
+  .chapter--v2 .scroller__steps { padding-block-start: 58dvh; gap: 65dvh; }
+  .chapter--v2 > .chapter-title { font-size: var(--fs-400); }
 }
 
 /* ============================================================

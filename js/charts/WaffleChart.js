@@ -1,449 +1,264 @@
 /* ============================================================
-   WaffleChart — 10×10 grid: how much of a 2019 €100 still buys today.
-   Each cell = €1 of January-2019 purchasing power. Solid (terracotta,
-   severity-tinted) cells survived; ghosted/hatched cells were eroded by
-   inflation. The hero is the big italic Fraunces survivor number; the
-   accent loss-delta + one-line stamp name what's gone.
-
-   Depth:
-     1. computation — index ratio (2019-01 / latest) × 100, per (geo, coicop)
-     2. interaction — country + category picker; cell hover/tap teaching tooltip
-     3. annotation — Fraunces kicker + accent "−€N gone" + stamp sentence + legend
-     4. encoding   — waffle (part-to-whole), severity-tinted survivors, eroded ghosts
-     5. motion     — first reveal erodes €100 → €N top-down; cycles MORPH the
-                     waterline (cells flip + pulse) instead of rebuilding the grid
-
-   Award-pass [R2-elevate]: split render() into a persistent scaffold +
-   _update() so country/category changes morph the same cells (no blotchy
-   full-grid re-fade); animated kicker; severity tint; eroded "ghost" cells;
-   live hover/tap tooltip; tighter editorial rhythm. — see docs round-2.
+   WaffleChart — CH6 "The kitchen table" (REBUILD, brief §6 CH6).
+   Two halves in one body:
+     LEFT  — the 100-cell waffle: €1 of 2019 purchasing power; eroded cells (claret→ghost).
+             EU-27 = 77 solid / 23 eroded; Hungary = 61.
+     RIGHT — the hero's six basket lines as paired bars: the 2019 base (€30/22/15/14/10/9)
+             vs the same line at Dec-2025, priced for the SELECTED country (matches the
+             receipt to the cent for EU-27).
+   A country <select> re-animates both halves in one transition (never re-mounts).
+   Key stays `waffle` in the factory (brief allows).
    ============================================================ */
 
 import { BaseChart } from "./BaseChart.js";
-import { watchChapterProgress } from "../modules/ChartMotion.js";
+import { watchChapterProgress, smooth } from "../modules/ChartMotion.js";
 
-const CYCLE_COUNTRY  = ["DE", "EE", "HU"];          // Germany → Estonia → Hungary (worst)
-const CYCLE_CATEGORY = ["SERV", "CP01", "CP045"];   // services (best) → food → electricity & gas (worst)
+const BASKET = [
+  { cat: "CP04",  label: "Rent & water",       base: 30 },
+  { cat: "CP01",  label: "Groceries",          base: 22 },
+  { cat: "SERV",  label: "Services",           base: 15 },
+  { cat: "CP07",  label: "Petrol & transport", base: 14 },
+  { cat: "CP045", label: "Electricity & gas",  base: 10 },
+  { cat: "CP11",  label: "Café & restaurants", base: 9  },
+];
+const START = "2019-01";
 
 export class WaffleChart extends BaseChart {
   constructor(sel, data, ctx) {
-    super(sel, data, ctx, { margin: { top: 18, right: 16, bottom: 18, left: 16 }, aspect: 1.0 });
-    this.country = "EU27_2020";
-    this.category = "CP00";
+    super(sel, data, ctx, { margin: { top: 56, right: 20, bottom: 24, left: 20 }, aspect: 1.3 });
+    this.geo = "EU27_2020";
     this.controlsEl = document.getElementById("chart-waffle-controls");
-    this._firstReveal = true;   // the very first paint erodes €100 → €N
-    this._lastFill = null;      // previous survivor count (drives morph direction)
-    // [R3-motion] scroll-driven phase state replaces the old wall-clock setInterval cycles.
-    // The spread (DE→EE→HU, then SERV→CP01→CP045) now advances with the READER'S scroll,
-    // not a 2.1 s timer — so the same scroll-y always shows the same state (no hysteresis),
-    // reverse-scroll walks it back, and reduced-motion users get no autonomous motion.
-    this._phaseSet = "eu";      // "eu" | "country" | "category" — which spread the active step drives
-    this._activeStepEl = null;  // the live <div.scroller__step> for the active cycling step
-    this._userOverride = false; // a manual control pick suspends scroll-phase until the next step enter
-    this._appliedKey = null;    // last (country|category) applied — guards _update against re-fire
+    this._erodeP = 0;
   }
 
-  // Fill the sticky panel: square waffle + a hero block above it. We read the
-  // available height so the block doesn't float in a tall empty panel.
   size() {
-    if (!this.container) return { width: 600, height: 600 };
-    const w = this.container.clientWidth || 600;
-    const hAvail = this.container.clientHeight || 0;
-    const hMin = Math.round(w / this.opts.aspect);
-    return { width: w, height: Math.max(440, hAvail || hMin) };
+    if (!this.container) return { width: 720, height: 560 };
+    const w = this.container.clientWidth || 720;
+    const h = this.container.clientHeight || Math.round(w / this.opts.aspect);
+    return { width: w, height: Math.max(360, h) };
   }
 
-  // ---- data ----------------------------------------------------------
-  _value(geo, cat) {
-    const series = this.data.hicpIndex[geo]?.[cat];
+  // carry-forward guard (last known value at or before t) — matches ReceiptHero.
+  _at(series, t) {
     if (!series) return null;
-    const keys = Object.keys(series).sort();
-    const p0 = series["2019-01"];
-    const p1 = series[keys.at(-1)];
-    if (p0 == null || !p1) return null;   // !p1 also rejects 0 (avoids Infinity euro)
-    return { euro: Math.max(0, (p0 / p1) * 100), last: keys.at(-1) };
+    if (series[t] != null) return series[t];
+    const ks = Object.keys(series).filter(k => k <= t).sort();
+    return ks.length ? series[ks.at(-1)] : null;
+  }
+  _lastMonth(geo) {
+    const s = this.data.hicpIndex[geo]?.CP00 || {};
+    const ks = Object.keys(s).filter(k => k <= "2025-12").sort();
+    return ks.at(-1) || "2025-12";
+  }
+  // €100 CP00 purchasing power at end (77.1 EU, 61.1 HU).
+  _power(geo) {
+    const s = this.data.hicpIndex[geo]?.CP00; if (!s) return null;
+    const b = this._at(s, START), e = this._at(s, this._lastMonth(geo));
+    return (b && e) ? 100 * b / e : null;
+  }
+  // a basket line's Dec-2025 nominal value for geo.
+  _lineVal(geo, cat, base) {
+    const s = this.data.hicpIndex[geo]?.[cat]; if (!s) return null;
+    const b = this._at(s, START), e = this._at(s, this._lastMonth(geo));
+    return (b && e) ? base * e / b : null;
   }
 
   render() {
     super.render();
     this.container.innerHTML = "";
+    const isPhone = this.size().width < 620;
+    this._isPhone = isPhone;
+    this.opts.margin = isPhone ? { top: 48, right: 14, bottom: 20, left: 14 } : { top: 56, right: 20, bottom: 24, left: 20 };
     const { width, height } = this.ensureSvg();
     this.W = width; this.H = height;
-    const { width: iw } = this.innerSize();
-    const isPhone = width < 460;
+    this.svg.attr("aria-label", "The €100 monthly basket of 2019, priced for one country: on the left, its purchasing power today (77 of 100 euros for the EU-27); on the right, the six spending lines and how much each costs now.");
+    const M = this.opts.margin;
+    const iw = width - M.left - M.right, ih = height - M.top - M.bottom;
+    this._iw = iw; this._ih = ih;
+    const contentY = M.top;
 
-    // ---- geometry: hero block (top) + square waffle (below) ----------
-    const cols = 10, rows = 10, N = 100;
-    const heroH    = isPhone ? 96 : 118;   // kicker + delta + stamp sentence
-    const legendH  = 26;                    // inline "kept / lost" key
-    const captionH = this.country !== "EU27_2020" ? 42 : 24;
-    const innerH   = height - this.opts.margin.top - this.opts.margin.bottom;
-    // Grid is square, sized to the smaller of width and the height left after text rows.
-    const gridMax  = Math.min(iw, innerH - heroH - legendH - captionH);
-    const size = Math.max(10, gridMax / cols * 0.88);
-    const gap  = Math.max(3, size * 0.12);
-    const grid = cols * size + (cols - 1) * gap;
-    const startX = (iw - grid) / 2;
+    // ── layout: LEFT waffle | RIGHT bars ──────────────────────────
+    // phone stacks: waffle on top, bars below.
+    const gap = isPhone ? 12 : 34;
+    const leftW = isPhone ? iw : Math.min(iw * 0.42, ih);
+    const rightX = isPhone ? 0 : leftW + gap;
+    const rightW = isPhone ? iw : iw - leftW - gap;
+    // waffle geometry
+    const cols = 10, rows = 10;
+    const waffleSide = isPhone ? Math.min(leftW, ih * 0.42) : Math.min(leftW, ih);
+    const cellPitch = waffleSide / cols;
+    const cellGap = Math.max(2, cellPitch * 0.12);
+    const cellSize = cellPitch - cellGap;
+    const waffleX = M.left + (isPhone ? (iw - waffleSide) / 2 : 0);
+    const waffleY = contentY + (isPhone ? 0 : Math.max(0, (ih - waffleSide) / 2));
+    this._waffle = { cols, rows, cellPitch, cellSize, x: waffleX, y: waffleY };
+    // bars geometry
+    const barsX = M.left + (isPhone ? 0 : rightX);
+    const barsY = isPhone ? contentY + waffleSide + 26 : contentY + 8;
+    const barsW = isPhone ? iw : rightW;
+    const barsH = isPhone ? ih - waffleSide - 40 : ih - 16;
+    this._bars = { x: barsX, y: barsY, w: barsW, h: barsH };
 
-    // Vertically pack the whole block, then nudge a touch above centre so the
-    // hero number sits where the eye lands first.
-    const blockH = heroH + legendH + grid + captionH;
-    const top0 = Math.max(0, (innerH - blockH) / 2 - innerH * 0.02);
-    const heroY    = top0;
-    const legendY  = heroY + heroH;
-    const gridY    = legendY + legendH;
-    const captionY = gridY + grid;
+    // ── kicker (purchasing power €77 / €61) ───────────────────────
+    // kicker = the purchasing power (€77 EU / €61 HU); country comes from the step card + subtitle.
+    this._kickNum = this.svg.append("text").attr("class", "kick-num").attr("x", M.left).attr("y", isPhone ? 38 : 46).style("font-size", isPhone ? "30px" : "42px").text("€77");
+    // right-side title over the bars
+    this._barsTitle = this.svg.append("text").attr("class", "legend-title").attr("x", barsX).attr("y", (isPhone ? barsY - 8 : contentY - 2)).text("WHERE THE €100 GOES — 2019 → NOW");
 
-    // stash geometry for _update + hover
-    this._geo = { cols, rows, N, size, gap, grid, startX, gridY, isPhone, heroY, gridCenterX: startX + grid / 2 };
-
-    // ---- defs: ghost hatch for eroded cells (chart-scoped, rebuilt each render) ----
-    const defs = this.svg.append("defs");
-    const hatch = defs.append("pattern")
-      .attr("id", "waffle-erode-hatch")
-      .attr("patternUnits", "userSpaceOnUse")
-      .attr("width", 5).attr("height", 5)
-      .attr("patternTransform", "rotate(45)");
-    hatch.append("rect").attr("class", "waffle-hatch-bg").attr("width", 5).attr("height", 5);
-    hatch.append("line").attr("class", "waffle-hatch-line")
-      .attr("x1", 0).attr("y1", 0).attr("x2", 0).attr("y2", 5);
-    // [R5·P12] "Sphere treatment" for survivor cells (PART 8.8) — a per-cell radial gradient so
-    // each surviving euro reads as a lit, slightly-domed tile. Stays a SQUARE (DESIGN-REVIEW #16:
-    // the coin trick belongs to the hero; this is the analytical register). Resolved to HEX
-    // (d3.rgb brighter/darker) so no oklch()/color-mix reaches d3 (D15-safe).
-    const accHex = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim();
-    const sgrad = defs.append("radialGradient").attr("id", "waffle-survivor-grad")
-      .attr("cx", "38%").attr("cy", "34%").attr("r", "72%");
-    sgrad.append("stop").attr("offset", "0%").attr("stop-color", d3.rgb(accHex).brighter(0.6));
-    sgrad.append("stop").attr("offset", "62%").attr("stop-color", accHex);
-    sgrad.append("stop").attr("offset", "100%").attr("stop-color", d3.rgb(accHex).darker(0.7));
-
-    // ---- hero block: kicker + accent loss-delta + stamp sentence -----
-    this.hero = this.g.append("g").attr("class", "waffle-hero").attr("pointer-events", "none");
-    this.kickerNum = this.hero.append("text").attr("class", "waffle-kicker year-kicker")
-      .attr("x", startX).attr("y", heroY + (isPhone ? 44 : 54));
-    this.kickerDelta = this.hero.append("text").attr("class", "waffle-delta")
-      .attr("x", startX).attr("y", heroY + (isPhone ? 70 : 84));
-    this.kickerSentence = this.hero.append("text").attr("class", "waffle-stamp-sentence")
-      .attr("x", startX).attr("y", heroY + (isPhone ? 90 : 108));
-
-    // top-right unit label (legend-title system, shared with sibling charts)
-    this.hero.append("text").attr("class", "legend-title")
-      .attr("x", startX + grid).attr("y", heroY + 12).attr("text-anchor", "end")
-      .text("OF €100 IN JAN 2019");
-
-    // ---- inline legend (kept / lost) — persistent, text updated in _update ----
-    this.legendG = this.g.append("g").attr("class", "waffle-legend").attr("pointer-events", "none");
-    const sw = 11;
-    this.legendKept = { g: this.legendG.append("g") };
-    this.legendKept.g.append("rect").attr("class", "waffle-legend-swatch waffle-legend-swatch--on")
-      .attr("x", startX).attr("y", legendY).attr("width", sw).attr("height", sw).attr("rx", 2);
-    this.legendKept.t = this.legendKept.g.append("text").attr("class", "waffle-legend-text")
-      .attr("x", startX + sw + 6).attr("y", legendY + sw - 1);
-    this.legendLost = { g: this.legendG.append("g") };
-    this.legendLost.g.append("rect").attr("class", "waffle-legend-swatch waffle-legend-swatch--off")
-      .attr("x", startX + grid * 0.52).attr("y", legendY).attr("width", sw).attr("height", sw).attr("rx", 2)
-      .attr("fill", "url(#waffle-erode-hatch)");   // legend matches the eroded ghost
-    this.legendLost.t = this.legendLost.g.append("text").attr("class", "waffle-legend-text")
-      .attr("x", startX + grid * 0.52 + sw + 6).attr("y", legendY + sw - 1);
-
-    // ---- cells (persistent rects, bottom-up idx) ---------------------
-    const cells = d3.range(N).map(i => {
-      const col = i % cols, row = Math.floor(i / cols);
-      return { i, col, row, idx: (rows - 1 - row) * cols + col };
-    });
-    this.cellSel = this.g.selectAll("rect.waffle-cell").data(cells, d => d.i).join("rect")
+    // ── waffle cells (persistent) — eroded = claret (the loss, brief §6), survived = muted ──
+    const cellData = d3.range(100).map(i => { const col = i % cols, row = Math.floor(i / cols); return { i, col, row, idx: (rows - 1 - row) * cols + col }; });
+    const wf = this._waffle;
+    this._cells = this.svg.selectAll("rect.waffle-cell").data(cellData, d => d.i).join("rect")
       .attr("class", "waffle-cell")
-      .attr("x", d => startX + d.col * (size + gap))
-      .attr("y", d => gridY + d.row * (size + gap))
-      .attr("width", size).attr("height", size).attr("rx", 2)
-      .style("transform-box", "fill-box").style("transform-origin", "center");
+      .attr("x", d => wf.x + d.col * wf.cellPitch).attr("y", d => wf.y + d.row * wf.cellPitch)
+      .attr("width", wf.cellSize).attr("height", wf.cellSize).attr("rx", 2)
+      .on("mouseenter", (e) => this._cellTip(e))
+      .on("mousemove", (e) => this.ctx.tooltip.move(e.clientX, e.clientY))
+      .on("mouseleave", () => this.ctx.tooltip.hide())
+      .on("pointerdown", (e) => { if (e.pointerType !== "mouse") this._cellTip(e); });
 
-    // hover/tap teaching tooltip (round-1 dead state → live)
-    this._wireCellTooltip();
+    // ── basket bars (persistent groups) ───────────────────────────
+    this._buildBars();
 
-    // ---- caption + EU compare (persistent, text updated in _update) ----
-    this.captionT = this.g.append("text").attr("class", "waffle-caption")
-      .attr("x", iw / 2).attr("y", captionY + 18).attr("text-anchor", "middle");
-    this.compareT = this.g.append("text").attr("class", "waffle-compare")
-      .attr("x", iw / 2).attr("y", captionY + 38).attr("text-anchor", "middle");
-
-    // first paint
-    this._lastFill = null;
-    this._appliedKey = `${this.country}|${this.category}`;
-    this._update({ firstPaint: true });
+    // country picker
     this._renderControls();
 
-    // [R3-motion] subscribe ONCE to continuous chapter scroll progress. Inside a cycling
-    // step, the reader's scroll position (not a timer) selects the phase. render() can run
-    // again (theme/resize) so tear the old watcher down first — never stack listeners.
-    this._unsub && this._unsub();
-    const chapter = this.container.closest(".chapter");
-    this._unsub = watchChapterProgress(chapter, () => this._syncScrollPhase());
-  }
-
-  // ---- scroll-driven phase: map the active cycling step's own viewport progress
-  //      to a discrete spread phase. Self-calibrating off the live step element, so it
-  //      is immune to chapter-geometry drift and identical every visit to the same scroll-y.
-  _syncScrollPhase(force = false) {
-    if (!this.cellSel || this._userOverride) return;
-    const set = this._phaseSet;
-    if (set !== "country" && set !== "category") return;
-    const el = this._activeStepEl;
-    if (!el) return;
-    // Spread the 3 phases across this step's ACTIVE travel so phase 0 shows the moment the
-    // step takes over (scrollama's 0.55 offset → step top ≈ 0.55·vh) and the last phase is
-    // reached as the step scrolls off the top. Equal-width plateaus → captures land settled,
-    // and the anchor phase (Germany / Services) is never skipped.
-    const r = el.getBoundingClientRect();
-    const vh = innerHeight || 800;
-    const t = Math.max(0, Math.min(0.999, (vh * 0.55 - r.top) / (vh * 0.62)));
-    const phases = set === "country" ? CYCLE_COUNTRY : CYCLE_CATEGORY;
-    const idx = Math.floor(t * phases.length);
-    const next = phases[idx];
-    const axis = set === "country" ? "country" : "category";
-    if (this[axis] !== next || force) {
-      this[axis] = next;
-      this._update();   // _update is idempotency-guarded, so a forced no-change call is cheap
-    }
-  }
-
-  // ---- update: morph cells + tween kicker on (geo/cat) change --------
-  _update({ firstPaint = false } = {}) {
-    if (!this.cellSel) return;
-    // [R3-motion · #A idempotency] If neither country nor category actually changed,
-    // the visual is already correct — re-running would restart the kicker tween and
-    // re-morph settled cells (the blink/replay scrollama re-fires would cause). No-op.
-    const key = `${this.country}|${this.category}`;
-    if (!firstPaint && key === this._appliedKey) { this._syncControls(); return; }
-    this._appliedKey = key;
-    const reduced = this.ctx.motion.reduced;
-    const v = this._value(this.country, this.category);
-    const euro = v ? v.euro : null;
-    const fillN = euro == null ? 0 : Math.round(euro);
-    const lostN = 100 - fillN;
-
-    // palette read at draw time (tokens only). Survivors hold the chart's signature terracotta —
-    // now as the lit radial "sphere treatment" (waffle-survivor-grad); severity is encoded by HOW
-    // MANY cells erode, so the accent stays constant (accent restraint) rather than ramping fills.
-    const css = getComputedStyle(document.documentElement);
-    const onFill = "url(#waffle-survivor-grad)";
-
-    // mark cells on/off against the NEW waterline
-    this.cellSel.each(function (d) { d._on = d.idx < fillN; });
-
-    const prevFill = this._lastFill;
-    const waterline = fillN;   // cells crossing this line animate
-    const sz = this._geo.size;
-
-    const applyOn  = (sel) => sel.attr("class", "waffle-cell waffle-cell--on").style("fill", onFill).attr("fill", onFill);
-    const applyOff = (sel) => sel.attr("class", "waffle-cell waffle-cell--off").style("fill", null).attr("fill", "url(#waffle-erode-hatch)");
-
-    if (firstPaint && this._firstReveal && !reduced) {
-      // Signature reveal: start with ALL €100 standing, then erode the top
-      // (100−fillN) cells top-down so the reader watches purchasing power burn away.
-      this.cellSel.each(function (d) {
-        const el = d3.select(this);
-        applyOn(el).attr("opacity", 0);
-      });
-      // fade the whole standing stack up bottom-first
-      this.cellSel.transition("appear").duration(420).delay(d => (99 - d.idx) * 3).attr("opacity", 1)
-        .on("end", (d, i, nodes) => {
-          if (i !== nodes.length - 1) return;
-          // then erode: eroded cells dissolve from the very top down
-          const eroded = this.cellSel.filter(c => !c._on);
-          eroded.transition("erode").duration(360)
-            .delay(c => (c.idx - fillN) * 26 + 220)
-            .style("fill", css.getPropertyValue("--rule").trim())
-            .on("end", function () { applyOff(d3.select(this)); });
-        });
-    } else if (reduced) {
-      // static correct end-state
-      this.cellSel.each(function (d) {
-        const el = d3.select(this);
-        d._on ? applyOn(el).attr("opacity", 1) : applyOff(el).attr("opacity", 1);
-      });
-    } else if (prevFill == null) {
-      // non-animated first paint fallback (e.g. re-render after resize)
-      this.cellSel.each(function (d) {
-        const el = d3.select(this);
-        d._on ? applyOn(el).attr("opacity", 1) : applyOff(el).attr("opacity", 1);
-      });
+    // ── data + motion ─────────────────────────────────────────────
+    this._erodeP = 0;
+    this._update(true);
+    if (this.ctx.motion.reduced) {
+      this._erodeP = 1; this._applyWaffle(1); this._growBars(1);
     } else {
-      // MORPH: only cells between old & new waterline flip; pulse them so the
-      // change reads as the water rising (recovering) or receding (more lost).
-      const lo = Math.min(prevFill, fillN), hi = Math.max(prevFill, fillN);
-      this.cellSel.each(function (d) {
-        const el = d3.select(this);
-        const flips = d.idx >= lo && d.idx < hi;
-        if (!flips) {
-          el.attr("opacity", 1);   // unchanged cell: leave it be
-          return;
-        }
-        const delay = Math.abs(d.idx - waterline) * 22;
-        el.interrupt();
-        if (d._on) {
-          // becoming a survivor: pop in with the survivor colour
-          applyOn(el);
-          el.attr("opacity", 0.25).style("transform", "scale(0.6)")
-            .transition("flip").delay(delay).duration(360).ease(d3.easeBackOut)
-            .attr("opacity", 1).style("transform", "scale(1)");
-        } else {
-          // being eroded: shrink + cross-fade to ghost hatch
-          el.transition("flip").delay(delay).duration(300)
-            .style("transform", "scale(0.55)").attr("opacity", 0.0)
-            .on("end", function () {
-              applyOff(d3.select(this));
-              d3.select(this).transition("flipback").duration(300)
-                .attr("opacity", 1).style("transform", "scale(1)");
-            });
-        }
-      });
+      if (this._unsub) this._unsub();
+      const chapter = this.container.closest(".chapter");
+      this._unsub = watchChapterProgress(chapter, p => this._onProgress(p));
     }
-
-    // safety net — force final state if transitions don't tick (background tabs)
-    if (this._cellsSafety) clearTimeout(this._cellsSafety);
-    const self = this;
-    this._cellsSafety = setTimeout(() => {
-      self.cellSel.each(function (d) {
-        const s = d3.select(this);
-        if (s.attr("opacity") !== "1" || s.style("transform")) {
-          s.interrupt().attr("opacity", 1).style("transform", null);
-          d._on ? applyOn(s) : applyOff(s);
-        }
-      });
-    }, 1600);
-
-    this._lastFill = fillN;
-    if (firstPaint && this._firstReveal) this._firstReveal = false;
-
-    // ---- hero text (animated kicker) ----
-    const countryDisplay = this.country === "EU27_2020" ? "EU-27 average" : (this.data.countryName(this.country) || this.country);
-    const sub = `${countryDisplay} · ${this.data.categoryLabel(this.category)}`;
-    this.kickerDelta.text(euro == null ? "" : `−€${lostN} gone`);
-    this.kickerSentence.text(sub);
-    this.legendKept.t.text(`${fillN} survive`);
-    this.legendLost.t.text(`${lostN} eroded since 2019`);
-    this.captionT.text(`Jan 2019 → ${v ? v.last : "latest"}`);
-
-    // animate the big number from prev → new (Pudding "kicker animates on change")
-    const target = euro == null ? null : fillN;
-    if (target == null) {
-      this.kickerNum.text("—");
-    } else if (reduced || prevFill == null) {
-      this.kickerNum.text(`€${target}`);
-    } else {
-      if (this._kickerTween) this._kickerTween.cancel();
-      // [R3-motion · #3] match the cell-morph duration (~360 ms) so the big number and the
-      // grid/legend settle together — shrinks the window where the kicker disagrees with
-      // the "N survive" legend during a scroll-triggered phase change.
-      this._kickerTween = this.ctx.motion.tween({
-        from: prevFill, to: target, duration: 380, ease: "outCubic",
-        onTick: val => this.kickerNum.text(`€${Math.round(val)}`)
-      });
-    }
-
-    // EU-27 compare row (only for a specific country)
-    if (this.country !== "EU27_2020") {
-      const euv = this._value("EU27_2020", this.category);
-      this.compareT.text(euv ? `EU-27 average: €${Math.round(euv.euro)}` : "");
-    } else {
-      this.compareT.text("");
-    }
-
-    this._syncControls();
   }
 
-  // ---- hover / tap teaching tooltip ----------------------------------
-  _wireCellTooltip() {
-    const tip = this.ctx.tooltip;
-    if (!tip) return;
-    const self = this;
-    const html = (d) => {
-      const n = d.idx + 1;                       // 1..100 from the floor
-      const survived = d._on;
-      const where = self.country === "EU27_2020" ? "EU-27 avg" : self.data.countryName(self.country);
-      return `
-        <h5>${survived ? "Still buys today" : "Eroded by inflation"}</h5>
-        <div class="row"><span class="key">Euro #${n} of €100</span><span class="val">${survived ? "survives" : "gone"}</span></div>
-        <div class="row"><span class="key">${where} · ${self.data.categoryLabel(self.category)}</span></div>`;
-    };
-    this.cellSel
-      .on("mouseenter.tt", (event, d) => tip.show(html(d), event.clientX, event.clientY))
-      .on("mousemove.tt",  (event)    => tip.move(event.clientX, event.clientY))
-      .on("mouseleave.tt", ()         => tip.hide())
-      // touch parity — a tap delivers the same info as hover
-      .on("pointerdown.tt", (event, d) => {
-        if (event.pointerType === "touch") tip.show(html(d), event.clientX, event.clientY);
-      });
-  }
-
-  // ---- controls ------------------------------------------------------
-  _syncControls() {
-    const c = this.controlsEl;
-    if (!c || c.dataset.wired !== "1") return;
-    const s1 = c.querySelector('[data-w-country]');
-    const s2 = c.querySelector('[data-w-cat]');
-    if (s1 && s1.value !== this.country) s1.value = this.country;
-    if (s2 && s2.value !== this.category) s2.value = this.category;
+  _buildBars() {
+    const { x, y, w, h } = this._bars;
+    const maxVal = 46;   // headroom above rent's ~40.5
+    const xScale = d3.scaleLinear().domain([0, maxVal]).range([0, w - 46]);
+    const yBand = d3.scaleBand().domain(BASKET.map(b => b.cat)).range([0, h]).padding(0.34);
+    this._barX = xScale; this._barY = yBand; this._barX0 = x + 46;
+    const bh = yBand.bandwidth();
+    this._barG = new Map();
+    BASKET.forEach(b => {
+      const g = this.svg.append("g").attr("class", "wf-barrow").attr("data-cat", b.cat)
+        .attr("transform", `translate(${this._barX0},${y + yBand(b.cat)})`)
+        .style("cursor", "default")
+        .on("mouseenter", (e) => this._barTip(e, b))
+        .on("mousemove", (e) => this.ctx.tooltip.move(e.clientX, e.clientY))
+        .on("mouseleave", () => this.ctx.tooltip.hide());
+      // category label
+      g.append("text").attr("class", "wf-bar-label").attr("x", -6).attr("y", bh / 2 - 6).attr("text-anchor", "end").text(b.label);
+      // 2019 base bar (muted, top half) + 2025 bar (claret, bottom half)
+      g.append("rect").attr("class", "wf-bar-2019").attr("x", 0).attr("y", 0).attr("height", bh * 0.42).attr("width", 0).attr("rx", 1.5);
+      g.append("rect").attr("class", "wf-bar-2025").attr("x", 0).attr("y", bh * 0.52).attr("height", bh * 0.42).attr("width", 0).attr("rx", 1.5);
+      g.append("text").attr("class", "wf-bar-v2019").attr("x", 0).attr("y", bh * 0.42 - 3).attr("text-anchor", "start");
+      g.append("text").attr("class", "wf-bar-v2025").attr("x", 0).attr("y", bh * 0.94).attr("text-anchor", "start");
+      // full-row hit area
+      g.insert("rect", ":first-child").attr("class", "wf-bar-hit").attr("x", -160).attr("y", -2).attr("width", w + 160).attr("height", bh + 4).attr("fill", "transparent");
+      this._barG.set(b.cat, g);
+    });
   }
 
   _renderControls() {
-    const c = this.controlsEl;
-    if (!c) return;
-    if (c.dataset.wired === "1") { this._syncControls(); return; }
+    const c = this.controlsEl; if (!c) return;
+    if (c.dataset.wired === "1") { const s = c.querySelector("select"); if (s && s.value !== this.geo) s.value = this.geo; return; }
     c.dataset.wired = "1";
-
-    const allCountries = ["EU27_2020", ...this.data.euCodes()].filter(code =>
-      Object.keys(this.data.hicpIndex[code]?.CP00 || {}).length > 0);
-    const allCats = ["CP00", "CP01", "CP045", "NRG", "SERV"];
-
-    const optCountry = allCountries.map(code => `<option value="${code}" ${code === this.country ? "selected" : ""}>${code === "EU27_2020" ? "EU-27 avg" : this.data.countryName(code)}</option>`).join("");
-    const optCat = allCats.map(cat => `<option value="${cat}" ${cat === this.category ? "selected" : ""}>${this.data.categoryLabel(cat)}</option>`).join("");
-
-    c.innerHTML = `
-      <label class="waffle-ctrl">Country
-        <select data-w-country>${optCountry}</select>
-      </label>
-      <label class="waffle-ctrl">Basket
-        <select data-w-cat>${optCat}</select>
-      </label>
-    `;
-    // A manual pick suspends the scroll-driven phase so the reader's choice sticks until
-    // they scroll into the next step (which re-arms the relevant spread).
-    c.querySelector('[data-w-country]').addEventListener("change", e => { this.country = e.target.value; this._userOverride = true; this._update(); });
-    c.querySelector('[data-w-cat]').addEventListener("change", e => { this.category = e.target.value; this._userOverride = true; this._update(); });
+    const codes = ["EU27_2020", ...this.data.euCodes()].filter(code => BASKET.every(b => (this.data.hicpIndex[code]?.[b.cat]?.[START] != null)) && this.data.hicpIndex[code]?.CP00?.[START] != null);
+    const opt = codes.map(code => `<option value="${code}" ${code === this.geo ? "selected" : ""}>${code === "EU27_2020" ? "EU-27 average" : this.data.countryName(code)}</option>`).join("");
+    c.innerHTML = `<label class="waffle-ctrl">Country&nbsp;<select data-w-geo aria-label="Country">${opt}</select></label>`;
+    c.querySelector("[data-w-geo]").addEventListener("change", e => { this.geo = e.target.value; this._update(false); });
   }
 
-  // [R3-motion] onStep now only ARMS which spread the active step drives; the actual
-  // phase is then selected continuously by _syncScrollPhase off the reader's scroll.
-  // Idempotent: re-entering the same step re-points _activeStepEl and re-applies the
-  // anchor state, but _update no-ops if nothing changed (no blink on scrollama re-fire).
-  // Step 1 cycles Germany → Estonia → Hungary (basket pinned to All-items).
-  // Step 2 cycles services → food → electricity & gas (country pinned to EU-27).
-  onStep(idx, element) {
-    this._userOverride = false;            // entering any step re-arms scroll control
-    this._activeStepEl = element || null;
-    if (idx === 0) {
-      this._phaseSet = "eu";
-      this.country = "EU27_2020"; this.category = "CP00";
-      this._update();
-    } else if (idx === 1) {
-      this._phaseSet = "country";
-      this.category = "CP00";              // basket pinned; country resolved from scroll
-      this._syncScrollPhase(true);         // pick the phase for the current scroll position now
-    } else if (idx === 2) {
-      this._phaseSet = "category";
-      this.country = "EU27_2020";          // country pinned; basket resolved from scroll
-      this._syncScrollPhase(true);
-    }
+  // recompute + animate both halves (one 600ms transition), never remount.
+  _update(immediate) {
+    const power = this._power(this.geo);
+    this._fillN = power == null ? 0 : Math.round(power);
+    this._power$ = power;
+    // waffle: mark cells on/off vs waterline
+    this._cells.each(d => { d._on = d.idx < this._fillN; });
+    this._applyWaffle(this._erodeP);
+    // bars
+    this._lineVals = BASKET.map(b => ({ ...b, v: this._lineVal(this.geo, b.cat, b.base) }));
+    this._growBars(this._barsShown ? 1 : (this.ctx.motion.reduced ? 1 : 0), immediate);
+    // kicker (the purchasing power number, tweened on country change)
+    if (immediate || this.ctx.motion.reduced) this._kickNum.text(power == null ? "—" : `€${this._fillN}`);
+    else this._tweenKicker(this._fillN);
   }
 
-  destroy() {
-    if (this._kickerTween) this._kickerTween.cancel();
-    if (this._cellsSafety) clearTimeout(this._cellsSafety);
-    super.destroy?.();                     // cancels the watchChapterProgress subscription via this._unsub
+  _tweenKicker(to) {
+    const from = this._kickShown ?? to; this._kickShown = to;
+    const num = this._kickNum;
+    d3.select({ v: from }).transition().duration(560).ease(d3.easeCubicInOut).tween("k", function () {
+      const i = d3.interpolateNumber(from, to); return t => num.text(`€${Math.round(i(t))}`);
+    });
   }
 
+  // waffle fill: erodeP 0→1 stages the erosion of the lost cells (top-down), latched. Each cell
+  // flips class as the erosion wave (from the top) reaches it — the stagger IS the erodeP threshold,
+  // so scrolling drives it and reduced-motion (erodeP=1) shows the full loss. --off = claret (loss).
+  _applyWaffle(erodeP) {
+    if (!this._cells) return;
+    const lost = 100 - this._fillN;
+    this._cells.each(function (d) {
+      const el = d3.select(this);
+      if (d._on) { el.classed("waffle-cell--on", true).classed("waffle-cell--off", false); return; }
+      const rank = 99 - d.idx;                 // 0 = topmost eroded target
+      const threshold = lost > 0 ? rank / lost : 1;
+      const gone = erodeP >= threshold;
+      el.classed("waffle-cell--on", !gone).classed("waffle-cell--off", gone);
+    });
+  }
+
+  _growBars(frac, immediate) {
+    if (!this._lineVals) return;
+    this._barsFrac = frac;
+    const dur = (immediate || this.ctx.motion.reduced) ? 0 : 600;
+    const x = this._barX;
+    this._lineVals.forEach(b => {
+      const g = this._barG.get(b.cat); if (!g) return;
+      const w2019 = x(b.base), w2025 = x(b.v ?? b.base) * frac;
+      const t = (sel) => immediate || this.ctx.motion.reduced ? sel : sel.transition("gb").duration(dur).ease(d3.easeCubicInOut);
+      t(g.select(".wf-bar-2019")).attr("width", Math.max(0, w2019));
+      t(g.select(".wf-bar-2025")).attr("width", Math.max(0, w2025));
+      g.select(".wf-bar-v2019").attr("x", x(b.base) + 5).text(`€${b.base}`);
+      const shown = frac > 0.6;
+      g.select(".wf-bar-v2025").attr("x", x(b.v ?? b.base) * frac + 5).style("opacity", shown ? 1 : 0).text(b.v == null ? "" : `€${b.v.toFixed(0)}`);
+    });
+  }
+
+  _onProgress(p) {
+    const er = smooth(Math.max(0, Math.min(1, (p - 0.02) / 0.24)));
+    if (er > this._erodeP) { this._erodeP = er; this._applyWaffle(er); }
+    // bars grow once the reader passes into the second beat
+    const bt = smooth(Math.max(0, Math.min(1, (p - 0.34) / 0.24)));
+    if (bt > (this._barsFrac || 0)) { if (bt > 0.05) this._barsShown = true; this._growBars(bt); }
+  }
+
+  onStep(index, el) {
+    const geo = (el && el.dataset.geo) || this.geo;
+    const mode = el && el.dataset.mode;
+    if (this.container) { this.container.setAttribute("data-active-geo", geo); this.container.setAttribute("data-onstep", index); }
+    if (mode === "bars" || index >= 1) { this._barsShown = true; if (!this.ctx.motion.reduced && (this._barsFrac || 0) < 1) this._growBars(1); }
+    if (geo !== this.geo) { this.geo = geo; this._update(false); const s = this.controlsEl?.querySelector("select"); if (s) s.value = geo; }
+  }
+
+  _cellTip(e) {
+    const p = this._power$; const per = p == null ? null : p / 100;
+    const name = this.geo === "EU27_2020" ? "EU-27 average" : this.data.countryName(this.geo);
+    this.ctx.tooltip.show(`<h5>${name}</h5><div class="row"><span class="key">€1 of 2019</span><span class="val">worth €${per == null ? "—" : per.toFixed(2)} today</span></div>`, e.clientX, e.clientY);
+  }
+  _barTip(e, b) {
+    const v = this._lineVal(this.geo, b.cat, b.base);
+    const pct = v == null ? null : (v / b.base - 1) * 100;
+    this.ctx.tooltip.show(
+      `<h5>${b.label}</h5><div class="row"><span class="key">2019</span><span class="val">€${b.base.toFixed(2)}</span></div><div class="row"><span class="key">Now</span><span class="val">€${v == null ? "—" : v.toFixed(2)}</span></div><div class="row"><span class="key">Change</span><span class="val">${pct == null ? "—" : (pct >= 0 ? "+" : "") + pct.toFixed(0) + "%"}</span></div>`,
+      e.clientX, e.clientY);
+  }
+
+  destroy() { if (this._unsub) this._unsub(); super.destroy(); }
   onThemeChange() { this.render(); }
 }
