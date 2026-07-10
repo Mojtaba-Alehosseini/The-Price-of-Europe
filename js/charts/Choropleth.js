@@ -6,17 +6,49 @@
 
 import { BaseChart } from "./BaseChart.js";
 import {
-  watchChapterProgress, progressBetween, smooth, lerp, tracePath
+  watchChapterProgress, progressBetween, smooth, lerp
 } from "../modules/ChartMotion.js";
+import { CompareMap } from "./CompareMap.js";
+import { getInfoPop } from "../modules/InfoPop.js";
 
-// Event markers shown on top-3 sparklines during the bar-morph (Steps 5–6).
-// Month indices are relative to "2019-01" (0).
-const BAR_EVENT_MARKERS = [
-  { idx: 37, label: "Russia invades Ukraine", date: "Feb 2022" },
-  { idx: 42, label: "First ECB rate hike",    date: "Jul 2022" },
-  { idx: 56, label: "ECB peaks at 4.5 %",     date: "Sep 2023" },
-  { idx: 65, label: "First ECB rate cut",     date: "Jun 2024" }
-];
+// [debug 2026-07-06] _cameraTo's own pan/zoom transition duration — the ONE place this number is
+// defined. Anything that positions a label/card AFTER the camera settles must wait AT LEAST this
+// long (plus a small buffer for scheduling jitter), or it renders using this._cam's STALE
+// pre-transition value (this._cam only updates in the transition's own "end" callback) — the
+// resulting label sits wherever the OLD camera position would have put it, off by however far the
+// camera still had left to pan. The error scales with pan distance, which is why it read as
+// "sometimes fits, sometimes doesn't": one delayed consumer (the single-country click-to-focus
+// path) had already been bumped to CAM_DUR+50 when this duration last changed; the step-driven
+// multi-label path was missed and was still using a stale, shorter constant.
+const CAM_DUR = 1100;
+// [debug 2026-07-07 — owner bug report] Manual Alt+wheel zoom's own per-tick transition duration —
+// deliberately much shorter than CAM_DUR (a one-shot camera flight): a wheel zoom is a rapid *stream*
+// of small re-targets, not a single trip, so each tick only needs to smooth its own short hop before
+// the next tick (typically <100ms later) retargets it again. How long a quiet gap between ticks means
+// "the gesture ended" for clearing .is-camming.
+const WHEEL_ZOOM_DUR = 160;
+const WHEEL_ZOOM_IDLE = 220;
+
+// [debug 2026-07-08 — owner retime spec] Rank-morph timing envelope + per-phase window tables.
+// MORPH_HOLD/MORPH_DUR replace the old bracket-eased single tween (D79/D80): the master `p` now
+// sweeps LINEARLY across its hold→motion→hold timeline (see _animateMorphTo), and EVERY phase below
+// applies its OWN local easing to its OWN window of that linear motion — never a second easing layered
+// on top of an already-eased master value. Windows are fractions [0,1] of MORPH_DUR; both direction
+// tables are independently authored (NOT mirror images of each other — e.g. reverse's map fade-in
+// deliberately overlaps fly-reverse's tail so shapes land on a visible map; a pure mirror wouldn't).
+// `lockRelease` is a single threshold (pointer-lock engages the instant motion starts, releases here).
+const MORPH_HOLD = 100, MORPH_DUR = 7300;
+const MORPH_STAGGER_MS = 50;   // max spread of any per-element stagger (fly/bars/trail), see _tickMorph
+const MORPH_FWD = {   // map -> bars
+  mapFade: [0, 0.12], rise: [0, 0.15], fly: [0.12, 0.55], land: [0.50, 0.60],
+  title: [0.45, 0.58], bars: [0.56, 0.78], trail: [0.60, 0.80], closing: [0.78, 0.92],
+  lockRelease: 0.85,
+};
+const MORPH_REV = {   // bars -> map
+  closing: [0, 0.14], trail: [0.10, 0.30], bars: [0.12, 0.34], title: [0.25, 0.38],
+  land: [0.30, 0.40], fly: [0.38, 0.80], mapFade: [0.65, 0.88], rise: [0.78, 0.95],
+  lockRelease: 0.95,
+};
 
 const CAPITALS = {
   AT: [16.37, 48.21], BE: [4.35, 50.85], BG: [23.32, 42.70],
@@ -39,12 +71,40 @@ const CAPITALS = {
 // Respin CH3 (brief §5): 4 steps — data-year (2019/2022/2024) recolour the map; data-mode="rank"
 // morphs it to the ranking; a subsequent data-year reverses the morph. Per-year camera focus gives
 // the "pans fire per step" beat — 2022 highlights the burning east, the calm years stay wide.
-const YEAR_FOCUS = { 2019: null, 2021: ["EE", "LT", "LV"], 2022: ["EE", "LT", "LV"], 2024: null, 2025: null };
+// [Fable 2026-07-07] 2022 → null RESTORED (this exact regression is documented above: "Step 2
+// ('The map turns red') now uses focus:null" — the Baltics zoom on 2022 inverted the story, showing
+// three highlighted countries on a dimmed Europe where the copy says "the east burns... on this
+// map"). The Baltics camera-dive now belongs to the NEW 2021 step (index.html), giving the pan arc
+// back: 2019 wide → 2021 dive to the Baltics → 2022 pull back to the full red map → rank → 2024.
+const YEAR_FOCUS = { 2019: null, 2021: ["EE", "LT", "LV"], 2022: null, 2024: null, 2025: null };
 
 function getCSS(name) {
   const m = name.match(/var\((--[^)]+)\)/); const n = m ? m[1] : name;
   return getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 }
+
+// [D82] Reads --dur-4 live rather than hardcoding 420 — keeps the enter/exit-compare fade-then-hide
+// setTimeout (charts.css's #chart-choropleth > svg transition) in sync with the token by construction.
+function CMP_FADE_MS() {
+  const ms = parseFloat(getCSS("--dur-4"));
+  return Number.isFinite(ms) ? ms : 420;
+}
+
+// [D84] Compare-detail (before/after mini panel) motion timing — literal ms, matching the CSS
+// declarations in charts.css 1:1 (kept as JS constants here since the panel-reveal/name/row CSS
+// transitions and the JS-driven line draw/morph/crossfade-sequencing must agree on the same numbers
+// for the two halves to read as one coordinated motion, not two independently-timed pieces).
+const CMP_DETAIL_LINE_MS = 550;          // each line's draw-in duration (Case A)
+const CMP_DETAIL_LINE_STAGGER_MS = 130;  // newer-year line starts this much after the older one
+const CMP_DETAIL_MORPH_MS = 450;         // line d-attribute morph duration (Case B/C, no stagger)
+const CMP_DETAIL_SWAP_MS = 150;          // name/value crossfade half-duration (out, then in)
+// Oversized dasharray used ONLY during Case B/C's d-morph — flubber-free plain d-interpolation
+// means the path's rendered length can drift briefly during the tween even though start/end
+// lengths are each measured exactly; a fixed dasharray smaller than some intermediate length would
+// expose the pattern's "gap" phase as a flash partway down the line. 700 comfortably exceeds the
+// theoretical max length of a 12-point line in this 220x64 viewBox (~613, at max vertical swing on
+// every segment) so the "gap" phase is never reached, regardless of the intermediate shape.
+const CMP_DETAIL_DASH_SAFE = 700;
 
 function sparkPath(data, w, h) {
   if (!data || !data.length) return { d: "", lastX: 0, lastY: h, zeroY: h - 2, length: 0 };
@@ -88,6 +148,8 @@ export class Choropleth extends BaseChart {
     this.playing = false; this._playTimer = null;
     this._stepCaption = null; this._stepPulse = false;
     this._kickerSeq = 0; this._camSeq = 0;
+    this._cmpEnterSeq = 0; this._cmpExitSeq = 0;   // [D83] guard stale async compare-transition continuations
+    this._cmpDetailIso = null; this._cmpDetailSeq = 0;   // [D84] compare-detail panel: selected country + guard
     this._centroidCache = new Map();
     // EU avg comes straight from the EU27_2020 aggregate (real Eurostat data, refreshed
     // by preprocessing/process_data.py). The hardcoded fallback below is a safety net
@@ -225,12 +287,29 @@ export class Choropleth extends BaseChart {
     const avg0 = this._euAvg(this.year);
     this.kickerSub.text(`EU avg · ${avg0 != null ? avg0.toFixed(1) + "%" : "—"}`);
     this._renderKickerExtremes();
+    this._wireExtremesPop();   // [Fable D54] click an extreme row → InfoPop explainer
 
     this._renderLegend();
 
     // No hard SVG clip — the chart-body has a CSS mask that fades the edges softly.
     this.gMap = this.svg.append("g").attr("class", "map-layer");
-    const graticule = d3.geoGraticule().step([5, 5]);
+    // [debug 2026-07-08 — owner "white lines during zoom" bug, THE root cause] `d3.geoGraticule()`
+    // defaults to the WHOLE GLOBE (lon −180…180, lat −80…80). Projected through this Europe-centred
+    // `geoConicConformal` — a conformal projection whose coordinates diverge toward infinity far from
+    // its centre — the antimeridian/high-latitude grid lines land at coordinates in the HUNDREDS OF
+    // MILLIONS (the raw `d` starts `M68505746,-53373867…`). That made `.map-layer`'s bounding box
+    // ~383,000,000 × 337,000,000 SVG units (measured) versus the countries' sane ~1097 × 972. A layer
+    // that colossal cannot fit in any GPU texture, so the compositor is FORCED to tile it — and with
+    // `will-change: transform` scaling that monster during a camera flight, the tile boundaries leak
+    // the paper background as the white horizontal + vertical grid the owner saw (NOT the graticule's
+    // own faint claret lines, NOT the vignette mask — a compositor tiling artifact, invisible to
+    // paint-based headless screenshots). Constrain the graticule to a bounded European window so its
+    // projected coordinates stay finite and small; the visible grid is unchanged (the map only ever
+    // showed this region anyway) but the layer's bbox collapses to the countries' own size and the
+    // compositor no longer needs to tile it. This is the actual fix; the earlier `.is-camming`
+    // graticule-hide (D70) and mask-drop (D75) treated symptoms of the same tiling without removing
+    // the thing that forced the tiling.
+    const graticule = d3.geoGraticule().step([5, 5]).extent([[-30, 30], [45, 73]]);
     this.gMap.append("path").attr("class", "graticule")
       .attr("d", this.path(graticule()))
       .attr("fill", "none").attr("stroke", "var(--accent)")
@@ -265,6 +344,31 @@ export class Choropleth extends BaseChart {
       });
 
     // Scroll-zoom — only intercept wheel when Alt is held, so normal page scrolling is not hijacked.
+    // [debug 2026-07-07 — owner bug report: "when zooming in or out, the map shakes and white
+    // vertical and horizontal lines appear and disappear"] This handler moves the SAME `.map-layer`
+    // transform `_cameraTo` does, but predates D70's `.is-camming` graticule-hide and was never wired
+    // into it — confirmed live (instrumented every rAF frame through a real Alt+wheel sequence):
+    // `.is-camming` never gets set here, so the graticule's hairline grid (`--accent` lat/long lines)
+    // is live and re-rasterising on every tick, exactly the "lines appear and disappear" D70 already
+    // fixed for the click-to-zoom and scroll-into-step camera paths. Separately, every tick set the
+    // transform with a bare `.attr()` — no transition at all — so a fast wheel (many ticks in quick
+    // succession, typical of a trackpad) advanced the map in raw, unsmoothed jumps: the "shakes".
+    // Fix mirrors `_cameraTo` exactly (same `.is-camming` class, same named "camera" transition slot
+    // so a manual zoom cleanly interrupts/replaces an in-flight camera flight and vice versa) but with
+    // its own much shorter WHEEL_ZOOM_DUR — this is a rapid stream of small re-targets, not one trip,
+    // so each tick only has to smooth its own short hop before the next tick (often <100ms later)
+    // retargets it again. `_cam` itself still updates synchronously (unlike `_cameraTo`, which only
+    // updates it on the transition's "end") — the very next tick's zoom-toward-cursor math anchors on
+    // it and ticks arrive far faster than any reasonable transition could complete. `.is-camming`
+    // clears after WHEEL_ZOOM_IDLE ms of no further wheel events (debounced per tick) — there's no
+    // single discrete "end" event for a whole burst of ticks the way a one-shot flight has one.
+    // The debounce is a bare setTimeout, not a d3 transition, so nothing cancels it automatically the
+    // way `.interrupt("camera")` cancels a superseded transition — it shares `_cameraTo`'s own
+    // `_camSeq` generation counter (bumped by BOTH this handler and `_cameraTo`) and re-checks it right
+    // before clearing, so a stale timer from an earlier tick can never stomp `.is-camming` off while a
+    // NEWER wheel tick or an unrelated `_cameraTo` flight (e.g. the reader Alt+wheels, then immediately
+    // clicks a country) is still actually in flight — caught live: without this guard, a leftover timer
+    // cleared the class mid-flight of a click-triggered camera move that started just after.
     this.svg.on("wheel", (event) => {
       if (!event.altKey) return;
       event.preventDefault();
@@ -275,8 +379,21 @@ export class Choropleth extends BaseChart {
       const wx = (mx - t.tx) / t.k;
       const wy = (my - t.ty) / t.k;
       this._cam = { tx: mx - wx * newK, ty: my - wy * newK, k: newK, side: t.side };
-      this.gMap.interrupt("camera")
-        .attr("transform", `translate(${this._cam.tx}, ${this._cam.ty}) scale(${this._cam.k})`);
+      const targetTransform = `translate(${this._cam.tx}, ${this._cam.ty}) scale(${this._cam.k})`;
+      this.gMap.interrupt("camera");
+      if (this.ctx.motion.reduced) {
+        this.gMap.attr("transform", targetTransform);
+      } else {
+        this._camSeq++;
+        const seq = this._camSeq;
+        if (this.svg) this.svg.classed("is-camming", true);
+        this.gMap.transition("camera").duration(WHEEL_ZOOM_DUR).ease(d3.easeCubicInOut).attr("transform", targetTransform);
+        clearTimeout(this._wheelZoomIdle);
+        this._wheelZoomIdle = setTimeout(() => {
+          if (seq !== this._camSeq) return;
+          if (this.svg) this.svg.classed("is-camming", false);
+        }, WHEEL_ZOOM_IDLE);
+      }
     }, { passive: false });
 
     // Pan — mousedown on country starts drag; mouse delta updates _cam.tx/ty.
@@ -346,17 +463,24 @@ export class Choropleth extends BaseChart {
     // subscribe to chapter scroll progress to drive the morph.
     this._buildBarLayer();
     if (this._chapterUnsub) { this._chapterUnsub(); this._chapterUnsub = null; }
-    if (this._morphRaf) { cancelAnimationFrame(this._morphRaf); this._morphRaf = null; }
-    this._morphP = 0.5;        // resting = pure map (respin: the morph is STEP-driven, see onStep/_animateMorph)
+    this._morphP = 0.5;        // resting = pure map
     this._rankActive = false;
     if (this.ctx?.motion?.reduced) {
       this._tickMorph(0.5);    // map; reduced-motion users don't get the flubber morph
     } else {
-      // Step-driven morph: data-mode="rank" fires it forward, a data-year step reverses it — because
-      // respin CH3 puts a MAP step (2024) AFTER the ranking. Keep a light scroll listener ONLY to
-      // re-run _tickMorph's in-viewport gate so the fixed overlay hides when the chapter leaves view.
+      // [Fable D54] The morph is TIMED now (_animateMorphTo, fired by onStep) — the owner judged
+      // the scroll-synced version unreadable when it spans a single step ("we can not match the
+      // transition speed with scrolling when its only 1 step"). This light subscription only keeps
+      // _tickMorph's in-viewport gate + per-tick clone alignment fresh, and parks the compare
+      // overlay when the chapter leaves view. _continuousMorph is retired (kept below, unreferenced).
       const chapter = this.container.closest(".chapter");
-      this._chapterUnsub = watchChapterProgress(chapter, () => this._tickMorph(this._morphP ?? 0.5));
+      this._chapterUnsub = watchChapterProgress(chapter, () => {
+        this._tickMorph(this._morphP ?? 0.5);
+        if (this._cmpWrap && !this._cmpWrap.hidden) {
+          const r = chapter.getBoundingClientRect();
+          if (r.bottom < 80 || r.top > innerHeight - 80) this._exitCompare();
+        }
+      });
     }
 
     // [CH1 layout fix] _buildControls() (the ~132px timeline scrubber) lays out AFTER size()
@@ -694,7 +818,7 @@ export class Choropleth extends BaseChart {
     this.capSel.attr("r", d => sizeFor(d[0]));
     this._swapKicker(prevYear, this.year);
     this._renderTopLabels(m);
-    this._renderDetail();
+    // [Fable D54] left-side country detail panel dropped (owner: "drop this feature").
     this._updateCountryLabel();
     const labelCode = this.lockedCode || this.focusCode;
     if (Array.isArray(labelCode)) {
@@ -850,16 +974,22 @@ export class Choropleth extends BaseChart {
     this._camSeq++;
     const seq = this._camSeq;
     const target = Array.isArray(code) ? this._computeCameraMulti(code) : this._computeCamera(code);
-    const duration = animate && !this.ctx.motion.reduced ? 1100 : 0;
+    const duration = animate && !this.ctx.motion.reduced ? CAM_DUR : 0;
     const targetTransform = `translate(${target.tx}, ${target.ty}) scale(${target.k})`;
     this.gMap.interrupt("camera");
+    // [Fable D54 · owner lag report] Hide the graticule while the camera flies — the hairline
+    // grid re-rasterises every frame of the zoom (the "vertical and horizontal lines appear for
+    // a moment") and costs paint time. CSS: .chart-svg.is-camming .graticule { opacity: 0 }.
+    if (this.svg) this.svg.classed("is-camming", duration > 0);
     this.gMap.transition("camera").duration(duration).ease(d3.easeCubicInOut)
       .attr("transform", targetTransform)
       .on("end", () => {
+        if (this.svg) this.svg.classed("is-camming", false);
         if (seq !== this._camSeq) return;
         this._cam = target;
         if (this._stepPulse && code) this._emitPulse(code);
-      });
+      })
+      .on("interrupt", () => { if (this.svg) this.svg.classed("is-camming", false); });
     // [CH1-W2] rAF-stall safety net — in iframes / background tabs d3 transitions can
     // sit in CREATED state forever and the camera never moves. After the transition
     // would have completed, force the final transform + _cam state so label positioning
@@ -873,7 +1003,7 @@ export class Choropleth extends BaseChart {
       }
     }, duration + 80);
     if (!animate) { this._cam = target; }
-    this._renderDetail();
+    // [Fable D54] left-side country detail panel dropped (owner: "drop this feature").
   }
 
   _emitPulse(code) {
@@ -975,8 +1105,8 @@ export class Choropleth extends BaseChart {
     clearTimeout(this._labelTimeout);
     if (this.lockedCode) {
       const code = this.lockedCode;
-      const delay = !this.ctx.motion.reduced ? 1150 : 0;
-      this._labelTimeout = setTimeout(() => { if (this.lockedCode === code) this._renderMapLabel(code); }, delay);
+      const delay = !this.ctx.motion.reduced ? CAM_DUR + 50 : 0;
+      // [Fable D54] locked-country map label dropped with the rest of the on-map name labels.
     }
   }
 
@@ -1205,23 +1335,81 @@ export class Choropleth extends BaseChart {
     if (this.container) this.container.setAttribute("data-onstep", index);
     const mode = el?.dataset?.mode;
 
-    // ── RANK step (data-mode="rank"): morph the map → ranking (forward) ──
+    // ── COMPARE step (data-mode="compare") — drag-to-compare finale lives IN this panel (D54) ──
+    // [debug 2026-07-08 — owner: D82's cross-fade still "reads as a jump" — a cross-fade cannot
+    // work between visually dissimilar, geometrically mismatched frames. D83 replaces it with a
+    // matched-geometry reveal (see _compareEnterAnimated); reduced-motion keeps the D82 snap.] ──
+    if (mode === "compare") {
+      // [debug 2026-07-10 — D84] Idempotency guard, found necessary (not defensive filler) while
+      // verifying D84's animated panel reveal: the compare-detail panel's grid-template-rows 0fr->1fr
+      // transition continuously changes the STEP CARD's own rendered height for ~280ms, and
+      // scrollama's own IntersectionObserver (watching this element's geometry against the viewport
+      // to detect its trigger-line crossing) turns out to be sensitive to the WATCHED ELEMENT's size
+      // changing, not just the page scrolling — confirmed empirically: clicking a country while
+      // reduced-motion is off caused _cmpEnterSeq to jump by 9+ within 300ms of a single click (never
+      // happens under reduced-motion, where the panel snaps instead of animating), each spurious
+      // onStepEnter re-fire calling _compareEnterAnimated() again and yanking the divider back to its
+      // parked position mid-interaction. Rather than patch scrollama's own (vendored, third-party)
+      // resize-reactivity, make re-entry a no-op if we're already in (or mid-entering) compare —
+      // data-active-mode is set to "compare" synchronously at the top of the branch below and only
+      // ever changes when actually LEAVING compare, so this can't block a genuine re-entry, only a
+      // same-session spurious re-fire.
+      if (this.container?.getAttribute("data-active-mode") === "compare") return;
+      if (this.ctx.motion.reduced) {
+        this._rankActive = false;
+        if (this.container) this.container.setAttribute("data-active-mode", "compare");
+        if (this.playing) this._togglePlay(false);
+        this._removeMapLabel();
+        clearTimeout(this._labelTimeout);
+        this._tickMorph(0.5); this._morphP = 0.5;   // snap bars away — the overlay covers the switch
+        if (this._morphRaf) { cancelAnimationFrame(this._morphRaf); this._morphRaf = null; }
+        this._enterCompare();
+        // D83's forward sequence otherwise parks the divider right + fades labels in on arrival —
+        // reduced-motion has no sequence to do that, so assert the plain, centered D82 end-state
+        // explicitly (guards a stale split/label-opacity left over from a PRIOR non-reduced visit).
+        if (this._cmp) {
+          this._cmp._applySplit(0.5);
+          this._cmp._labelA?.style("opacity", 1);
+          this._cmp._labelB?.style("opacity", 1);
+          if (this._cmp._handle) this._cmp._handle.style.pointerEvents = "";
+        }
+      } else {
+        this._compareEnterAnimated();
+      }
+      return;
+    }
+
+    // ── RANK step (data-mode="rank"): morph the map → ranking, TIMED (D54) ──
     if (mode === "rank") {
       this._rankActive = true;
       if (this.container) this.container.setAttribute("data-active-mode", "rank");
       if (this.playing) this._togglePlay(false);
+      this._exitCompare();
       this._removeMapLabel();
       this.svg?.selectAll(".multi-label-text").remove();
       clearTimeout(this._labelTimeout);
-      if (this.ctx.motion.reduced) this._tickMorph(1); else this._animateMorph(1);
+      this._cameraTo(null, false);   // rank needs the default full-map framing before the flight
+      if (this.ctx.motion.reduced) this._tickMorph(1); else this._animateMorphTo(1);
       return;
     }
 
-    // ── YEAR step (data-year): reverse the morph if we were ranked, then recolour + pan ──
+    // ── YEAR step (data-year): reverse the morph if we were ranked (TIMED), then recolour + pan ──
     const wasRanked = this._rankActive || (this._morphP ?? 0.5) > 0.5;
     this._rankActive = false;
+    // [debug 2026-07-08 — D83] If we're actually leaving an ANIMATED compare, defer the plain D82
+    // exit-fade — _compareExitAnimated (fired at the bottom of this branch, after this.year and
+    // every other piece of state below has already been updated) drives its own sweep+pivot+
+    // handback sequence and calls _exitCompare() itself once the pixels underneath genuinely
+    // match. Reduced-motion / not-actually-in-compare takes the unchanged, immediate D82 path.
+    // Checked via data-active-mode (not _cmpWrap.hidden) so a reversal DURING enter's phase 1 —
+    // before _enterCompare() has even run once, _cmpWrap.hidden is still whatever it defaulted
+    // to — is still correctly recognized as "leaving compare" and routed through the animated
+    // exit's own _interruptCompareAnim() rather than silently leaving a stale transition running.
+    const cmpWasActive = this.container?.getAttribute("data-active-mode") === "compare";
+    const animatedCmpExit = cmpWasActive && !this.ctx.motion.reduced && !!this._cmp;
+    if (!animatedCmpExit) this._exitCompare();
     if (this.container) this.container.setAttribute("data-active-mode", el?.dataset?.year || "");
-    if (wasRanked) { if (this.ctx.motion.reduced) this._tickMorph(0.5); else this._animateMorph(0.5); }
+    if (wasRanked) { if (this.ctx.motion.reduced) this._tickMorph(0.5); else this._animateMorphTo(0.5); }
 
     if (this.playing) this._togglePlay(false);
     const yr = el?.dataset?.year ? +el.dataset.year : this.year;
@@ -1232,44 +1420,517 @@ export class Choropleth extends BaseChart {
     this._stepCaption = null;
     this._stepPulse = false;
     this.lockedCode = null;
-    this._animateYearChange(prev);
+    this._animateYearChange(prev);   // recolors the MAIN map to `yr` now — invisible while compare's
+                                      // own SVG is still the one on top, ready for a matched handback
     this._updatePlayhead();
     this._applyFocus();
     this._cameraTo(this.focusCode);
 
-    // Auto-label the focused country/countries so the map stays in sync with the narrative.
+    // [Fable D54] On-map name labels DROPPED (owner: after a click-zoom they sat at stale
+    // positions; "drop countries name when showing them on the map"). The hover tooltip and the
+    // kicker extremes carry the who-is-what; _renderMapLabel/_renderMultiLabels stay unreferenced.
     this._removeMapLabel();
     this.svg?.selectAll(".multi-label-text").remove();
     clearTimeout(this._labelTimeout);
-    if (this.focusCode) {
-      const code = this.focusCode;
-      const delay = !this.ctx.motion.reduced ? 900 : 0;
-      this._labelTimeout = setTimeout(() => {
-        if (this.focusCode !== code || this.lockedCode) return;
-        if (Array.isArray(code)) this._renderMultiLabels(code);
-        else this._renderMapLabel(code);
-      }, delay);
-    }
+
+    if (animatedCmpExit) this._compareExitAnimated(yr);
   }
 
-  // Step-driven morph: animate _morphP toward targetP (0.5 = pure map, 1 = full ranking), calling
-  // _tickMorph each frame. _tickMorph is a pure function of p, so driving 1 → 0.5 runs the flubber
-  // morph in REVERSE (ranking → map). This replaces the old raw-scroll driver so a MAP step (2024)
-  // can follow the rank step. A running loop reads this._morphTargetP each frame, so a new target
-  // mid-flight simply redirects it.
-  _animateMorph(targetP) {
-    this._morphTargetP = targetP;
-    if (this._morphRaf) return;
-    const tick = () => {
-      const cur = this._morphP ?? 0.5;
-      const t = this._morphTargetP;
-      const next = Math.abs(t - cur) < 0.006 ? t : cur + (t - cur) * 0.16;
-      this._morphP = next;
-      this._tickMorph(next);
-      if (next !== t) { this._morphRaf = requestAnimationFrame(tick); }
-      else { this._morphRaf = null; }
+  /** [Fable D54] Timed map↔rank morph: HOLD (frozen at `from`, MORPH_HOLD ms) → MOTION (MORPH_DUR ms)
+   *  → HOLD (frozen at `target`, MORPH_HOLD ms). Fired by onStep (scroll OR rail-dot jump).
+   *  [debug 2026-07-08 — owner retime spec: "the phase order is correct, do not re-choreograph... the
+   *  problem is time allocation... fix the envelope, tighten to ~7.5s, and remove per-frame allocation
+   *  costs"] `p` now sweeps LINEARLY across the motion segment — no easing applied here at all. Every
+   *  phase inside `_tickMorph` applies its OWN local easing to its OWN window of that linear sweep
+   *  (`smooth(progressBetween(p,a,b))`, or a direction-specific d3 ease for the phases the spec calls
+   *  out — map-fade ease-in, rise/bars ease-out, fly ease-in-out) — a SECOND easing layered on top of
+   *  an already-eased master value (the old design) reads as mushy/soft; a linear master + per-phase
+   *  easing is what "each phase = smoothstep(clamp(...))" actually asks for. `this._morphDir` ('fwd'/
+   *  'rev') is set here, once, and read by `_tickMorph` to pick MORPH_FWD or MORPH_REV — the two window
+   *  tables are independently authored, not mirror images (see the tables' own comment). Geometry is
+   *  captured ONCE here (`_captureCloneStarts`), before the rAF loop starts — not on every tick. */
+  _animateMorphTo(target) {
+    if (this._morphRaf) cancelAnimationFrame(this._morphRaf);
+    const from = this._morphP ?? 0.5;
+    if (Math.abs(target - from) < 0.001) { this._tickMorph(target); return; }
+    this._morphDir = target > from ? "fwd" : "rev";
+    this._captureCloneStarts();
+    const total = MORPH_HOLD + MORPH_DUR + MORPH_HOLD;
+    const t0 = performance.now();
+    const step = (now) => {
+      const t = now - t0;
+      let p;
+      if (t < MORPH_HOLD) p = from;
+      else if (t < MORPH_HOLD + MORPH_DUR) p = from + (target - from) * ((t - MORPH_HOLD) / MORPH_DUR);
+      else p = target;
+      this._morphP = p;
+      this._tickMorph(p);
+      this._morphRaf = t < total ? requestAnimationFrame(step) : null;
     };
-    tick();
+    this._morphRaf = requestAnimationFrame(step);
+  }
+
+  /** [debug 2026-07-08 — perf] Read the choropleth's current on-screen rect ONCE, right before a morph
+   *  starts, and write every clone's start position from it — replaces the old per-TICK
+   *  getBoundingClientRect() pair (forced synchronous layout, every frame) that used to live inside
+   *  _tickMorph. Safe to do once per motion rather than every tick: by the time any morph starts, the
+   *  camera has already been synchronously reset (onStep(rank) calls `_cameraTo(null,false)` before
+   *  `_animateMorphTo`), and the sticky panel's own on-screen rect doesn't move while a chapter is
+   *  pinned — the ONLY situation this cache could go stale is the reader resizing the window mid-morph,
+   *  a rare edge case not worth paying a forced-layout cost on every one of ~450 frames for. */
+  _captureCloneStarts() {
+    const clones = this._bars?.clones;
+    if (!clones || !clones.length) return;
+    const choroSvg = this.svg?.node();
+    const stage = this._barsStage;
+    if (!choroSvg || !stage) return;
+    const choroRect = choroSvg.getBoundingClientRect();
+    const stageRect = stage.getBoundingClientRect();
+    const cam = this._cam || { tx: 0, ty: 0, k: 1 };
+    const m = this._bars.margin;
+    const stageW = this._bars.W, stageH = this._bars.H;
+    const sX = choroRect.width / this.W, sY = choroRect.height / this.H;
+    clones.forEach(c => {
+      const inSvgX = c.geoCx * cam.k + cam.tx;
+      const inSvgY = c.geoCy * cam.k + cam.ty;
+      const pxX = choroRect.left + inSvgX * sX;
+      const pxY = choroRect.top  + inSvgY * sY;
+      const svgX = (pxX - stageRect.left) * stageW / stageRect.width;
+      const svgY = (pxY - stageRect.top)  * stageH / stageRect.height;
+      c.startCx = svgX - m.left;
+      c.startCy = svgY - m.top;
+    });
+  }
+
+  /** [Fable D54] Kicker extreme rows (RO/PT etc.) → InfoPop explainer on click. Text is built at
+   *  click time so it always matches the currently shown year. */
+  _wireExtremesPop() {
+    const pop = getInfoPop();
+    const wire = (sel, kind) => {
+      if (!sel) return;
+      sel.attr("pointer-events", "all").style("cursor", "help").attr("tabindex", "0").attr("role", "button");
+      const open = (e) => {
+        e.preventDefault(); e.stopPropagation();
+        const ext = this._yearExtremes(this.year);
+        const rec = kind === "hi" ? ext?.hi : ext?.lo;
+        if (!rec) return;
+        const text = kind === "hi"
+          ? `${rec.name} — the highest annual inflation on this map in ${this.year}: ${rec.value.toFixed(1)}%.`
+          : `${rec.name} — the lowest annual inflation on this map in ${this.year}: ${rec.value.toFixed(1)}%.`;
+        pop.open(sel.node(), text);
+      };
+      sel.on("click", open);
+      sel.on("keydown", (e) => { if (e.key === "Enter" || e.key === " ") open(e); });
+    };
+    wire(this.kickerHi, "hi");
+    wire(this.kickerLo, "lo");
+  }
+
+  /** [Fable D54] The drag-to-compare finale, embedded in this chapter's panel (the separate
+   *  full-width CompareMap chapter is retired). Built lazily on first entry.
+   *  [debug 2026-07-08 — owner report: "map changes suddenly" — D82] The map's own layers used to
+   *  hide via an instant `visibility:hidden` while .choro-cmp-wrap faded in over --dur-4 — an
+   *  asymmetric cut (old content vanishes in one frame, new content grows in from blank), confirmed
+   *  via a frame-by-frame trace: gMap opacity stayed 1 right up to the step flip, then visibility
+   *  snapped hidden the SAME frame .choro-cmp-wrap appeared at opacity 0. Now both sides fade
+   *  together over the identical --dur-4/--ease-out window (CSS rule in charts.css) — opacity drives
+   *  the fade, visibility is only the END state (set after the fade completes) so hidden content
+   *  still stops taking pointer events/a11y focus once truly invisible, exactly like `_tickMorph`'s
+   *  own opacity-then-visibility pattern elsewhere in this file. */
+  _enterCompare() {
+    if (!this._cmpWrap) {
+      const wrap = document.createElement("div");
+      wrap.className = "choro-cmp-wrap";       // opacity 0 until .is-in — invisible but LAID OUT,
+      wrap.id = "chart-choropleth-compare";    // so CompareMap's size() reads a real clientWidth
+      this.container.appendChild(wrap);
+      this._cmpWrap = wrap;
+      this._cmp = new CompareMap("#chart-choropleth-compare", this.data, this.ctx, this);
+      this._cmp.render();
+      this._wireCmpDetail();
+    }
+    const reduced = this.ctx.motion.reduced;
+    [...this.container.children].forEach(ch => {
+      if (ch === this._cmpWrap) return;
+      ch.dataset.cmpHidden = "1";
+      ch.style.opacity = "0";
+      clearTimeout(ch._cmpFadeTimer);
+      if (reduced) ch.style.visibility = "hidden";
+      else ch._cmpFadeTimer = setTimeout(() => { if (ch.dataset.cmpHidden) ch.style.visibility = "hidden"; }, CMP_FADE_MS());
+    });
+    this._cmpWrap.hidden = false;
+    requestAnimationFrame(() => this._cmpWrap.classList.add("is-in"));
+  }
+
+  _exitCompare() {
+    if (!this._cmpWrap || this._cmpWrap.hidden) return;
+    this._cmpWrap.classList.remove("is-in");   // starts its own opacity 1->0 fade (CSS)
+    const reduced = this.ctx.motion.reduced;
+    [...this.container.children].forEach(ch => {
+      if (!ch.dataset || !ch.dataset.cmpHidden) return;
+      delete ch.dataset.cmpHidden;
+      clearTimeout(ch._cmpFadeTimer);
+      ch.style.visibility = "";   // visible again FIRST, so the opacity fade-in is actually seen
+      ch.style.opacity = "1";
+    });
+    clearTimeout(this._cmpWrap._cmpFadeTimer);
+    if (reduced) this._cmpWrap.hidden = true;
+    else this._cmpWrap._cmpFadeTimer = setTimeout(() => { this._cmpWrap.hidden = true; }, CMP_FADE_MS());
+  }
+
+  /** [D83] Kill every named transition either compare choreography can possibly have in flight,
+   *  regardless of which one started it. Necessary (not just belt-and-suspenders): enter and exit
+   *  each touch a PARTIALLY overlapping set of named transitions per phase (enter's phase 1 pivots
+   *  the MAIN map; exit never touches the main map's fill at all) — same-name-same-element d3
+   *  auto-interrupt only fires where the two sequences actually collide, which isn't every phase.
+   *  A rapid reversal inside the ~600ms color-pivot window is the concrete failure this closes: a
+   *  stale "cmpPivot" transition left running toward the OLD target would keep overriding the new
+   *  sequence's own instant fill-set on every subsequent frame otherwise. Called at the top of both
+   *  _compareEnterAnimated and _compareExitAnimated so either one always starts from a clean slate. */
+  _interruptCompareAnim() {
+    this.countryPaths?.interrupt("cmpPivot");
+    if (this._cmp) {
+      this._cmp.gA?.selectAll("path.cmp-country").interrupt("cmpFill");
+      this._cmp.gB?.selectAll("path.cmp-country").interrupt("cmpFill");
+    }
+    if (this._cmpWrap) d3.select(this._cmpWrap).interrupt("cmpSweep");
+  }
+
+  /** [debug 2026-07-08 — owner: D82's cross-fade "still reads as a jump" — D83] A cross-fade
+   *  cannot work between visually dissimilar, geometrically mismatched frames; STEP 0 measured
+   *  CompareMap at ~0.59x the main map's scale, letterboxed. Now that geometry is unified
+   *  (CompareMap.js's `host` param), the two views land on the SAME pixels whenever their colors
+   *  also match — so instead of fading between two different-looking things, this sequence makes
+   *  them the SAME thing before ever swapping: (1) recolor the MAP THAT'S ALREADY VISIBLE from its
+   *  current year to compare's older year (2019) — a plain fill transition, no swap yet; (2) at
+   *  that instant the pixels genuinely match, so hand off to CompareMap's SVG (D82's fade plays
+   *  but is imperceptible — nothing actually changes) with its divider parked at the far right
+   *  edge (matches "all older year" exactly); (3) sweep the divider to center, revealing the newer
+   *  year; (4) invite: labels fade in, the handle pulses once and unlocks. Every step uses a NAMED
+   *  d3 transition ("cmpPivot"/"cmpSweep"/"cmpFill") so a rapid scroll-reversal mid-sequence
+   *  interrupts-and-replaces automatically (d3's own semantics) rather than queuing — the paired
+   *  `_cmpEnterSeq`/`_cmpExitSeq` counters additionally guard the .then() continuations themselves
+   *  (a promise already in flight when superseded must not act on stale state once it resolves). */
+  _compareEnterAnimated() {
+    this._interruptCompareAnim();
+    this._rankActive = false;
+    if (this.container) this.container.setAttribute("data-active-mode", "compare");
+    if (this.playing) this._togglePlay(false);
+    this._removeMapLabel();
+    clearTimeout(this._labelTimeout);
+    this._tickMorph(0.5); this._morphP = 0.5;
+    if (this._morphRaf) { cancelAnimationFrame(this._morphRaf); this._morphRaf = null; }
+    this._cmpExitSeq++;   // any in-flight EXIT sequence is now stale — we're going back IN
+
+    if (!this._cmpWrap) {
+      const wrap = document.createElement("div");
+      wrap.className = "choro-cmp-wrap";
+      wrap.id = "chart-choropleth-compare";
+      this.container.appendChild(wrap);
+      this._cmpWrap = wrap;
+      this._cmp = new CompareMap("#chart-choropleth-compare", this.data, this.ctx, this);
+      this._cmp.render();
+      this._wireCmpDetail();
+    }
+    const cmp = this._cmp;
+    const prevYear = this.year;
+    const targetYear = cmp.yearA;
+    const enterSeq = ++this._cmpEnterSeq;
+
+    this._swapKicker(prevYear, targetYear);
+    if (cmp._handle) cmp._handle.style.pointerEvents = "none";   // locked until phase 4 (invite)
+    cmp._labelA?.style("opacity", 0);
+    cmp._labelB?.style("opacity", 0);
+
+    this._transitionCountryFill(targetYear, 600, d3.easeCubicInOut).then(() => {
+      if (enterSeq !== this._cmpEnterSeq) return;   // superseded — a newer entry (or an exit) owns this now
+      return Promise.all([cmp._transitionYear(cmp.gA, cmp.yearA, 0), cmp._transitionYear(cmp.gB, cmp.yearB, 0)])
+        .then(() => {
+          if (enterSeq !== this._cmpEnterSeq) return;
+          cmp._applySplit(0.96);          // far right — matches the fully-2019 state phase 1 just made
+          this._enterCompare();           // D82's handoff — pixel-identical, so its own fade is a no-op look
+          return d3.select(this._cmpWrap).transition("cmpSweep").duration(900).ease(d3.easeCubicInOut)
+            .tween("split", () => { const i = d3.interpolateNumber(0.96, 0.5); return t => cmp._applySplit(i(t)); })
+            .end().catch(() => {});
+        });
+    }).then(() => { if (enterSeq === this._cmpEnterSeq) this._compareInvite(); })
+      .catch(() => {});
+  }
+
+  _compareInvite() {
+    const cmp = this._cmp;
+    if (!cmp) return;
+    if (cmp._handle) {
+      cmp._handle.style.pointerEvents = "";
+      cmp._handle.classList.remove("is-pulsing");
+      void cmp._handle.offsetWidth;   // restart the keyframe animation on re-add
+      cmp._handle.classList.add("is-pulsing");
+    }
+    cmp._labelA?.transition("cmpLabel").duration(300).style("opacity", 1);
+    cmp._labelB?.transition("cmpLabel").duration(300).style("opacity", 1);
+  }
+
+  /** [D83] Mirror of _compareEnterAnimated — sweeps the divider back to the right edge (full
+   *  older-year view), recolors CompareMap's own layer to `destYear` while it's still the thing
+   *  on screen, then hands back to the main map (already showing `destYear`, set synchronously by
+   *  `_animateYearChange` earlier in this same onStep call — see the YEAR-step branch). `destYear`
+   *  is whatever step was actually entered (a rail-dot jump can land anywhere, not just "2024"),
+   *  so this correctly no-ops the fill pivot when it happens to already match. */
+  _compareExitAnimated(destYear) {
+    this._interruptCompareAnim();
+    const cmp = this._cmp;
+    if (!cmp || !this._cmpWrap) { this._exitCompare(); return; }
+    const exitSeq = ++this._cmpExitSeq;
+    if (cmp._handle) { cmp._handle.style.pointerEvents = "none"; cmp._handle.classList.remove("is-pulsing"); }
+    cmp._labelA?.interrupt("cmpLabel").style("opacity", 0);
+    cmp._labelB?.interrupt("cmpLabel").style("opacity", 0);
+    const fromSplit = cmp.split;
+
+    d3.select(this._cmpWrap).transition("cmpSweep").duration(700).ease(d3.easeCubicInOut)
+      .tween("split", () => { const i = d3.interpolateNumber(fromSplit, 0.96); return t => cmp._applySplit(i(t)); })
+      .end().catch(() => {})
+      .then(() => {
+        if (exitSeq !== this._cmpExitSeq) return;
+        return cmp._transitionYear(cmp.gA, destYear, 600, d3.easeCubicInOut);
+      })
+      .then(() => { if (exitSeq === this._cmpExitSeq) this._exitCompare(); })   // pixel-identical handback
+      .catch(() => {});
+  }
+
+  /** [D83] Transitions the MAIN choropleth's own country fills to `year`'s values — the forward
+   *  choreography's "color pivot," run on the map that's actually visible before any layer swap.
+   *  Named ("cmpPivot") so a rapid reversal mid-pivot interrupts cleanly; `ms<=0`/reduced snaps. */
+  _transitionCountryFill(year, ms = 0, ease) {
+    const euSel = this.countryPaths.filter(d => this.data.countriesByCode.has(this.data.topoToIso(d.id)));
+    const fillFor = d => {
+      const v = this.data.hicpAnnual[this.data.topoToIso(d.id)]?.CP00?.[String(year)];
+      return v == null ? this._noDataColor : this.color(v);
+    };
+    if (ms <= 0 || this.ctx.motion.reduced) { euSel.interrupt("cmpPivot").attr("fill", fillFor); return Promise.resolve(); }
+    return euSel.transition("cmpPivot").duration(ms).ease(ease || d3.easeCubicInOut)
+      .attr("fill", fillFor).end().catch(() => {});
+  }
+
+  /** Click a country on the compare map → small before/after card in the step's detail slot. */
+  _wireCmpDetail() {
+    const detail = document.getElementById("ch3-compare-detail");
+    if (!detail || !this._cmpWrap) return;
+    this._cmpDetailEl = detail;   // [D84] stored so _onCmpYearChange (fired from CompareMap.js's own
+                                   // dropdown handlers, a different call stack) can reach it too.
+    this._cmpWrap.addEventListener("click", (e) => {
+      const pathEl = e.target.closest && e.target.closest("path.cmp-country");
+      if (!pathEl || pathEl.classList.contains("is-non-eu")) return;
+      const d = pathEl.__data__;
+      const iso = this.data.topoToIso(d?.id);
+      if (!iso || !this.data.countriesByCode.has(iso)) return;
+      e.stopPropagation();                    // keep the divider-jump click from firing
+      this._renderCmpDetail(detail, iso);
+    }, true);
+  }
+
+  /** [D84] Owner: "the year dropdown, while a country is selected, should re-render with the same
+   *  morph treatment as Case B." This case had NO wiring at all before — CompareMap's own year-<select>
+   *  change handlers only ever repainted the map layers + corner labels, never touched the detail
+   *  panel, so switching years while a country was selected silently left the OLD year pair's before/
+   *  after data on screen. Fixed at the source (CompareMap.js calls this via `_host`) rather than
+   *  papering over it with new motion on top of stale data. No-ops if nothing is currently selected. */
+  _onCmpYearChange() {
+    if (!this._cmpDetailIso || !this._cmpDetailEl) return;
+    this._renderCmpDetail(this._cmpDetailEl, this._cmpDetailIso);
+  }
+
+  /** [D84] Builds the detail panel's DOM ONCE (lazily, on first selection) and returns the cached
+   *  element refs — everything after this reuses the SAME nodes, which is what makes Case B/C's line
+   *  MORPH and text CROSSFADE possible at all (the old innerHTML-replace-every-time implementation
+   *  destroyed and rebuilt the <polyline>s on every click, leaving nothing persistent to tween from).
+   *  <path>, not the old <polyline> — needed for the d-attribute morph d3 does in _cmpDetailSwitch;
+   *  stroke-dasharray/dashoffset work identically on either (both are SVGGeometryElements). */
+  _ensureCmpDetailDom(el) {
+    if (this._cmpDetailEls && this._cmpDetailEls.root === el) return this._cmpDetailEls;
+    el.innerHTML =
+      `<div class="cmp-detail__inner">` +
+      `<div class="cmp-detail__name"></div>` +
+      `<svg class="cmp-detail__mini" viewBox="0 0 220 64" preserveAspectRatio="none" aria-hidden="true">` +
+      `<path class="cmp-mini-a"></path><path class="cmp-mini-b"></path></svg>` +
+      `<div class="cmp-detail__rows">` +
+      `<span class="cmp-detail__row cmp-detail__row--a"></span>` +
+      `<span class="cmp-detail__row cmp-detail__row--b"></span></div></div>`;
+    this._cmpDetailEls = {
+      root: el,
+      name: el.querySelector(".cmp-detail__name"),
+      pathA: el.querySelector(".cmp-mini-a"),
+      pathB: el.querySelector(".cmp-mini-b"),
+      rowA: el.querySelector(".cmp-detail__row--a"),
+      rowB: el.querySelector(".cmp-detail__row--b"),
+    };
+    return this._cmpDetailEls;
+  }
+
+  /** [D84] Kills every named transition either case can have in flight, on both paths, regardless of
+   *  which case started it — Case A's draw-in ("cmpDetailDrawA/B") and Case B/C's morph
+   *  ("cmpDetailMorphA/B") are DIFFERENT names on the SAME elements, so d3's own same-name interrupt
+   *  doesn't cover a rapid click that arrives while the OTHER case's transition is still running
+   *  (e.g. a second country clicked before the first one's draw-in finishes) — same reasoning as
+   *  D83's _interruptCompareAnim, same fix shape. */
+  _interruptCmpDetail(els) {
+    d3.select(els.pathA).interrupt("cmpDetailDrawA").interrupt("cmpDetailMorphA");
+    d3.select(els.pathB).interrupt("cmpDetailDrawB").interrupt("cmpDetailMorphB");
+  }
+
+  _renderCmpDetail(el, iso) {
+    const cmp = this._cmp;
+    const a = cmp.yearA, b = cmp.yearB;
+    const series = (y) => Array.from({ length: 12 }, (_, i) =>
+      this.data.hicpMonthly[iso]?.CP00?.[`${y}-${String(i + 1).padStart(2, "0")}`] ?? null);
+    const A = series(a), B = series(b);
+    const va = this.data.hicpAnnual[iso]?.CP00?.[String(a)];
+    const vb = this.data.hicpAnnual[iso]?.CP00?.[String(b)];
+    const all = [...A, ...B].filter(v => v != null);
+    if (!all.length) return;   // [D84] no data at all for this country/year pair — leave prior state
+                                // untouched (was `el.innerHTML=""` — no longer applies now that the
+                                // skeleton is persistent; this is a rare edge case, real EU-27 HICP
+                                // data has no gaps, not worth a dedicated collapse animation).
+    const lo = Math.min(...all), hi = Math.max(...all), span = Math.max(0.1, hi - lo);
+    const W = 220, H = 64;
+    const lineGen = d3.line().defined(v => v != null)
+      .x((_, i) => i / 11 * W)
+      .y(v => H - 6 - (v - lo) / span * (H - 12));
+    const dA = lineGen(A) || "", dB = lineGen(B) || "";
+    const nameTxt = this.data.countryName(iso);
+    const rowATxt = `${a} · ${va != null ? va.toFixed(1) + "%" : "—"}`;
+    const rowBTxt = `${b} · ${vb != null ? vb.toFixed(1) + "%" : "—"}`;
+
+    this._cmpDetailIso = iso;   // for _onCmpYearChange (Case C)
+    const els = this._ensureCmpDetailDom(el);
+    const wasIn = el.classList.contains("is-in");   // read BEFORE mutating anything below
+    this._interruptCmpDetail(els);
+    const reduced = this.ctx.motion.reduced;
+
+    if (!wasIn || reduced) {
+      // ===== CASE A — first selection: reveal the panel, draw both lines left-to-right =====
+      el.classList.remove("is-in");   // in case a stale reduced-motion state left it set oddly
+      els.name.classList.remove("is-swap", "is-swap-in");
+      els.rowA.classList.remove("is-shown", "is-swap", "is-swap-in");
+      els.rowB.classList.remove("is-shown", "is-swap", "is-swap-in");
+      els.name.textContent = nameTxt;
+      els.rowA.textContent = rowATxt;
+      els.rowB.textContent = rowBTxt;
+      els.pathA.setAttribute("d", dA);
+      els.pathB.setAttribute("d", dB);
+      el.classList.add("is-in");   // starts the grid-template-rows reveal + name/divider fade (CSS)
+
+      if (reduced) {
+        els.pathA.removeAttribute("stroke-dasharray"); els.pathA.removeAttribute("stroke-dashoffset");
+        els.pathB.removeAttribute("stroke-dasharray"); els.pathB.removeAttribute("stroke-dashoffset");
+        els.rowA.classList.add("is-shown");
+        els.rowB.classList.add("is-shown");
+        return;
+      }
+      // getTotalLength() measured ONCE per path, immediately after setting `d`, never per frame —
+      // the draw-in itself is driven by a d3 attr-transition on stroke-dashoffset, not rAF.
+      const lenA = els.pathA.getTotalLength(), lenB = els.pathB.getTotalLength();
+      els.pathA.setAttribute("stroke-dasharray", `${lenA} ${lenA}`);
+      els.pathA.setAttribute("stroke-dashoffset", String(lenA));
+      els.pathB.setAttribute("stroke-dasharray", `${lenB} ${lenB}`);
+      els.pathB.setAttribute("stroke-dashoffset", String(lenB));
+      d3.select(els.pathA).transition("cmpDetailDrawA").duration(CMP_DETAIL_LINE_MS).ease(d3.easeCubicOut)
+        .attr("stroke-dashoffset", 0).end().then(() => els.rowA.classList.add("is-shown")).catch(() => {});
+      d3.select(els.pathB).transition("cmpDetailDrawB").delay(CMP_DETAIL_LINE_STAGGER_MS)
+        .duration(CMP_DETAIL_LINE_MS).ease(d3.easeCubicOut).attr("stroke-dashoffset", 0)
+        .end().then(() => els.rowB.classList.add("is-shown")).catch(() => {});
+      return;
+    }
+
+    // ===== CASE B/C — switching country, or a year changed while one is selected: morph, don't
+    // re-reveal. Shape morphs via a d3 attr-transition on `d` (the x-domain is always the same 12
+    // evenly-spaced months, so plain string interpolation is safe — no flubber needed). dasharray
+    // widens to a safe constant (see CMP_DETAIL_DASH_SAFE) and dashoffset re-targets 0 — normally a
+    // no-op since it's already 0, but if a rapid click interrupted Case A's OWN draw-in mid-flight
+    // this also finishes revealing it, so the morph never starts from a partially-hidden line. =====
+    if (reduced) {
+      els.pathA.removeAttribute("stroke-dasharray"); els.pathA.removeAttribute("stroke-dashoffset");
+      els.pathB.removeAttribute("stroke-dasharray"); els.pathB.removeAttribute("stroke-dashoffset");
+      els.pathA.setAttribute("d", dA);
+      els.pathB.setAttribute("d", dB);
+      els.name.textContent = nameTxt; els.rowA.textContent = rowATxt; els.rowB.textContent = rowBTxt;
+      this._cmpDetailSeq++;   // invalidate any in-flight (pre-toggle) swap timers
+      clearTimeout(this._cmpDetailSwapT1); clearTimeout(this._cmpDetailSwapT2);
+      [els.name, els.rowA, els.rowB].forEach(n => n.classList.remove("is-swap", "is-swap-in"));
+      return;
+    }
+    els.pathA.setAttribute("stroke-dasharray", `${CMP_DETAIL_DASH_SAFE} ${CMP_DETAIL_DASH_SAFE}`);
+    els.pathB.setAttribute("stroke-dasharray", `${CMP_DETAIL_DASH_SAFE} ${CMP_DETAIL_DASH_SAFE}`);
+    d3.select(els.pathA).transition("cmpDetailMorphA").duration(CMP_DETAIL_MORPH_MS).ease(d3.easeCubicInOut)
+      .attr("d", dA).attr("stroke-dashoffset", 0);
+    d3.select(els.pathB).transition("cmpDetailMorphB").duration(CMP_DETAIL_MORPH_MS).ease(d3.easeCubicInOut)
+      .attr("d", dB).attr("stroke-dashoffset", 0);
+
+    // name + both value rows crossfade together (150ms out, swap text, 150ms in) — a sequence
+    // counter guards the setTimeout-driven text-swap so a rapid re-click cancels cleanly instead of
+    // a stale callback overwriting a NEWER click's text after the fact.
+    const seq = ++this._cmpDetailSeq;
+    const group = [els.name, els.rowA, els.rowB];
+    group.forEach(n => n.classList.remove("is-swap-in"));
+    group.forEach(n => n.classList.add("is-swap"));
+    clearTimeout(this._cmpDetailSwapT1); clearTimeout(this._cmpDetailSwapT2);
+    this._cmpDetailSwapT1 = setTimeout(() => {
+      if (seq !== this._cmpDetailSeq) return;
+      els.name.textContent = nameTxt; els.rowA.textContent = rowATxt; els.rowB.textContent = rowBTxt;
+      group.forEach(n => n.classList.add("is-swap-in"));
+      this._cmpDetailSwapT2 = setTimeout(() => {
+        if (seq !== this._cmpDetailSeq) return;
+        group.forEach(n => n.classList.remove("is-swap", "is-swap-in"));
+      }, CMP_DETAIL_SWAP_MS);
+    }, CMP_DETAIL_SWAP_MS);
+  }
+
+  // [debug 2026-07-06 — owner report: "still fast and buggy... synced by scrolling with reasonable
+  // speed"] The map<->rank morph used to run on ITS OWN CLOCK — onStep fired a fixed-duration eased
+  // tween toward a target (first 420ms, then slowed to 640ms in the previous fix) — so once
+  // triggered, it kept animating regardless of whether the reader kept scrolling. That's exactly the
+  // "fast and buggy" feel even after the camera-glitch and speed fixes: motion the scroll TRIGGERED,
+  // not motion the scroll IS. Replaced with a continuous, scrollY-driven interpolation — the same
+  // pattern used for SmallMultiplesLine's line-draw fix in this same session — computing each step's
+  // own trigger-crossing scroll position and interpolating _morphP between adjacent steps' own
+  // targets (year steps: 0.5, pure map; the rank step: 1, full bars) directly off the CURRENT scroll
+  // position. The morph now visibly flies WHILE the reader scrolls from "Two Europes" into "The gap,
+  // in order," completing exactly as that step's own text becomes current — never early (the bug
+  // that motivated the ORIGINAL fixed-duration approach), never a separate clock racing the reader.
+  _stepTriggerYs() {
+    const chapter = this.container?.closest(".chapter");
+    const steps = chapter ? [...chapter.querySelectorAll(".scroller__step")] : [];
+    return steps.map(el => el.getBoundingClientRect().top + scrollY - innerHeight * 0.55);
+  }
+  _stepMorphTargets() {
+    const chapter = this.container?.closest(".chapter");
+    const steps = chapter ? [...chapter.querySelectorAll(".scroller__step")] : [];
+    return steps.map(el => (el.dataset.mode === "rank" ? 1 : 0.5));
+  }
+  _continuousMorph() {
+    if (this.ctx.motion.reduced) return;
+    const ys = this._stepTriggerYs();
+    if (!ys.length) { this._tickMorph(this._morphP ?? 0.5); return; }
+    const targets = this._stepMorphTargets();
+    const y = scrollY;
+    let p, headingToRank;
+    if (y <= ys[0]) { p = targets[0]; headingToRank = targets[0] === 1; }
+    else if (y >= ys[ys.length - 1]) { p = targets[targets.length - 1]; headingToRank = targets[targets.length - 1] === 1; }
+    else {
+      let i = 0;
+      while (i < ys.length - 1 && y > ys[i + 1]) i++;
+      const segP = smooth((y - ys[i]) / (ys[i + 1] - ys[i]));
+      p = targets[i] + (targets[i + 1] - targets[i]) * segP;
+      headingToRank = targets[i + 1] === 1;
+    }
+    // [debug 2026-07-06] Camera reset moves HERE from onStep's rank branch: with the morph now
+    // continuously scroll-driven, it starts progressing as soon as scrollY enters the segment
+    // leading INTO the rank step — well before onStep(rank) itself fires (that now happens at the
+    // segment's END, once morphP has already reached 1). Reset once, the instant we first start
+    // heading toward the rank target (map still fully opaque at this point — mapFade only starts at
+    // p=0.64, comfortably later), not when onStep eventually fires on an already-far-along morph.
+    if (headingToRank && !this._morphCamReset) { this._cameraTo(null, false); this._morphCamReset = true; }
+    else if (!headingToRank) { this._morphCamReset = false; }
+    this._morphP = p;
+    this._tickMorph(p);
   }
 
   // ============================================================
@@ -1323,44 +1984,44 @@ export class Choropleth extends BaseChart {
     const _posMax = Math.max(1, d3.max(_devs) || 1);
     const _negMax = Math.max(0, -(d3.min(_devs) || 0));
 
-    // --- FULL-CHAPTER overlay (covers both grid columns, sticky to viewport) ---
-    // The wrap is sticky inside the chapter so as the user scrolls into the morph
-    // steps the bar canvas sits on top of the entire chapter — the text column too.
+    // [debug 2026-07-06 — owner report: "should be in the right side like all charts we have"] The
+    // wrap now lives INSIDE `this.container` (`.chart-body` — the exact box the choropleth map's own
+    // SVG fills, `position:relative` per scrollytelling.css), not the whole `.chapter`. It fills that
+    // one box (`position:absolute; inset:0` in charts.css) instead of the full viewport.
     const wrap = document.createElement("div");
     wrap.className = "choro-bars-wrap";
-    chapter.appendChild(wrap);
+    this.container.appendChild(wrap);
 
-    // [Morph-v2] Inner stage constrains the SVG to a comfortable max-width and centers it.
-    // Without this the bar canvas would span the full monitor (~1440+ px) on wide screens.
     const stage = document.createElement("div");
     stage.className = "choro-bars-stage";
     wrap.appendChild(stage);
 
-    // Layout sized to the STAGE (not the full viewport) so bars stay inside the frame on big monitors.
-    const W = stage.clientWidth || 1180;
-    const H = stage.clientHeight || (wrap.clientHeight || 700);
-    // Tighter margins than v1 — extra top: 92 reserves room for the editorial text box.
-    // [R2-elevate] Threshold raised 480→820 so TABLET (768) also gets the compact morph layout
-    // (ISO codes + slim margins). At 768 with full country names + sparklines + the closing prose
-    // the bars crowded and the closing overlapped them (pixel-confirmed tablet-06). Tablet now
-    // reads like the phone morph: dense but clean.
-    const isMobile = W < 820;
-    // [FULL-SITE AUDIT · C1 fix] Reserve top room for the centered title + eu-zero
-    // label, and bottom room for the closing-insight box, so neither overlaps the
-    // top/bottom bars (overlap was pixel-confirmed on desktop + phone).
-    // [R2-elevate] Mobile top margin 132→156: the title now wraps to ~3 lines
-    // ("…above or below the EU-27 average since January 2019"). The disambiguating note line
-    // is hidden ≤1100px (responsive.css) since the title + axis tag carry the framing on small
-    // screens, so 156 (not 176) cleanly clears the 3-line title without orphan whitespace.
+    // Layout sized to the STAGE — now the same ~750-900px column every other chart draws into, not
+    // a 1200-1500px full-screen canvas. [debug 2026-07-06] Always uses the compact (ISO-code,
+    // slim-margin) layout that used to be mobile-only: at this width there's no longer a "wide
+    // desktop" case to branch on. Right margin shrunk hard now the per-row sparkline column is gone
+    // (see the removed `bar-spark` block below) — that was 140px of chart plus its own gutter.
+    const W = stage.clientWidth || this.W || 700;
+    const H = stage.clientHeight || (wrap.clientHeight || this.H || 700);
+    const isMobile = W < 480;
+    // [debug 2026-07-06] Shrunk again now the title block is 16px/left-aligned (was 92/68 sized for
+    // a 28px centered title + full country names) — measured overlap on real pixels: "Netherlands"/
+    // "Luxembourg" etc. at 12px don't fit this left margin and bleed across the zero line into the
+    // small bars sitting right next to it (see the ISO-code switch below, which is the other half
+    // of this same fix).
     const m = isMobile
-      ? { top: 150, right: 50, bottom: 100, left: 72 }    // [owner D1 4b] left 92->72: tighter label→bar gutter
-      // [scroll-fix §4b] trim the oversized top/bottom bands so the 27 rows grow taller and the
-      // ranking fills its (now wider) stage — title still clears at top:128, axis tag at bottom:108.
-      : { top: 128, right: 150, bottom: 108, left: 150 };
+      ? { top: 56, right: 16, bottom: 56, left: 52 }
+      : { top: 60, right: 24, bottom: 64, left: 58 };
     const iw = W - m.left - m.right;
     const ih = H - m.top - m.bottom;
     const yBand = d3.scaleBand().domain(barRows.map(r => r.code)).range([0, ih]).padding(0.18);
-    const xLin  = d3.scaleLinear().domain([-(_negMax * 1.22 + 1), _posMax * 1.12]).range([0, iw]);
+    // [debug 2026-07-06] Negative-side padding 1.22→1.6: in this narrower confined layout the
+    // most-negative bars (Denmark -10.5% etc.) started so close to the row's own left edge that
+    // their value label (anchored just before the bar's far end, same convention as the positive
+    // side) had nowhere to go but ON TOP of the ISO code — measured overlap on real pixels. More
+    // padding here pushes every negative bar's start further from the edge, same fix in spirit as
+    // the left-margin bump above, both aimed at the same collision.
+    const xLin  = d3.scaleLinear().domain([-(_negMax * 1.6 + 1), _posMax * 1.12]).range([0, iw]);
     const pal   = this.palette();
     const barColor = d3.scaleLinear()
       .domain([-15, -5, 0, 5, 15, 30])
@@ -1391,15 +2052,15 @@ export class Choropleth extends BaseChart {
     stage.appendChild(textbox);
     this._bars_textbox = textbox;
 
-    // [Morph-v2 · Task 4] Inline legend — top-right, EU27 line + sparkline key
-    const legend = document.createElement("div");
-    legend.className = "bars-legend";
-    const euValRound = Number.isFinite(euVal) ? `+${euVal.toFixed(1)}%` : "";
-    legend.innerHTML = `
-      <div class="bars-legend__row"><span class="bars-legend__dash"></span> EU-27 cumulative · ${euValRound}</div>
-      <div class="bars-legend__row"><span class="bars-legend__line"></span> 84-month sparkline · ticks = Ukraine + ECB cycle</div>`;
-    stage.appendChild(legend);
-    this._bars_legend = legend;
+    // [Morph-v2 · Task 4] Inline legend — top-right, EU27 line key.
+    // [debug 2026-07-06 — owner report] The per-row sparkline (+ this second legend row explaining
+    // it) is REMOVED — the confined ~750-900px column has no room for a 140px trend-line column per
+    // row, and hovering a row already opens the shared tooltip's own enlarged 2-line mini-chart
+    // (`_barMiniChart` — untouched, still wired below), so the detail the sparkline offered didn't
+    // disappear, just moved from "always on, cramped" to "on demand, full-size."
+    // [Fable D54] Top-right EU-27 legend dropped — it duplicated the bars-eu-tag under the zero
+    // rule (owner: "written twice"). The tag anchors the zero line; one statement is enough.
+    this._bars_legend = null;
 
     // [user-fix · post-morph insight] Closing text box — fades in after the bars are
     // fully revealed, gives the reader a moment to absorb the chart with a data insight
@@ -1413,11 +2074,10 @@ export class Choropleth extends BaseChart {
     // [R4 fix · Reuters/Professor] In-overlay source attribution. The morph wrap is
     // fixed-position fullscreen, so a reader who anchor-jumps in may never see the
     // chapter-source paragraph below the chart. Mirror it inside the overlay.
-    const sourceEl = document.createElement("div");
-    sourceEl.className = "bars-source";
-    sourceEl.textContent = "Source · Eurostat HICP (prc_hicp_aind)";
-    stage.appendChild(sourceEl);
-    this._bars_source = sourceEl;
+    // [Fable D54] In-overlay source dropped — its "fixed-position fullscreen" rationale died when
+    // S37 confined the wrap into chart-body: the panel-foot source right below is always visible,
+    // so this mirrored line read as the source printed twice (owner report).
+    this._bars_source = null;
 
     const root = d3.select(svg).append("g").attr("transform", `translate(${m.left}, ${m.top})`);
 
@@ -1427,12 +2087,13 @@ export class Choropleth extends BaseChart {
     // and is positioned outside the chart drawing area).
 
     // EU27 zero rule
-    root.append("line").attr("class", "bars-eu-zero")
+    const euZeroEl = root.append("line").attr("class", "bars-eu-zero")
       .attr("x1", xLin(0)).attr("x2", xLin(0))
       .attr("y1", 0).attr("y2", ih)
       .attr("stroke", "var(--ink)")
       .attr("stroke-dasharray", "4 4")
-      .attr("stroke-opacity", 0.55);
+      .attr("stroke-opacity", 0.55)
+      .node();
     // [R2-elevate · kill the title bleed] The old top-anchored .bars-eu-label sat at the
     // zero line (chart centre, y:-2) directly BEHIND the centred HTML title — pixel-confirmed
     // garbled overlap in EVERY morph frame (round-1 before 07-10, light + dark). The EU-27 line
@@ -1442,22 +2103,15 @@ export class Choropleth extends BaseChart {
     // EU-27 tag sits centred directly under the zero rule. The directional cues are pushed to
     // the FAR ENDS of the axis (under the most-negative / most-positive bars) so they never
     // collide with the centred tag. Two stacked rows keep everything legible.
-    root.append("text").attr("class", "bars-eu-tag")
+    const euTagEl = root.append("text").attr("class", "bars-eu-tag")
       .attr("x", xLin(0)).attr("y", ih + 17).attr("text-anchor", "middle")
       .style("opacity", 0)
-      .text(`EU-27 average · +${euVal.toFixed(1)} %`);
-    // Directional axis cues — far left = cooler than EU, far right = hotter than EU.
-    root.append("text").attr("class", "bars-axis-dir bars-axis-dir--lo")
-      .attr("x", 0).attr("y", ih + 17).attr("text-anchor", "start")
-      .style("opacity", 0)
-      .text("← cooler");
-    root.append("text").attr("class", "bars-axis-dir bars-axis-dir--hi")
-      .attr("x", iw).attr("y", ih + 17).attr("text-anchor", "end")
-      .style("opacity", 0)
-      .text("hotter →");
+      .text(`EU-27 average · +${euVal.toFixed(1)} %`)
+      .node();
+    // [Fable D54] "← cooler / hotter →" cues dropped (owner). The diverging bars + the EU-tag
+    // under the zero rule carry the direction on their own.
 
     const rowH = yBand.bandwidth();
-    const SPARK_W = 140, SPARK_H = 16;
 
     // Compute each country's START position in this bar-layer's SVG coords.
     // Captured at build time; valid as long as the choropleth's layout doesn't change.
@@ -1469,6 +2123,12 @@ export class Choropleth extends BaseChart {
       .attr("data-code", d => d.code)
       .attr("transform", d => `translate(0, ${yBand(d.code)})`);
 
+    // [debug 2026-07-08 — perf] Cache a direct node reference per row/element HERE, at build time —
+    // _tickMorph drives every tick from this flat array (raw setAttribute/style, indexed by rank,
+    // rank===array-index since rowG's join followed barRows' own already-rank-sorted order) instead of
+    // re-querying `root.selectAll(...)` every frame. rank is redundant with array index but kept
+    // explicit so _tickMorph never has to assume it.
+    const rowEls = [];
     rowG.each((d, i, nodes) => {
       const g = d3.select(nodes[i]);
       const dev = d.cumPct - euVal;
@@ -1485,64 +2145,47 @@ export class Choropleth extends BaseChart {
       const flagY = rowH / 2;                   // flag center y within row
 
       // Country flag
-      g.append("image").attr("class", "bar-flag")
+      const flagEl = g.append("image").attr("class", "bar-flag")
         .attr("href", `assets/flags/${d.iso}.svg`)
         .attr("x", flagX - 7).attr("y", flagY - 5)
         .attr("width", 14).attr("height", 9)
-        .style("opacity", 0);
+        .style("opacity", 0)
+        .node();
 
-      // Country name — full name on desktop, ISO code on mobile (S3-3)
-      g.append("text").attr("class", "bar-name")
+      // [debug 2026-07-06] Country name → ISO code, always (was full name on "desktop" — the old
+      // full-viewport branch). Confirmed by measurement: "Netherlands"/"Luxembourg" etc. at 12px
+      // don't fit the ~44px left margin this confined column needs, and were bleeding across the
+      // zero line into whatever small bar sits next to it. Full name is still one hover away in the
+      // tooltip's own mini-chart (`_barMiniChart`, unchanged).
+      const nameEl = g.append("text").attr("class", "bar-name")
         .attr("x", flagX + 12).attr("y", flagY + 4)
-        .text(isMobile ? d.code : d.name)
-        .style("opacity", 0);
+        .text(d.code)
+        .style("opacity", 0)
+        .node();
 
       // Bar rect
-      g.append("rect").attr("class", "bar-rect")
+      const rectEl = g.append("rect").attr("class", "bar-rect")
         .attr("x", barX).attr("y", 1)
         .attr("width", 0)
         .attr("height", rowH - 2)
         .attr("rx", 2)
         .attr("fill", fill)
         .attr("data-target-width", barW)
-        .attr("data-target-x", barX);
+        .attr("data-target-x", barX)
+        .node();
 
       // Value label
-      g.append("text").attr("class", "bar-value")
+      const valueEl = g.append("text").attr("class", "bar-value")
         .attr("y", flagY + 4)
         .attr("text-anchor", dev >= 0 ? "start" : "end")
         .attr("x", dev >= 0 ? xDev + 6 : xDev - 6)
         .attr("fill", "var(--ink-soft)")   /* readable neutral — bar colour carries sign/heat; --seq-1 negatives were near-invisible */
         .style("opacity", 0)
-        .text(`${dev >= 0 ? "+" : ""}${dev.toFixed(1)}%`);
+        .text(`${dev >= 0 ? "+" : ""}${dev.toFixed(1)}%`)
+        .node();
 
-      // Sparkline group
-      const sparkG = g.append("g").attr("class", "bar-spark")
-        .attr("transform", `translate(${iw + 16}, ${flagY - SPARK_H / 2})`)
-        .style("opacity", 0);
-      const valid = d.series.filter(v => v != null);
-      if (valid.length >= 2) {
-        const sx = d3.scaleLinear().domain([0, d.series.length - 1]).range([0, SPARK_W]);
-        const sy = d3.scaleLinear().domain([d3.min(valid), d3.max(valid)]).range([SPARK_H, 0]);
-        const line = d3.line()
-          .defined(v => v != null)
-          .x((_, i) => sx(i))
-          .y(v => sy(v))
-          .curve(d3.curveMonotoneX);
-        sparkG.append("path").attr("class", "bar-spark-line")
-          .attr("d", line(d.series))
-          .attr("fill", "none")
-          .attr("stroke", fill)
-          .attr("stroke-width", 1.2)
-          .attr("stroke-opacity", 0.85);
-        const lastIdx = d.series.length - 1;
-        const lastVal = d.series[lastIdx];
-        if (lastVal != null) {
-          sparkG.append("circle").attr("class", "bar-spark-dot")
-            .attr("cx", sx(lastIdx)).attr("cy", sy(lastVal))
-            .attr("r", 1.8).attr("fill", "var(--accent)");
-        }
-      }
+      // [debug 2026-07-06 — owner report] Per-row inline sparkline REMOVED — see the legend comment
+      // above for why (no room in the confined column; hover's own mini-chart already covers it).
 
       // [owner review D1 4b] full-row hover target → highlight this row + enlarged 2-line mini-chart
       // (the country's 2019→now index vs the EU-27 average) in the shared tooltip. Appended last.
@@ -1553,6 +2196,8 @@ export class Choropleth extends BaseChart {
         .on("mouseenter", (e) => this._barRowHover(e, d))
         .on("mousemove", (e) => this.ctx.tooltip.move(e.clientX, e.clientY))
         .on("mouseleave", () => this._barRowHoverOut());
+
+      rowEls.push({ code: d.code, rank: i, groupEl: nodes[i], flagEl, nameEl, rectEl, valueEl, targetWidth: barW });
     });
 
     // Markers — separate group at root level (no row transform).
@@ -1583,25 +2228,8 @@ export class Choropleth extends BaseChart {
         .style("opacity", 0);
     });
 
-    // Event ticks on top-5 deviation rows
-    const topByMag = [...barRows].sort((a, b) =>
-      Math.abs(b.cumPct - euVal) - Math.abs(a.cumPct - euVal)).slice(0, 5);
-    const tickCodes = new Set(topByMag.map(r => r.code));
-    rowG.each((d, i, nodes) => {
-      if (!tickCodes.has(d.code)) return;
-      const sparkG = d3.select(nodes[i]).select("g.bar-spark");
-      if (sparkG.empty()) return;
-      const sx = d3.scaleLinear().domain([0, d.series.length - 1]).range([0, SPARK_W]);
-      BAR_EVENT_MARKERS.forEach(e => {
-        if (e.idx < 0 || e.idx >= d.series.length) return;
-        sparkG.append("line").attr("class", "bar-spark-event")
-          .attr("x1", sx(e.idx)).attr("x2", sx(e.idx))
-          .attr("y1", 0).attr("y2", SPARK_H)
-          .attr("stroke", "var(--ink-faint)")
-          .attr("stroke-width", 0.6)
-          .attr("opacity", 0.6);
-      });
-    });
+    // [debug 2026-07-06 — owner report] Sparkline event ticks (Ukraine/ECB markers on the top-5
+    // rows' trend lines) REMOVED along with the sparklines themselves — see the legend comment above.
 
     // [Morph-v2 · Task 6] Build country path clones + flubber interpolators
     const clonesData = this._buildCountryClones(barRows, root, m, yBand, xLin, rowH, stage, W, H, euVal);
@@ -1610,8 +2238,13 @@ export class Choropleth extends BaseChart {
       wrap, svg, root, markersG, barRows, yBand, xLin, euVal, iw, ih, rowH,
       W, H, margin: m,
       euSeries, barColor,                       // [owner review D1 4b] hover mini-chart needs these
-      clones: clonesData ? clonesData.clones : []
+      clones: clonesData ? clonesData.clones : [],
+      rowEls, euZeroEl, euTagEl,                 // [debug 2026-07-08 — perf] cached node refs, see _tickMorph
     };
+    // [debug 2026-07-08 — perf] markersG's circles are permanently hidden (the flubber-clone system
+    // replaced them; "Hide the old circle markers (v1 leftover)" used to re-force opacity:0 on them
+    // EVERY tick). Force it once, here, instead.
+    markersG?.selectAll("circle.bar-marker").style("opacity", 0);
 
     // [S1-5] IntersectionObserver fallback — hides the morph wrap when the
     // chapter scrolls completely out of viewport, even without a scroll event
@@ -1632,6 +2265,30 @@ export class Choropleth extends BaseChart {
     this._chapterIO.observe(chapter);
   }
 
+  // [debug 2026-07-08] Build-time only (called once per country from _buildCountryClones, never per
+  // tick) — reduces to the SINGLE largest-area subpath. Single-subpath input (21 of 27 EU countries)
+  // returns unchanged. See the long comment at the one call site for why this must be singular, not a
+  // threshold-keep (a flubber interpolation failure mode, not a visual-quality trim).
+  _dominantSubpath(d) {
+    if (!d) return d;
+    const subpaths = d.split(/(?=M)/).filter(s => s.trim());
+    if (subpaths.length <= 1) return d;
+    if (!this._clonePathProbe) {
+      this._clonePathProbe = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      this._clonePathProbe.style.opacity = "0";
+      this.svg?.node()?.appendChild(this._clonePathProbe);
+    }
+    const probe = this._clonePathProbe;
+    let best = subpaths[0], bestArea = -1;
+    subpaths.forEach(s => {
+      probe.setAttribute("d", s);
+      let bb; try { bb = probe.getBBox(); } catch (_) { bb = { width: 0, height: 0 }; }
+      const area = bb.width * bb.height;
+      if (area > bestArea) { bestArea = area; best = s; }
+    });
+    return best;
+  }
+
   // [Morph-v2 · Task 6] Build SVG <path> clones of each EU country inside the morph SVG,
   // alongside flubber interpolators that morph the country shape → square as it travels
   // toward its bar slot. Returns null if flubber failed to load (fallback path stays empty).
@@ -1646,16 +2303,12 @@ export class Choropleth extends BaseChart {
     // Edge length of the target square — matches the flag glyph bbox so the morph lands cleanly.
     const SQ = 14;
 
-    // Geometry conversions: country centroids are in CHOROPLETH-SVG coords.
-    // We need them in MORPH-SVG-ROOT coords. The morph SVG uses a viewBox = "0 0 W H"
-    // and is sized to the stage's actual pixel dims. The root <g> has translate(m.left, m.top).
+    // [debug 2026-07-08 — perf] Used to also read choroRect/stageRect here to size a build-time
+    // startCx/startCy — dead weight: those two fields were only ever consumed by _tickMorph's own
+    // (now-removed) per-tick recompute. Existence-only guard now (no layout read); the REAL geometry
+    // capture happens once per motion in _captureCloneStarts, right before each _animateMorphTo run.
     const choroSvg = this.svg?.node();
-    const choroRect = choroSvg?.getBoundingClientRect();
-    const stageRect = stage?.getBoundingClientRect();
-    if (!choroRect || !stageRect) return null;
-    const cam = this._cam || { tx: 0, ty: 0, k: 1 };
-    const sX = choroRect.width / this.W;
-    const sY = choroRect.height / this.H;
+    if (!choroSvg || !stage) return null;
 
     barRows.forEach(d => {
       const featId = this._codeToFeatId(d.code);
@@ -1663,7 +2316,22 @@ export class Choropleth extends BaseChart {
       if (!feat) return;
 
       // Country path in choropleth SVG coords
-      const fromD = this.path(feat);
+      // [debug 2026-07-08 — owner retime verification found this, not asked for, but load-bearing for
+      // "fly" to look right] `flubber.interpolate()` on a multi-ring "from" shape against this clone's
+      // single-ring "to" shape (a square) collapses to a near-invisible sliver the INSTANT t>0, only
+      // recovering by growing roughly toward the target size as t→1 — confirmed independent of
+      // maxSegmentLength (5/6/8/10 all identical), so it isn't a segment-density issue: it's flubber's
+      // point-correspondence degenerating whenever ring counts don't match 1:1. First attempt (keep
+      // every subpath ≥1% of the largest one's own bbox area) was NOT sufficient: a t-sweep bbox probe
+      // across all 27 clones post-filter showed EVERY country still left with >1 subpath still
+      // collapsed (France 2 subpaths → 1% of its t=0 area by t=0.02; Croatia 2 → 3%; Malta 2 → 46%;
+      // Denmark 11 → 1%; Greece 3 → 3%; Netherlands 4 → 2%; Estonia 3 → 9%), while all 19
+      // already-single-subpath countries interpolated smoothly (~50-60% ratio, monotonic, no dip).
+      // `_dominantSubpath` (singular) keeps ONLY the single largest-area subpath, always. The clone's
+      // RESTING map (this.path(feat) used everywhere else) is untouched and still shows full
+      // multi-island geography — only the ~3s in-flight shape simplifies to its main landmass, which
+      // reads fine at flight speed/scale.
+      const fromD = this._dominantSubpath(this.path(feat));
       if (!fromD) return;
 
       // Target square center in ROOT coords (root has translate(m.left, m.top))
@@ -1688,7 +2356,10 @@ export class Choropleth extends BaseChart {
       // flubber interpolator — wrap in try/catch in case the path is unusual (multi-polygon)
       let interp;
       try {
-        interp = flubber.interpolate(fromD, toD, { maxSegmentLength: 8 });
+        // [debug 2026-07-08 — perf] 8 → 5: the clones are always IN MOTION (never inspected at rest),
+        // so full-resolution country outlines are wasted interpolation points; a lower max segment
+        // length bounds the interpolator's own path complexity without a visible quality loss.
+        interp = flubber.interpolate(fromD, toD, { maxSegmentLength: 5 });
       } catch (err) {
         // flubber failed for this country — skip its clone (silent fallback; §6: no console in prod).
         return;
@@ -1713,6 +2384,9 @@ export class Choropleth extends BaseChart {
         geoCx: cx, geoCy: cy            // [Morph-v2 fix] keep geo coords for per-tick remap
       });
     });
+
+    // build-time-only scratch element (see _dominantSubpath) — done with it once every clone is built.
+    if (this._clonePathProbe) { this._clonePathProbe.remove(); this._clonePathProbe = null; }
 
     return { clonesG, clones };
   }
@@ -1756,11 +2430,13 @@ export class Choropleth extends BaseChart {
     this.ctx.tooltip.hide();
   }
   /** Spotlight a set of bar rows (others dimmed to 0.28); null/empty → all visible. Shared by the
-   *  scroll-highlight sequence and by hover-out restore so the two never fight. */
+   *  scroll-highlight sequence (runs every tick while its window is active) and by hover-out restore
+   *  so the two never fight. [debug 2026-07-08 — perf] Cached rowEls + raw style writes, not a fresh
+   *  `.selectAll()` re-query — this runs on the hot per-tick path during the spotlight window. */
   _applyBarSpotlight(codes) {
     if (!this._bars) return;
     const set = codes && codes.length ? new Set(codes) : null;
-    this._bars.root.selectAll("g.bar-row").style("opacity", r => (!set || set.has(r.code)) ? 1 : 0.28);
+    for (const r of (this._bars.rowEls || [])) r.groupEl.style.opacity = (!set || set.has(r.code)) ? 1 : 0.28;
   }
   /** Tooltip HTML: country name + an inline 2-line SVG (country vs EU-27, both indexed to 100 at
    *  Jan-2019 so they're comparable) + the two cumulative figures. Enlarged vs the inline sparkline. */
@@ -1850,165 +2526,144 @@ export class Choropleth extends BaseChart {
         sel.attr("width", onScreen ? +sel.attr("data-target-width") : 0);
       });
       root.selectAll("text.bar-name, text.bar-value").style("opacity", onScreen ? 1 : 0);
-      root.selectAll("g.bar-spark").style("opacity", onScreen ? 1 : 0);
       root.selectAll("text.bars-eu-tag, text.bars-axis-dir").style("opacity", onScreen ? 1 : 0);
       root.select("line.bars-eu-zero").style("opacity", onScreen ? 1 : 0);
       return;
     }
 
-    // Phase progress (smoothstep eased)
-    // [user-feedback] Map stays fully visible through narrative steps 0–4 (calm
-    // through p=0.65). Morph compressed into 0.65–0.88, leaving a DWELL phase
-    // 0.88–1.00 where bars stay visible + closing insight text appears,
-    // so the reader has scroll-room to absorb the chart before the next chapter.
-    // [R2-elevate · smoother morph] Round-1 pixels showed the title painting over still-map-like
-    // clones (frame 07) and a stiff mid-flight beat. We give the FLY phase more scroll-room so the
-    // country shapes read as a continuous flow into the bar column, then land → bars → trail follow
-    // in a gentle cascade, and the title (textOp below) holds off until the shapes have arrived.
-    const rise  = smooth(progressBetween(p, 0.64, 0.70));
-    const fly   = smooth(progressBetween(p, 0.69, 0.81));
-    const land  = smooth(progressBetween(p, 0.80, 0.85));
-    const bars  = smooth(progressBetween(p, 0.84, 0.90));
-    const trail = smooth(progressBetween(p, 0.88, 0.93));
-    // [FULL-SITE AUDIT · C1 fix] Fade the map + year-kicker out EARLIER (done by
-    // p=0.72) so the leftover SVG kicker/labels never bleed through behind the
-    // HTML morph title, which fades in afterwards (textOp below).
-    const mapFade = smooth(progressBetween(p, 0.64, 0.72));
-    const show  = Math.max(rise, fly, land, bars);
-    // Closing-text opacity — fades in once bars are complete (p ≥ 0.93)
-    const closingOp = Math.max(0, Math.min(1, (p - 0.93) / 0.04));
+    // [debug 2026-07-08 — owner retime spec] direction + LINEAR local motion progress (0 at the
+    // instant motion starts, 1 at the instant it's fully arrived) — `p` itself carries no easing any
+    // more (see _animateMorphTo); every phase below applies its own.
+    const dir = this._morphDir || "fwd";
+    const WIN = dir === "fwd" ? MORPH_FWD : MORPH_REV;
+    const mProg = Math.max(0, Math.min(1, dir === "fwd" ? (p - 0.5) / 0.5 : (1 - p) / 0.5));
+    const rowEls = this._bars.rowEls || [];
+    const N = Math.max(clones.length, rowEls.length, 1);
+    // Per-element stagger: shift a phase's window later by up to MORPH_STAGGER_MS (spread across N
+    // elements), never compress it — a late element simply starts (and finishes) slightly later.
+    // `reverseOrder` flips WHICH end goes first (bottom-rank-first for reverse's bar-shrink).
+    const staggerU = N > 1 ? (MORPH_STAGGER_MS / MORPH_DUR) / (N - 1) : 0;
+    const staggeredWindow = (key, rank, reverseOrder = false) => {
+      const [a, b] = WIN[key];
+      const i = reverseOrder ? (N - 1 - rank) : rank;
+      const shift = i * staggerU;
+      return [a + shift, b + shift];
+    };
 
-    // [scroll-fix §4b] Settled states = pure map (p<0.62) OR fully-ranked (p≥0.965). Anything between is
-    // the morph in flight: gate ALL pointer interactions and clear any open tooltip so no country/row card
-    // ever floats over a half-formed screen. The flag flips once; clear the tooltip on the rising edge.
-    const transitioning = p >= 0.62 && p < 0.965;
+    // ===== GLOBAL (non-staggered) phase values — one number each, reused by many elements =====
+    const mapFadeT = d3.easeCubicIn(progressBetween(mProg, ...WIN.mapFade));
+    const mapOpacity = dir === "fwd" ? (1 - mapFadeT) : mapFadeT;
+    const titleT = smooth(progressBetween(mProg, ...WIN.title));
+    const titleOp = dir === "fwd" ? titleT : (1 - titleT);
+    const closingT = smooth(progressBetween(mProg, ...WIN.closing));
+    const closingOp = dir === "fwd" ? closingT : (1 - closingT);
+    const landT = smooth(progressBetween(mProg, ...WIN.land));
+    const landOp = dir === "fwd" ? landT : (1 - landT);
+    // Forward's "rise" = clones fading/lifting IN (not staggered, per spec). Reverse's "rise" plays
+    // the mirrored ROLE forward's "trail" had — clones' final fade OUT, late in the timeline — kept
+    // as its own un-staggered global value; reverse's fade-IN instead reuses the "trail" window
+    // (staggered, bottom-rank-first) below, per-clone.
+    const riseInT  = dir === "fwd" ? d3.easeCubicOut(progressBetween(mProg, ...WIN.rise)) : 0;
+    const riseOutT = dir === "rev" ? smooth(progressBetween(mProg, ...WIN.rise)) : 0;
+    // Un-staggered base values of the two elements-vary-by-rank phases — coarse enough for the
+    // wrap-visibility check below (a ≤50ms per-element stagger doesn't matter at that granularity).
+    const flyBaseT  = d3.easeCubicInOut(progressBetween(mProg, ...WIN.fly));
+    const barsBaseT = d3.easeCubicOut(progressBetween(mProg, ...WIN.bars));
+
+    // ===== pointer-lock — engages the instant motion starts, releases at the direction's threshold =====
+    // [debug 2026-07-08 — regression fix] Must also require an ACTIVE flight (this._morphRaf truthy).
+    // The idle watchChapterProgress subscription calls _tickMorph(this._morphP ?? 0.5) continuously,
+    // even at rest on a pure-map step — at the resting p=0.5, mProg computes to exactly 0, which is
+    // always < lockRelease, so without this guard `transitioning` latched permanently true the instant
+    // the chart mounted, silently blocking _click()/_hover()/row-cards forever (found via
+    // _tmp-d70-camera.mjs: zero camera zoom on click; the D70 traverse suite didn't catch it since it
+    // only exercises scroll-driven onStep camera pans, not the click handler).
+    const transitioning = !!this._morphRaf && mProg < WIN.lockRelease;
     if (transitioning && !this._transitioning) this.ctx.tooltip?.hide();
     this._transitioning = transitioning;
 
-    // Bar wrap opacity + active visibility
+    // ===== wrap-level visibility =====
+    const show = dir === "fwd"
+      ? Math.max(riseInT, flyBaseT, landOp, barsBaseT, closingOp)
+      : Math.max(1 - riseOutT, landOp, closingOp);
     wrap.style.opacity = String(show);
-    // Bars accept hover ONLY when the ranking has fully settled (not mid-morph).
-    wrap.style.pointerEvents = (p >= 0.965) ? "auto" : "none";
+    // Bars accept hover ONLY once forward has fully arrived (never mid-morph, never during reverse).
+    wrap.style.pointerEvents = (dir === "fwd" && mProg >= 0.999) ? "auto" : "none";
     // [user-reported fix] hide via visibility when fully transparent so the fixed
     // overlay can never visually block the choropleth map below.
     wrap.style.visibility = show > 0.001 ? "visible" : "hidden";
     wrap.classList.toggle("is-active", show > 0.05);
 
-    // [Task 5] Text box + legend opacity tied to scroll
-    // [R2-elevate] Title holds off until the shapes have arrived (fly ~done at 0.81) so it lands
-    // over the forming bar column, never over the still-flying map clones. Legend follows the bars.
-    const textOp = Math.max(0, Math.min(1, (p - 0.81) / 0.06));
-    const legendOp = Math.max(0, Math.min(1, (p - 0.94) / 0.05));
-    if (this._bars_textbox) this._bars_textbox.style.opacity = String(textOp);
-    if (this._bars_legend)  this._bars_legend.style.opacity  = String(legendOp);
-    if (this._bars_closing) this._bars_closing.style.opacity = String(closingOp);
-    if (this._bars_source)  this._bars_source.style.opacity  = String(legendOp);
+    if (this._bars_textbox) this._bars_textbox.style.opacity = String(titleOp);
+    if (this._bars.euTagEl) this._bars.euTagEl.style.opacity = closingOp;
 
     // Fade the choropleth ornaments as the morph takes over
-    if (this.gMap)       this.gMap.style("opacity", 1 - mapFade);
+    if (this.gMap)       this.gMap.style("opacity", mapOpacity);
     // [scroll-fix §4b] Once the map starts fading, stop it catching pointer events — otherwise the
     // invisible country layer still pops hover cards (the "Croatia card over a half-empty screen" bug).
-    if (this.gMap)       this.gMap.style("pointer-events", mapFade > 0.01 ? "none" : "auto");
-    if (this.kickerG)    this.kickerG.style("opacity", 1 - mapFade);
-    if (this.labelG)     this.labelG.style("opacity", (1 - mapFade) * (this.focusCode ? 0 : 1));
-    if (this._mapCardEl) this._mapCardEl.style.opacity = (1 - mapFade);
+    if (this.gMap)       this.gMap.style("pointer-events", mapOpacity < 0.99 ? "none" : "auto");
+    if (this.kickerG)    this.kickerG.style("opacity", mapOpacity);
+    if (this.labelG)     this.labelG.style("opacity", mapOpacity * (this.focusCode ? 0 : 1));
+    if (this._mapCardEl) this._mapCardEl.style.opacity = mapOpacity;
 
-    // ===== Phases Rise + Fly =====
-    // [Morph-v2 fix] Recompute clone start positions THIS TICK using the choropleth's
-    // current screen position. The choropleth scrolls with the page, so the country's
-    // pixel coordinates change every frame. Build-time positions would be stale.
-    const choroSvg = this.svg?.node();
-    const choroRect = choroSvg?.getBoundingClientRect();
-    const stage = this._barsStage;
-    const stageRect = stage?.getBoundingClientRect();
-    const cam = this._cam || { tx: 0, ty: 0, k: 1 };
-    const m = this._bars.margin;
-    const stageW = this._bars.W, stageH = this._bars.H;
-    if (choroRect && stageRect) {
-      const sX = choroRect.width  / this.W;
-      const sY = choroRect.height / this.H;
-      clones.forEach(c => {
-        const inSvgX = c.geoCx * cam.k + cam.tx;
-        const inSvgY = c.geoCy * cam.k + cam.ty;
-        const pxX = choroRect.left + inSvgX * sX;
-        const pxY = choroRect.top  + inSvgY * sY;
-        const svgX = (pxX - stageRect.left) * stageW / stageRect.width;
-        const svgY = (pxY - stageRect.top)  * stageH / stageRect.height;
-        c.startCx = svgX - m.left;
-        c.startCy = svgY - m.top;
-      });
-    }
-
-    // [Morph-v2 fix] flubber.interpolate(fromD, toD) returns a path that morphs through
-    // BOTH shape AND position (from country path coords → square path at target coords).
-    // So we do NOT translate via transform — flubber already handles the position.
-    // We only use transform for the subtle "rise lift" (translateY) and the scale pulse.
-    //
-    // However, the country path d is in CHOROPLETH-SVG coords, which only align with the
-    // morph SVG if the choropleth happens to sit at the same screen position. Since the
-    // morph SVG is full-viewport and the choropleth is in its own sticky panel, we need
-    // to apply a per-tick offset to align the path's start position with the country's
-    // current on-screen position.
-    clones.forEach(c => {
-      // [owner review D1] clones FULLY fade once the flag lands (was floored at 0.35, which left a
-      // faint colour square behind every flag — the "extra squares" the owner flagged). The flag +
-      // the bar now carry the colour; the morph clone is gone at the end-state.
-      const opacity = Math.max(0, rise * (1 - trail));
-      const scale = 1 + rise * 0.08;
-      const liftY = -6 * rise;
-      // Per-tick screen-alignment offset for the START position (where the country IS on
-      // screen right now). startCx/Cy = computed-this-tick screen position in root coords.
-      // The PATH d is at choropleth coords (geoCx, geoCy). Offset = startCx - geoCx.
+    // ===== clones: fly (staggered) + rise/trail-as-fade (staggered only in reverse) =====
+    // [Morph-v2 fix, unchanged] flubber.interpolate(fromD, toD) returns a path that morphs through
+    // BOTH shape AND position — no separate translate for position, only for the rise lift + the
+    // per-tick screen-alignment offset (the clone's `d` is baked in CHOROPLETH coords; startCx/startCy,
+    // captured ONCE per motion by _captureCloneStarts — not read from the DOM here — give this tick's
+    // alignment translate).
+    clones.forEach((c, i) => {
+      let flyT, cloneOp, pulseT;
+      if (dir === "fwd") {
+        const [fa, fb] = staggeredWindow("fly", i);
+        flyT = d3.easeCubicInOut(progressBetween(mProg, fa, fb));
+        const [ta, tb] = staggeredWindow("trail", i);
+        const trailT = smooth(progressBetween(mProg, ta, tb));
+        cloneOp = Math.max(0, riseInT * (1 - trailT));
+        pulseT = riseInT;
+      } else {
+        // "trail" window reused as the reverse fade-IN (bottom-rank-first — mirrors forward's
+        // top-rank-first bars grow), "rise" (global, un-staggered) is the final fade-OUT.
+        const [ta, tb] = staggeredWindow("trail", i, true);
+        const fadeInT = smooth(progressBetween(mProg, ta, tb));
+        const [fa, fb] = staggeredWindow("fly", i);
+        flyT = 1 - d3.easeCubicInOut(progressBetween(mProg, fa, fb));   // 1=square at start, 0=country by the end
+        cloneOp = Math.max(0, fadeInT * (1 - riseOutT));
+        pulseT = cloneOp;
+      }
+      const scale = 1 + pulseT * 0.08;
+      const liftY = -6 * pulseT;
       const offsetX = c.startCx - c.geoCx;
       const offsetY = c.startCy - c.geoCy;
-      // Path d morphs via flubber. At fly=0: path matches fromD (at choro coords). At fly=1:
-      // path matches toD (at target square in root coords). We apply offsetX/Y as a translate
-      // that LERPS from offsetX (at fly=0, to align with screen) to 0 (at fly=1, since toD is
-      // already in root coords).
-      const transX = offsetX * (1 - fly);
-      const transY = offsetY * (1 - fly) + liftY;
-      try {
-        c.pathEl.setAttribute("d", c.interp(fly));
-      } catch (_) { /* defensive — shouldn't happen post-build */ }
-      c.pathEl.setAttribute("transform",
-        `translate(${transX.toFixed(2)},${transY.toFixed(2)}) scale(${scale.toFixed(3)})`);
-      c.pathEl.setAttribute("opacity", opacity.toFixed(3));
+      const transX = offsetX * (1 - flyT);
+      const transY = offsetY * (1 - flyT) + liftY;
+      try { c.pathEl.setAttribute("d", c.interp(flyT)); } catch (_) { /* defensive — shouldn't happen post-build */ }
+      c.pathEl.setAttribute("transform", `translate(${transX.toFixed(2)},${transY.toFixed(2)}) scale(${scale.toFixed(3)})`);
+      c.pathEl.setAttribute("opacity", cloneOp.toFixed(3));
     });
 
-    // ===== Phase Land =====
-    // Squares pulse-settle and crossfade to flag images.
-    // (Flag image opacity drives the visual; the clone's opacity is already fading from above.)
-    root.selectAll("image.bar-flag").style("opacity", land);
+    // ===== land: squares pulse-settle and crossfade to flag images =====
+    for (const r of rowEls) r.flagEl.style.opacity = landOp;
 
-    // ===== Phase Bars =====
-    // Horizontal bars grow from each flag.
-    root.selectAll("rect.bar-rect").each(function () {
-      const sel = d3.select(this);
-      const targetW = +sel.attr("data-target-width");
-      sel.attr("width", targetW * bars);
-    });
+    // ===== bars grow/shrink (staggered top-rank-first fwd / bottom-rank-first rev) + name/value =====
+    for (const r of rowEls) {
+      const [a, b] = staggeredWindow("bars", r.rank, dir === "rev");
+      const growT = d3.easeCubicOut(progressBetween(mProg, a, b));
+      r.rectEl.setAttribute("width", dir === "fwd" ? r.targetWidth * growT : r.targetWidth * (1 - growT));
+      const nameT = smooth(progressBetween(mProg, a, b));
+      const nameOp = dir === "fwd" ? nameT : (1 - nameT);
+      r.nameEl.style.opacity = nameOp;
+      r.valueEl.style.opacity = nameOp;
+    }
+    if (this._bars.euZeroEl) this._bars.euZeroEl.style.opacity = Math.max(landOp, dir === "fwd" ? barsBaseT : (1 - barsBaseT));
 
-    // [R2-elevate] EU-27 tag + directional axis cues fade in with the bars (not during the
-    // map-fly) so no orphan text floats before the bars exist.
-    root.selectAll("text.bars-eu-tag, text.bars-axis-dir").style("opacity", bars);
-    root.select("line.bars-eu-zero").style("opacity", Math.max(land, bars));
-
-    // Names + values + sparklines reveal at trail.
-    root.selectAll("text.bar-name").style("opacity", trail);
-    root.selectAll("text.bar-value").style("opacity", trail);
-    root.selectAll("g.bar-spark").style("opacity", trail);
-    root.selectAll("g.bar-spark").each(function () {
-      const path = d3.select(this).select("path.bar-spark-line");
-      if (!path.empty()) tracePath(path, trail);
-    });
-    root.selectAll("circle.bar-spark-dot").attr("opacity", trail * trail);
-
-    // ===== [owner review D1 4b] Scroll-highlight sequence =====
-    // Once the bars have formed, the dwell scroll spotlights, in turn: the highest country, then the
-    // two middle (around the EU-27 line, ≈ +small & ≈ −small), then the lowest — then releases to all.
-    // Hover overrides this; hover-out restores it (via _applyBarSpotlight(this._spotlightCodes)).
+    // ===== [owner review D1 4b] Scroll-highlight sequence — forward's tail dwell only. Retimed
+    // proportionally into the new envelope (was p 0.92-0.985 of the old bracket, ~80%-98.6% of that
+    // bracket's own span — same relative position here, now against MORPH_DUR directly). Not run in
+    // reverse: cycling a spotlight while the chart is tearing down doesn't serve the "let the reader
+    // absorb the fully-formed chart" purpose it has on the way in. =====
     let spotCodes = null;
-    if (p >= 0.92 && p < 0.985 && barRows.length > 3) {
+    if (dir === "fwd" && mProg >= 0.80 && mProg < 0.986 && barRows.length > 3) {
       const dev = r => r.cumPct - this._bars.euVal;
       let zc = barRows.findIndex(r => dev(r) < 0);          // first row below the EU line
       if (zc < 1) zc = Math.floor(barRows.length / 2);
@@ -2017,16 +2672,11 @@ export class Choropleth extends BaseChart {
         [barRows[zc - 1].code, barRows[zc].code],           // the two middle, straddling the EU line
         [barRows[barRows.length - 1].code],                 // lowest below EU
       ];
-      const dp = (p - 0.92) / 0.065;
+      const dp = (mProg - 0.80) / 0.186;
       spotCodes = stages[Math.max(0, Math.min(stages.length - 1, Math.floor(dp * stages.length)))];
     }
     this._spotlightCodes = spotCodes;
     this._applyBarSpotlight(spotCodes);
-
-    // ===== Hide the old circle markers (v1 leftover) =====
-    if (this._bars.markersG) {
-      this._bars.markersG.selectAll("circle.bar-marker").style("opacity", 0);
-    }
   }
   // ============================================================
 

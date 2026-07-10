@@ -493,6 +493,11 @@
 .tooltip .row { display: flex; justify-content: space-between; gap: var(--space-4); align-items: baseline; }
 .tooltip .row .key { color: var(--ink-soft); }
 .tooltip .row .val { font-family: var(--font-mono); font-weight: 600; font-variant-numeric: tabular-nums; color: var(--ink); }
+/* [compare] a group's own member rows nest under its average row — indent + slightly smaller only;
+   colour stays the same safe --ink-soft (never dim further into --ink-faint, which fails WCAG AA at
+   this text size — see the seq-hi-text/seq-lo-text fix this same session). */
+.tooltip .row--member { padding-inline-start: 14px; font-size: 0.92em; }
+.tooltip .row--member .ac-sw { opacity: 0.6; }   /* echoes the member line's own thin/pale chart stroke */
 /* [AUDIT 03] Event-dot tooltip note line (replaces an inline style= in AnnotatedLine). */
 .tooltip .tip-note { margin: 0; color: var(--ink-soft); max-width: 240px; }
 /* [AUDIT 08] DivergingBar tooltip — Real Δ coloured by sign
@@ -507,6 +512,19 @@
 .tooltip .ac-sw--c1 { background: var(--cmp-2); }
 .tooltip .ac-sw--c2 { background: var(--cmp-3); }
 .tooltip .ac-sw--c3 { background: var(--cmp-4); }
+/* [debug 2026-07-06] c4-c9 were missing entirely — harmless while only individually-added countries
+   (max ~4 in practice) used this swatch, but the group-tooltip feature routinely reaches slot 4+
+   (e.g. 2 groups + 2 countries already = slots 0-3; one more selection hits the gap), which would
+   render a blank/invisible swatch dot despite the line itself being correctly coloured. */
+.tooltip .ac-sw--c4 { background: var(--cmp-5); }
+.tooltip .ac-sw--c5 { background: var(--cmp-6); }
+.tooltip .ac-sw--c6 { background: var(--cmp-7); }
+.tooltip .ac-sw--c7 { background: var(--cmp-8); }
+.tooltip .ac-sw--c8 { background: var(--cmp-9); }
+.tooltip .ac-sw--c9 { background: var(--cmp-10); }
+/* [AMENDMENT-3 §2.3] RaceChart's multi-series hover reuses its own price/pay colours (it has
+   no separate cmp-colour system — compared-country lines are dashed, not recoloured). */
+.tooltip .ac-sw--wages { background: var(--cat-wages); }
 
 /* Crosshair — AnnotatedLine's vertical hover guide. Scoped to the live .chart-svg root;
    the old bare-.chart selector never matched (root is .chart-svg) so the line was invisible. */
@@ -641,6 +659,32 @@
   fill: var(--ink); letter-spacing: 0.05em; text-transform: uppercase;
 }
 .chart-svg .hm-col-head { font-family: var(--font-mono); font-size: 10px; fill: var(--ink-faint); letter-spacing: 0.02em; }
+/* [D85] Event markers — whisper-quiet, claret, entirely below ih (never over the cell grid).
+   Distinct from the grey .hm-col-head year row: claret colour + own micro-label voice (matches
+   the legend-title convention — 10px, wide tracking, uppercase, --font-ui). */
+.chart-svg .hm-event-dot { fill: var(--accent); pointer-events: none; transition: r 150ms var(--ease-out); }
+.chart-svg .hm-event-label {
+  font-family: var(--font-ui); font-size: 9px; font-weight: 600;
+  fill: var(--accent-text); letter-spacing: 0.14em; text-transform: uppercase;
+  pointer-events: none;
+}
+/* Invisible, generously-sized hover/tap target — the visible dot (2-2.4px) is too small to hit
+   reliably on its own, especially the narrowViewport dot-only size. */
+.chart-svg .hm-event-hit { fill: transparent; }
+.chart-svg .hm-event--focus .hm-event-dot { r: 3.6; }
+@media (prefers-reduced-motion: reduce) { .chart-svg .hm-event-dot { transition: none; } }
+/* [D85] The panel's own block-size (100dvh-derived, shared with every other chart) never grows —
+   instead the heatmap's OWN svg is let out of the shared `max-block-size:100%` cap so it can size
+   itself by its own (now EVENT_TIER_H-taller) viewBox aspect ratio and overflow the bottom of its
+   `1fr` chart-body row by exactly that many px. Same pattern the choropleth chapter already uses
+   for its own bleed (scrollytelling.css ~L169) — `.chart-body`'s OWN overflow (computed default:
+   hidden, not `.scroller__chart`'s — that one IS visible but is the wrong element) must also be
+   freed, or the taller svg just gets clipped back down to the unchanged row height. ih/cell/row
+   geometry is untouched because the EXTRA height is pure overflow, never redistributed into the
+   grid's own row sizing. At <=768px the tier drops to dot-only and the viewBox no longer grows,
+   so this quietly becomes a no-op there (nothing to overflow). */
+.scroller__chart[data-chart-mount="heatmap"] .chart-body { overflow: visible; }
+.scroller__chart[data-chart-mount="heatmap"] .chart-body > svg.chart-svg { max-block-size: none; }
 
 /* ===== CH5 · RateLevel (respin) — the KEY chart, two stacked panels ===== */
 .scroller__chart[data-chart-mount="rateLevel"] { padding-block: 0; gap: 2px; }
@@ -685,13 +729,33 @@
 .chart-svg .waffle-cell { stroke: var(--bg); stroke-width: 1.5; cursor: pointer; transition: fill var(--dur-3) var(--ease-out); }
 .chart-svg .waffle-cell--on  { fill: var(--bg-sunken); }
 .chart-svg .waffle-cell--off { fill: var(--accent); }
+/* [D86] the right column's own reserved label gutter — left-aligned, lives ENTIRELY inside the
+   ~140px gutter reserved by the JS layout, so a label can never cross into the waffle's zone at
+   any width (the structural fix for the overlap bug). */
 .chart-svg .wf-bar-label { font-family: var(--font-ui); font-size: 11px; font-weight: 600; fill: var(--ink-soft); }
 .chart-svg .wf-bar-2019 { fill: var(--ink-fainter); }
-.chart-svg .wf-bar-2025 { fill: var(--accent); }
+/* [D86] the NOW bar locks to its OWN category's --cat-* colour (owner ruling) — keyed on the
+   `data-cat` attribute _buildBars() already sets on each row group. Value tags stay a neutral
+   ink (not category-coloured): several --cat-* hues (transport cyan, food yellow-green) read
+   poorly as small bold text directly on the paper background, unlike a broad bar fill. */
+.chart-svg .wf-barrow[data-cat="CP04"]  .wf-bar-2025 { fill: var(--cat-housing); }
+.chart-svg .wf-barrow[data-cat="CP01"]  .wf-bar-2025 { fill: var(--cat-food); }
+.chart-svg .wf-barrow[data-cat="SERV"]  .wf-bar-2025 { fill: var(--cat-services); }
+.chart-svg .wf-barrow[data-cat="CP07"]  .wf-bar-2025 { fill: var(--cat-transport); }
+.chart-svg .wf-barrow[data-cat="CP045"] .wf-bar-2025 { fill: var(--cat-energy); }
+.chart-svg .wf-barrow[data-cat="CP11"]  .wf-bar-2025 { fill: var(--cat-other); }
 .chart-svg .wf-bar-v2019 { font-family: var(--font-mono); font-size: 9.5px; fill: var(--ink-faint); font-variant-numeric: tabular-nums; }
 .chart-svg .wf-bar-v2025 {
-  font-family: var(--font-mono); font-size: 11.5px; font-weight: 700; fill: var(--accent); font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono); font-size: 11.5px; font-weight: 700; fill: var(--ink); font-variant-numeric: tabular-nums;
   paint-order: stroke; stroke: var(--bg); stroke-width: 3px; stroke-linejoin: round;
+}
+.chart-svg .wf-bar-v2019, .chart-svg .wf-bar-v2025 { transition: opacity var(--dur-3) var(--ease-out); }
+/* [D86] the whole bars column (title + 6 rows) hides at step 0 (waffle alone) and shows from
+   step 1 on — a single opacity/pointer-events toggle the gate can assert on directly. */
+.chart-svg .wf-bars-group { opacity: 0; pointer-events: none; transition: opacity 280ms var(--ease-out); }
+.chart-svg .wf-bars-group.is-shown { opacity: 1; pointer-events: auto; }
+@media (prefers-reduced-motion: reduce) {
+  .chart-svg .wf-bars-group, .chart-svg .wf-bar-v2019, .chart-svg .wf-bar-v2025 { transition: none; }
 }
 .scroller__chart[data-chart-mount="waffle"] .chart-controls { padding: 0; gap: var(--space-2); line-height: 1; }
 #chart-waffle-controls .waffle-ctrl {
@@ -797,7 +861,8 @@
 .chart-controls .ac-select:focus-visible { outline: 2px solid var(--link); outline-offset: 1px; }
 .chart-svg .anno-extra-label,
 .chart-svg .race-extra-label,
-.chart-svg .hz-extra-label { font-family: var(--font-mono); font-size: 11px; font-weight: 600; }
+.chart-svg .hz-extra-label,
+.chart-svg .sm-cmp-label { font-family: var(--font-mono); font-size: 11px; font-weight: 600; }
 
 /* ===== [AMENDMENT-2 §C] InfoPop — clickable-label popover (singleton) ===== */
 .infopop {
@@ -825,6 +890,12 @@
    glyph and falls through to whatever's underneath. `bounding-box` makes the whole reported
    box clickable, matching what a user visually aims at. */
 .chart-svg .infopop-trigger { text-decoration: underline dotted var(--ipu, currentColor); text-decoration-thickness: 1px; text-underline-offset: 2px; pointer-events: bounding-box; }
+/* [AMENDMENT-3 §5.2] affordance upgrade — the dotted underline alone was too subtle for the
+   owner to notice these are clickable. On hover/focus, both the glyph fill and the underline
+   switch to claret (never the label's own semantic colour), signalling "interactive" the same
+   way everywhere; cursor:help is already set unconditionally in InfoPop.flag(). Focus-visible
+   keeps its own ring on top (keyboard-only, unchanged). */
+.chart-svg .infopop-trigger:hover, .chart-svg .infopop-trigger:focus-visible { fill: var(--accent); text-decoration-color: var(--accent); }
 .chart-svg .infopop-trigger:focus-visible { outline: 2px solid var(--link); outline-offset: 1px; }
 
 /* ===== [AMENDMENT-2 §B.5/§D.3] band labels inside bands + brush overview strip ===== */
@@ -1096,8 +1167,11 @@
   stroke-width: 3px;
   stroke-linejoin: round;
 }
-.chart-svg .year-kicker-extreme--hi { fill: var(--seq-4); }
-.chart-svg .year-kicker-extreme--lo { fill: var(--seq-1); }
+/* [debug 2026-07-06] --seq-4/--seq-1 direct read fine as map-fill colour patches but fail WCAG AA as
+   small text (measured 2.67:1 / 3.36:1 against --bg at this 11.5px size, need 4.5) — use the
+   darker, same-hue text-safe variants instead (mirrors --accent-text's existing pattern). */
+.chart-svg .year-kicker-extreme--hi { fill: var(--seq-hi-text); }
+.chart-svg .year-kicker-extreme--lo { fill: var(--seq-lo-text); }
 .chart-svg .graticule { pointer-events: none; }
 
 .chart-svg .capital-dot {
@@ -1120,37 +1194,31 @@
 
 /* Multi-country narrative labels (e.g. step 1: Estonia + Lithuania + Latvia) */
 /* Choropleth → diverging-bar morph (Chapter 1, Steps 5–6).
-   The wrap is a viewport-wide overlay (position: fixed) so the bar layout
-   gets the whole horizontal area the text column had occupied. JS gates
-   visibility to "while chapter 1 is in viewport" via the .is-active class. */
+   [debug 2026-07-06 — owner report: "should be in the right side like all charts we have"] The wrap
+   used to be a viewport-wide `position:fixed` overlay so the bars got the whole screen, including the
+   text column's own width — reported back as reading like a different chart taking over the page
+   rather than this chart's own next state. Confined to the SAME box every other chart's own SVG
+   lives in: `this.container` (`.chart-body`, already `position:relative` per scrollytelling.css) —
+   `position:absolute; inset:0` here fills exactly that box, no more, no less. JS gates visibility to
+   "while the chapter is in viewport" via the .is-active class, same as before. */
 .choro-bars-wrap {
-  position: fixed;
-  /* Full viewport — the fixed theme toggle sits above this in z-index, so it stays clickable
-     through the morph without needing a reserved band. */
+  position: absolute;
   inset: 0;
-  width: 100vw;
-  height: 100dvh;   /* [R5·P15/PART5] dvh — mobile URL-bar-safe */
   pointer-events: none;
   opacity: 0;
-  /* [Morph-v2 user-reported fix] visibility hidden when opacity 0 so the fixed overlay
-     never visually blocks the choropleth map underneath, even on browsers that paint
-     fully-transparent fixed elements. JS toggles visibility:visible when opacity > 0. */
+  /* visibility hidden when opacity 0 so the bars layer never visually blocks the choropleth map
+     underneath, even on browsers that paint fully-transparent elements. JS toggles
+     visibility:visible when opacity > 0. */
   visibility: hidden;
   z-index: 6;
-  background: linear-gradient(to bottom, var(--bg) 0%, var(--bg) 100%);
-  /* [Morph-v2] Center the stage horizontally */
+  background: var(--bg);
   display: flex;
   align-items: stretch;
   justify-content: center;
 }
 .choro-bars-wrap.is-active { pointer-events: auto; visibility: visible; }
-/* [Morph-v2] Inner stage — max-width-clamped container so the bar SVG never
-   spans the full monitor on wide screens. clamp keeps it readable laptop → 5K. */
 .choro-bars-stage {
   width: 100%;
-  /* [scroll-fix §4b] The ranking is the full-screen DESTINATION of the morph — let it use more of the
-     viewport so it reads as a finished chart, not a block floating in side-bands (was max 1180px). */
-  max-width: clamp(680px, 96vw, 1520px);
   height: 100%;
   position: relative;
   display: flex;
@@ -1169,41 +1237,48 @@
   opacity: 0;
   transition: opacity var(--dur-4, 420ms) var(--ease-out);
 }
+/* [debug 2026-07-06 — confined-column redesign] left-anchored + narrower cap instead of
+   centered/56ch — a centered title fights the LEFT-aligned bar rows for space in this narrower
+   column, and 56ch of wrap room on a ~750-900px stage means 2-3 lines eating the whole top margin
+   however tall that margin is set. Left-aligned matches how every other chart's own title reads. */
 .bars-textbox--top {
-  top: var(--space-4);
-  left: 50%;
-  transform: translateX(-50%);
-  text-align: center;
-  max-inline-size: 56ch;
+  top: var(--space-3);
+  left: var(--space-3);
+  right: var(--space-3);
+  text-align: left;
+  max-inline-size: 34ch;
 }
 .bars-textbox__eyebrow {
   font-family: var(--font-body);
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 600;
-  letter-spacing: 0.22em;
+  letter-spacing: 0.2em;
   text-transform: uppercase;
   color: var(--ink-faint);
-  margin-bottom: var(--space-2);
+  margin-bottom: var(--space-1);
 }
+/* [debug 2026-07-06] 28px → 16px: sized for a 1520px-wide full-screen destination before, now
+   reads at the same register as this chart's own `.scroller__chart h3` (var(--fs-400)) since the
+   bars share that exact column now instead of taking over the page. */
 .bars-textbox__title {
   font-family: var(--font-display);
   font-style: italic;
-  font-size: 28px;
+  font-size: 16px;
   font-weight: 380;
-  font-variation-settings: "opsz" 144;
-  letter-spacing: -0.015em;
+  font-variation-settings: "opsz" 32;
+  letter-spacing: -0.01em;
   color: var(--ink);
-  line-height: 1.2;
+  line-height: 1.25;
 }
 /* [R2-elevate] Emphasis inside the italic Fraunces title (e.g. "above or below") */
 .bars-textbox__title em { font-style: italic; color: var(--accent-text); }
 /* [R2-elevate] One-line note under the title stating the EU-27 absolute figure, so the
    deviation bars can't be misread as absolute inflation. Inter, muted, tabular strong. */
 .bars-textbox__note {
-  margin-top: var(--space-2);
+  margin-top: var(--space-1);
   font-family: var(--font-body);
-  font-size: 12.5px;
-  line-height: 1.45;
+  font-size: 10.5px;
+  line-height: 1.4;
   color: var(--ink-soft);
   letter-spacing: 0.005em;
 }
@@ -1260,11 +1335,6 @@
   display: inline-block;
   width: 18px; height: 1px;
   background: repeating-linear-gradient(to right, var(--ink-faint) 0 4px, transparent 4px 7px);
-}
-.bars-legend__line {
-  display: inline-block;
-  width: 18px; height: 1.5px;
-  background: var(--accent);
 }
 /* [R4 fix] In-overlay source attribution. Mirrors the chapter chart-source
    paragraph so anchor-jump readers always see the citation while inside the
@@ -1359,11 +1429,8 @@
   stroke-width: 3px;
   stroke-linejoin: round;
 }
-.choro-bars-svg .bars-axis-dir--hi { fill: var(--seq-4); }
-.choro-bars-svg .bars-axis-dir--lo { fill: var(--seq-1); }
-.choro-bars-svg .bar-spark-line,
-.choro-bars-svg .bar-spark-dot,
-.choro-bars-svg .bar-spark-event { pointer-events: none; }
+.choro-bars-svg .bars-axis-dir--hi { fill: var(--seq-hi-text); }
+.choro-bars-svg .bars-axis-dir--lo { fill: var(--seq-lo-text); }
 
 .chart-svg .multi-label-text {
   font-family: var(--font-body);
@@ -1981,6 +2048,15 @@
 .cmp-handle.is-dragging { box-shadow: var(--shadow-3); }
 .cmp-handle:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
 .cmp-handle__grip { letter-spacing: -2px; }
+/* [D83] One-shot invite pulse once the enter-compare sweep settles — must keep the handle's own
+   translate(-50%,-50%) centering (not just scale) or the pulse would visibly re-center the handle. */
+@keyframes cmp-handle-pulse {
+  0%   { transform: translate(-50%, -50%) scale(1); }
+  50%  { transform: translate(-50%, -50%) scale(1.15); }
+  100% { transform: translate(-50%, -50%) scale(1); }
+}
+.cmp-handle.is-pulsing { animation: cmp-handle-pulse var(--dur-5) var(--ease-spring); }
+@media (prefers-reduced-motion: reduce) { .cmp-handle.is-pulsing { animation: none; } }
 .scroller__chart .map-timeline {
   /* [scroll-fix §4a] taller strip so the area + playhead read in proportion (was 80px, squashed). */
   display: block; width: 100%; height: 92px; overflow: visible;
@@ -2133,3 +2209,111 @@
 
 
 /* (Ridgeline chart cut — its .ridge-* / .rdg-* styles removed in the round-5 debug pass.) */
+
+/* ============================================================
+   [Fable D54] CH3 compare finale + camera polish
+   ============================================================ */
+/* Graticule hidden while the camera flies — the hairline grid re-rasterises every zoom frame
+   (the owner's "vertical and horizontal lines appear for a moment") and costs paint time. */
+.chart-svg.is-camming .graticule { opacity: 0; }
+/* [D77 · owner "still not fixed" — the actual seam trigger] `will-change: transform` was REMOVED from
+   `.map-layer` here. D70 added it to "smooth" the camera, but on a large SVG group it does the OPPOSITE
+   of what you want: it forces Chrome to promote the layer to a persistent GPU texture and SCALE THAT
+   BITMAP during the zoom (tiled once the layer exceeds texture size — ~6300px at scale 2 × DPR 2 even
+   after the D76 graticule fix), and the tile boundaries leak the paper background as the white
+   horizontal/vertical grid the owner filmed (plus the bitmap upscaling reads as the "shake"/blur).
+   WITHOUT `will-change`, Chrome re-renders the map's VECTORS crisply every frame instead of scaling a
+   cached bitmap — no bitmap means no tiles means no seams, and it stays sharp at any zoom. The D76
+   graticule bound keeps that per-frame vector re-render cheap (27 countries + a bounded grid, not a
+   383-million-unit path). This is the real fix; the earlier is-camming graticule-hide (D70), mask-drop
+   (D75), and even the graticule-size fix (D76) all reduced the tiling without removing the one property
+   that FORCED bitmap-tiling in the first place. */
+/* [D75] The vignette mask is also dropped while `.is-camming` — see the co-located rule + rationale in
+   scrollytelling.css. Kept as defense-in-depth for extreme Alt+wheel zoom (scale 8). */
+
+/* The embedded drag-to-compare overlay — fills chapter 3's chart-body like the bars wrap does. */
+.choro-cmp-wrap {
+  position: absolute; inset: 0;
+  background: var(--bg);
+  opacity: 0;
+  transition: opacity var(--dur-4) var(--ease-out);
+  z-index: 4;
+}
+.choro-cmp-wrap.is-in { opacity: 1; }
+.choro-cmp-wrap .chart-svg { width: 100%; height: 100%; display: block; }
+@media (prefers-reduced-motion: reduce) { .choro-cmp-wrap { transition: none; } }
+
+/* [D82] Cross-fade partner — the map's own <svg> fades opacity over the SAME duration/easing as
+   .choro-cmp-wrap above instead of an instant visibility cut, so entering/leaving compare reads as
+   one cross-fade (map fades out while the compare overlay fades in) rather than a cut-then-fade-up.
+   Scoped to the direct SVG child only — nothing else here ever drives this element's own opacity. */
+#chart-choropleth > svg { transition: opacity var(--dur-4) var(--ease-out); }
+@media (prefers-reduced-motion: reduce) { #chart-choropleth > svg { transition: none; } }
+
+/* Year pickers now live in the compare STEP CARD (left column), not above a full-bleed map. */
+.cmp-card-controls {
+  display: flex; align-items: center; flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-block-start: var(--space-3);
+}
+/* [D84] Country before/after card under the pickers — filled by Choropleth._renderCmpDetail on
+   click. Two distinct motion cases, both class-toggle + CSS-transition driven (the line draw/morph
+   itself is d3-attr-transition driven in JS — see _cmpDetailReveal/_cmpDetailSwitch):
+   CASE A (first selection, panel not yet open) — .cmp-card-detail is a grid-template-rows 0fr->1fr
+   reveal container (the "animate to auto height" technique — no JS height measurement, no layout
+   jump). .cmp-detail__inner is the required overflow:hidden child the technique clips against, and
+   also carries the divider border, which fades in on its own delayed timing alongside the name.
+   CASE B/C (switching country, or a year-dropdown change while one is selected) — the panel does
+   NOT re-collapse/re-reveal; .is-swap/.is-swap-in on the SAME elements drive a fast, undelayed
+   crossfade (150ms out, swap text, 150ms in) — see the JS for why these need their OWN transition
+   duration distinct from the one-time reveal's delayed 180ms (a bare class-removal back to the
+   `.is-in` state would otherwise inherit the base rule's 168ms delay, wrong for a crossfade). */
+.cmp-card-detail {
+  margin-block-start: var(--space-3);
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 280ms var(--ease-out);
+}
+.cmp-card-detail.is-in { grid-template-rows: 1fr; }
+@media (prefers-reduced-motion: reduce) { .cmp-card-detail { transition: none; } }
+
+.cmp-detail__inner {
+  overflow: hidden;
+  min-height: 0;
+  border-block-start: 1px solid transparent;
+  padding-block-start: var(--space-3);
+  transition: border-color 180ms var(--ease-out) 168ms;
+}
+.is-in .cmp-detail__inner { border-color: var(--rule); }
+@media (prefers-reduced-motion: reduce) { .cmp-detail__inner { transition: none; } }
+
+.cmp-detail__name {
+  font-family: var(--font-ui); font-size: 11px; font-weight: 600;
+  letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink);
+  margin-block-end: 6px;
+  opacity: 0; transform: translateY(4px);
+  transition: opacity 180ms var(--ease-out) 168ms, transform 180ms var(--ease-out) 168ms;
+}
+.is-in .cmp-detail__name { opacity: 1; transform: translateY(0); }
+.is-in .cmp-detail__name.is-swap { opacity: 0; transition: opacity 150ms var(--ease-out); }
+.is-in .cmp-detail__name.is-swap.is-swap-in { opacity: 1; }
+
+.cmp-detail__mini { display: block; width: 100%; height: 64px; overflow: visible; }
+.cmp-detail__mini path { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.cmp-detail__mini .cmp-mini-a { stroke: var(--seq-1); }
+.cmp-detail__mini .cmp-mini-b { stroke: var(--seq-4); }
+
+.cmp-detail__rows { display: flex; gap: var(--space-4); margin-block-start: 6px; }
+.cmp-detail__row {
+  font-family: var(--font-mono); font-size: 11.5px; font-variant-numeric: tabular-nums;
+  opacity: 0; transform: translateY(4px);
+  transition: opacity 180ms var(--ease-out), transform 180ms var(--ease-out);
+}
+.cmp-detail__row.is-shown { opacity: 1; transform: translateY(0); }
+.cmp-detail__row.is-shown.is-swap { opacity: 0; transition: opacity 150ms var(--ease-out); }
+.cmp-detail__row.is-shown.is-swap.is-swap-in { opacity: 1; }
+.cmp-detail__row--a { color: var(--seq-lo-text); }
+.cmp-detail__row--b { color: var(--seq-hi-text); }
+@media (prefers-reduced-motion: reduce) {
+  .cmp-detail__name, .cmp-detail__row { transition: none; }
+}

@@ -25,6 +25,7 @@ export class RaceChart extends BaseChart {
     this._zoom = "full";          // [§C.3] zoom preset — persists across re-renders
     this._selectedCodes = [];     // [§C.3] compared countries (max 2) — persists
     this._lastStepIdx = -1;       // [§C.3] story-reset only on real step change
+    this._pairCache = new Map();  // [§2.3] code -> _countryPair(code), built once per add (not per mousemove)
   }
 
   size() {
@@ -149,6 +150,7 @@ export class RaceChart extends BaseChart {
     const x = this._x, y = this._y, g = this._g, iw = this._iw, ih = this._ih, rows = this._rows;
     const cur = g.append("line").attr("class", "crosshair").attr("y1", 0).attr("y2", ih).style("opacity", 0);
     const bisect = d3.bisector(d => d.t).left;
+    const nearest = (arr, t) => { const i = bisect(arr, t); const a = arr[Math.max(0, i - 1)], b = arr[Math.min(arr.length - 1, i)]; return (!a || (b && (t - a.t) > (b.t - t))) ? b : a; };
     g.append("rect").attr("x", 0).attr("y", 0).attr("width", iw).attr("height", ih).attr("fill", "transparent")
       .on("mousemove", (event) => {
         const [mx] = d3.pointer(event, g.node());
@@ -156,7 +158,21 @@ export class RaceChart extends BaseChart {
         const rec = rows[Math.max(0, Math.min(rows.length - 1, i))]; if (!rec) return;
         cur.style("opacity", 1).attr("x1", x(rec.t)).attr("x2", x(rec.t));
         const gap = rec.pay - rec.price;
-        this.ctx.tooltip.show(`<h5>${d3.timeFormat("%B %Y")(rec.t)}</h5><div class="row"><span class="key">Prices</span><span class="val">${rec.price.toFixed(0)}</span></div><div class="row"><span class="key">Pay</span><span class="val">${rec.pay.toFixed(0)}</span></div><div class="row"><span class="key">Gap</span><span class="val">${gap >= 0 ? "+" : ""}${gap.toFixed(1)} pts</span></div>`, event.clientX, event.clientY);
+        // §2.3 multi-series hover — EU base first (unprefixed, matches the original tooltip),
+        // then each compared country's own pay/price (cached in _addCountry, not recomputed
+        // per mousemove). Race has no separate cmp-colour system: compared lines reuse the same
+        // price/pay colours (dashed), so rows are disambiguated by a country-name prefix instead.
+        let html = `<h5>${d3.timeFormat("%B %Y")(rec.t)}</h5>` +
+          `<div class="row"><span class="key">Prices</span><span class="val">${rec.price.toFixed(0)}</span></div>` +
+          `<div class="row"><span class="key">Pay</span><span class="val">${rec.pay.toFixed(0)}</span></div>` +
+          `<div class="row"><span class="key">Gap</span><span class="val">${gap >= 0 ? "+" : ""}${gap.toFixed(1)} pts</span></div>`;
+        this._selectedCodes.forEach(code => {
+          const pair = this._pairCache?.get(code); if (!pair) return;
+          const name = this.data.countryName(code);
+          if (pair.price.length) { const pr = nearest(pair.price, t); html += `<div class="row"><span class="key"><span class="ac-sw ac-sw--eu"></span>${name} · Prices</span><span class="val">${pr.v.toFixed(0)}</span></div>`; }
+          if (pair.pay.length) { const pw = nearest(pair.pay, t); html += `<div class="row"><span class="key"><span class="ac-sw ac-sw--wages"></span>${name} · Pay</span><span class="val">${pw.v.toFixed(0)}</span></div>`; }
+        });
+        this.ctx.tooltip.show(html, event.clientX, event.clientY);
       })
       .on("mouseleave", () => { cur.style("opacity", 0); this.ctx.tooltip.hide(); });
   }
@@ -251,9 +267,9 @@ export class RaceChart extends BaseChart {
     const sel = host.querySelector(".ac-select"); if (sel) sel.disabled = this._selectedCodes.length >= 2;   // race: max 2
   }
 
-  _addCountry(code) { if (this._selectedCodes.includes(code) || this._selectedCodes.length >= 2) return; this._selectedCodes.push(code); this._rescaleY(true); this._renderChips(); }   // [§B.7] rescale y over visible series
-  _removeCountry(code) { this._selectedCodes = this._selectedCodes.filter(c => c !== code); this._rescaleY(true); this._renderChips(); }
-  _resetCountries() { if (!this._selectedCodes.length) return; this._selectedCodes = []; this._rescaleY(true); this._renderChips(); }
+  _addCountry(code) { if (this._selectedCodes.includes(code) || this._selectedCodes.length >= 2) return; this._selectedCodes.push(code); this._pairCache.set(code, this._countryPair(code)); this._rescaleY(true); this._renderChips(); }   // [§B.7] rescale y over visible series
+  _removeCountry(code) { this._selectedCodes = this._selectedCodes.filter(c => c !== code); this._pairCache.delete(code); this._rescaleY(true); this._renderChips(); }
+  _resetCountries() { if (!this._selectedCodes.length) return; this._selectedCodes = []; this._pairCache.clear(); this._rescaleY(true); this._renderChips(); }
 
   // A country's own pay index (from its 2019 floor) and price index (its HICP), monthly, 2019 = 100.
   _countryPair(code) {

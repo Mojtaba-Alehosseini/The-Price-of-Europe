@@ -65,6 +65,19 @@
     block-size: 72dvh;
     padding: var(--space-3);
   }
+  /* The fixed .theme-toggle sits inset-inline-end from the VIEWPORT edge, while the panel
+     sits inset from the viewport edge by a constant page margin — so at every width in this
+     breakpoint the toggle intrudes the SAME ~61px from the panel's own right edge (measured:
+     390px → toggle.left 313 vs panel.right 374; 375px → 298 vs 359 — both a 61px gap). The
+     centered, full-width `.panel-head .chart-title` (h3) has no clearance for it (the legend
+     got one in AMENDMENT-3 §3 via inset-block-start; the title, being horizontal/centered, is
+     fixed here by narrowing its box so text-align:center naturally keeps clear on the right).
+     Confirmed real, visible overlap on 7 of 11 chapters (longer titles) with a Range-based
+     text-extent measurement — a plain getBoundingClientRect on the centered block reports the
+     full box regardless of text length and is not a reliable overlap test. 72px clears the
+     61px danger zone with an ~11px buffer at every phone width. */
+  .chapter--a2 .panel-head .chart-title { padding-inline-end: 72px; }
+
   /* Trim the always-on choropleth hint on phone — touch users don't have
      "alt+scroll", so the hint is misleading anyway. */
   .choro-header__hint { display: none !important; }

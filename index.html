@@ -189,8 +189,8 @@
       <div class="container container-prose">
         <div class="about-credit">
           <p class="about-credit__by reveal-up">Mojtaba Alehosseini</p>
-          <p class="about-credit__role reveal-up">Supervised by Annalisa Barla</p>
-          <p class="about-credit__meta reveal-up">University of Genova · Data Visualization 2025–26</p>
+          <p class="about-credit__role reveal-up">Supervised by <a href="https://rubrica.unige.it/personale/UkNHU15t" target="_blank" rel="noopener" class="ac-plain-link">Annalisa Barla</a></p>
+          <p class="about-credit__meta reveal-up"><span class="ac-unige-trigger">University of Genova</span> · Data Visualization 2025–26</p>
           <img class="about-credit__logo reveal-up" src="assets/unige-logo.svg"
                alt="University of Genova" width="280" height="143" loading="lazy" decoding="async" />
         </div>
@@ -278,6 +278,7 @@
         <figure class="scroller__chart" data-chart-mount="smallMultiples" aria-labelledby="chart-2-title">
           <div class="panel-head"><h3 class="chart-title" id="chart-2-title">COVID didn't raise prices. It loaded the spring.</h3></div>
           <div class="chart-body" id="chart-smallMultiples"></div>
+          <div class="chart-controls" id="chart-smallMultiples-controls"></div>
           <div class="panel-foot"><p class="chart-source">Source · Eurostat HICP monthly rate (prc_hicp_manr), EU-27, by COICOP</p></div>
         </figure>
       </div>
@@ -295,25 +296,35 @@
                 <h4>One Europe</h4>
                 <p>The whole map sits in the same gentle band. Tallinn and Paris live in the same price world.</p>
               </div>
-              <div class="scroller__step" data-step="1" data-year="2022">
+              <div class="scroller__step" data-step="1" data-year="2021">
+                <div class="step-eyebrow">2021</div>
+                <h4>It starts in the east</h4>
+                <p>Watch the Baltics. Estonia is already at 4.5% while most of the map still sleeps — the corner of Europe closest to Russian gas warms first.</p>
+              </div>
+              <div class="scroller__step" data-step="2" data-year="2022">
                 <div class="step-eyebrow">2022</div>
                 <h4>Two Europes</h4>
-                <p>The east burns first and worst. Estonia touches 25% in a single month; France never passes 7.3%. Distance from Russian gas became distance on this map.</p>
+                <p>Then the whole map catches. The east burns first and worst — Estonia touches 25% in a single month; France never passes 7.3%. Distance from Russian gas became distance on this map.</p>
               </div>
-              <div class="scroller__step" data-step="2" data-mode="rank">
+              <div class="scroller__step" data-step="3" data-mode="rank">
                 <div class="step-eyebrow">2022</div>
                 <h4>The gap, in order</h4>
                 <p>Same numbers, lined up. The spread between the calmest and the hardest-hit countries is wider than anything the euro had seen.</p>
               </div>
-              <div class="scroller__step" data-step="3" data-year="2024">
+              <div class="scroller__step" data-step="4" data-year="2024">
                 <div class="step-eyebrow">2024</div>
                 <h4>Cooling, unevenly</h4>
                 <p>Two years later the map cools — but it never goes back to one colour.</p>
               </div>
-              <!-- Dwell — scroll room to absorb the cooled 2024 map before the compare-map chapter. -->
-              <div class="scroller__step scroller__step--dwell" data-step="4" aria-hidden="true"></div>
+              <!-- Compare finale (D54) — the drag-to-compare map takes over this panel. -->
+              <div class="scroller__step" data-step="5" data-mode="compare">
+                <div class="step-eyebrow">2019 ↔ 2022</div>
+                <h4>Before and after</h4>
+                <p>Drag the line across the map. Pick any pair of years below — and click a country for its own before-and-after.</p>
+                <div class="chart-controls cmp-card-controls" id="chart-compareMap-controls"></div>
+                <div class="cmp-card-detail" id="ch3-compare-detail" aria-live="polite"></div>
+              </div>
             </div>
-            <aside id="choropleth-detail" class="map-detail" data-active="false" aria-live="polite" aria-label="Selected country detail"></aside>
           </div>
         </div>
         <figure class="scroller__chart" data-chart-mount="choropleth" aria-labelledby="chart-1-title">
@@ -324,16 +335,8 @@
       </div>
     </article>
 
-    <!-- Chapter 3b · CompareMap — drag-to-compare (respin CH3 companion) -->
-    <article class="chapter chapter--compare chapter--v2" data-chart="compareMap" aria-labelledby="chart-compareMap-title">
-      <h3 class="chapter-title" id="chart-compareMap-title">Drag the line. Compare the years.</h3>
-      <p class="chapter-subtitle chapter-subtitle--center">2019 on one side of the handle, 2022 on the other. Same map, three years apart.</p>
-      <div class="compare-wrap">
-        <div class="chart-controls" id="chart-compareMap-controls"></div>
-        <div class="chart-body" id="chart-compareMap"></div>
-        <p class="chart-source">Source · Eurostat HICP (prc_hicp_aind) · annual rate per country</p>
-      </div>
-    </article>
+    <!-- (Chapter 3b CompareMap chapter RETIRED — D54: the compare map now lives inside chapter 3's
+         panel as its final step; CompareMap.js is instantiated by Choropleth._enterCompare.) -->
 
     <!-- Chapter 4 · Heatmap -->
     <article class="chapter chapter--v2 chapter--a2" data-chart="heatmap">

@@ -1,8 +1,11 @@
 /* ============================================================
    AnnotatedLine — CH1 "The official story" (REBUILD for AMENDMENT-2 §B).
    Single EU-27 monthly YoY line, Jan 2019 → Dec 2025, x-domain to 2026-01.
-   NO kicker (A2 §B.1). Playhead dot lives only during the scroll-draw and fades
-   when the draw completes by step 2 (§B.2/§B.3). Last step = full line end-to-end;
+   NO kicker (A2 §B.1). [debug 2026-07-06] The line draws in ONCE, complete, the first time the
+   chapter scrolls into view — no longer tied to scroll position/step (was: a progressive reveal
+   synced to how far the reader had scrolled past the text steps, completing ~step 2; read as the
+   line "waiting" on the text card instead of telling its own story). Playhead dot lives only
+   during that one-time draw and fades on completion (§B.2). Last step = full line end-to-end;
    un-pin resets to the neutral full view (§B.4). Band labels live INSIDE their band,
    centered, clipped (§B.5). Compare mode adds country lines in cmp colours and
    RESCALES y over all visible series (§B.7/§B.8). Zoom = a d3.brushX overview strip
@@ -11,12 +14,11 @@
    ============================================================ */
 
 import { BaseChart } from "./BaseChart.js";
-import { watchChapterProgress, smooth } from "../modules/ChartMotion.js";
 import { ensureGlow } from "../modules/CraftFX.js";
 import { getInfoPop } from "../modules/InfoPop.js";
 
 const STEPS = ["calm", "covid", "climb", "peak", "return"];
-const DRAW_DONE_STEP = 2;   // §B.3 the scroll-draw finishes by the activation of step 2
+const DRAW_DUR = 900;   // [debug 2026-07-06] one-time full-line draw-in on first appearance
 
 // §C.2 verbatim popover copy — the executor writes none of these.
 const POP = {
@@ -25,14 +27,35 @@ const POP = {
   ecb:   "The European Central Bank aims to keep inflation near 2% a year — slow enough to ignore, positive enough to avoid deflation.",
   peak:  "October 2022: prices 11.5% higher than a year before — the fastest rise the euro area has ever recorded.",
 };
-const CMP = ["var(--cmp-1)", "var(--cmp-2)", "var(--cmp-3)", "var(--cmp-4)"];
+// [debug 2026-07-06] Extended 4→10 for the country-groups feature — a shared 10-slot cap across
+// individual countries + groups draws from one combined, ordered palette (see _slotColor).
+const CMP = ["var(--cmp-1)", "var(--cmp-2)", "var(--cmp-3)", "var(--cmp-4)", "var(--cmp-5)", "var(--cmp-6)", "var(--cmp-7)", "var(--cmp-8)", "var(--cmp-9)", "var(--cmp-10)"];
+
+// [debug 2026-07-06] Country groups for the compare feature. Members are EU-27 codes only — this
+// site's whole dataset is Eurostat EU-27, so non-EU members of some real-world groupings (the UK for
+// G7; Norway/Iceland for Nordic; Switzerland for DACH) simply aren't representable here and are
+// dropped, labelled "(EU members)" so that's not silently misleading. showMembers:false (Eurozone
+// only) means the chart draws just its one average line — Eurozone has 20 members, and drawing all
+// of them individually on a chart built for ~4-10 lines would be unreadable clutter; every other
+// group is small enough (2-5 members) that seeing each one alongside its own average is the point.
+const GROUPS = {
+  eurozone: { label: "Eurozone",           members: ["AT","BE","HR","CY","EE","FI","FR","DE","EL","IE","IT","LV","LT","LU","MT","NL","PT","SK","SI","ES"], showMembers: false },
+  g7:       { label: "G7 (EU members)",    members: ["DE","FR","IT"], showMembers: true },
+  nordic:   { label: "Nordic (EU members)",members: ["SE","DK","FI"], showMembers: true },
+  benelux:  { label: "Benelux",            members: ["BE","NL","LU"], showMembers: true },
+  visegrad: { label: "Visegrád Group",     members: ["PL","HU","CZ","SK"], showMembers: true },
+  dach:     { label: "DACH (EU members)",  members: ["DE","AT"], showMembers: true },
+  southern: { label: "Southern Europe",    members: ["ES","IT","EL","PT"], showMembers: true },
+};
 
 export class AnnotatedLine extends BaseChart {
   constructor(sel, data, ctx) {
     super(sel, data, ctx, { margin: { top: 12, right: 74, bottom: 74, left: 48 }, aspect: 1.5 });
     this._stepIdx = 0; this._lastStepIdx = -1; this._neutral = false;
     this._drawnP = 0; this._drawComplete = false; this._peakFired = false;
+    this._introPlayed = false;        // [debug 2026-07-06] the one-time draw-in plays once ever, not per-render (resize-safe)
     this._selectedCodes = [];
+    this._selectedGroups = [];        // [debug 2026-07-06] group keys, e.g. "nordic" — see GROUPS
     this._win = null;                 // current x window [d0,d1]; null = full
     this._compareMode = false;        // §2.1 chips≥1 = explore mode (story annotations hidden)
     this._info = getInfoPop();
@@ -53,6 +76,18 @@ export class AnnotatedLine extends BaseChart {
       .filter(d => d.v != null && d.time >= "2019-01" && d.time <= "2025-12")
       .sort((a, b) => a.t - b.t);
   }
+  // [debug 2026-07-06] Unweighted mean across a group's member countries, month by month. Only
+  // months where EVERY member has data are included (no partial-membership average masquerading as
+  // the whole group's figure).
+  _groupAverage(members) {
+    const byTime = new Map();
+    members.forEach(code => this._series(code).forEach(d => {
+      if (!byTime.has(d.time)) byTime.set(d.time, { t: d.t, time: d.time, sum: 0, n: 0 });
+      const e = byTime.get(d.time); e.sum += d.v; e.n++;
+    }));
+    return [...byTime.values()].filter(e => e.n === members.length)
+      .map(e => ({ t: e.t, time: e.time, v: e.sum / e.n })).sort((a, b) => a.t - b.t);
+  }
   _yScale() {   // §B.7 nice domain + explicit ticks so the TOP GRIDLINE (top tick) is always ≥ the data max
     let max = d3.max(this._all, d => d.v) ?? 11.5;
     let min = d3.min(this._all, d => d.v) ?? 0;
@@ -60,6 +95,16 @@ export class AnnotatedLine extends BaseChart {
       const s = this._series(c);
       const m = d3.max(s, d => d.v); if (m != null && m > max) max = m;
       const n = d3.min(s, d => d.v); if (n != null && n < min) min = n;
+    });
+    // A group's average is always within its members' own min/max, so bounding on the (raw) members
+    // is sufficient regardless of whether they're individually drawn (showMembers) or not.
+    this._selectedGroups.forEach(key => {
+      const g = GROUPS[key]; if (!g) return;
+      g.members.forEach(c => {
+        const s = this._series(c);
+        const m = d3.max(s, d => d.v); if (m != null && m > max) max = m;
+        const n = d3.min(s, d => d.v); if (n != null && n < min) min = n;
+      });
     });
     const step = max <= 14 ? 2 : (max <= 28 ? 4 : (max <= 45 ? 5 : 10));
     const top = Math.max(12, Math.ceil((max + step * 0.12) / step) * step);
@@ -76,7 +121,14 @@ export class AnnotatedLine extends BaseChart {
     this.container.innerHTML = "";
     const isPhone = this.size().width < 560;
     this._isPhone = isPhone;
-    this.opts.margin = isPhone ? { top: 10, right: 18, bottom: 44, left: 40 } : { top: 12, right: 74, bottom: 20, left: 48 };
+    // [debug 2026-07-07] margin.top grown from 10/12 -> 40/24 (AMENDMENT-3 §3): the fixed-position
+    // .chart-legend reserves its own slot (inset-block-start:44px + ~23px of two-line text) that the
+    // plot's own top inset never accounted for, so the top gridline/tick/line sat under the legend
+    // text at every step. Measured, not guessed: legend bottom sits ~15px below the plot's old top
+    // edge on desktop (1440) and ~34px below it on phone (390, the same fixed-px legend eats a much
+    // bigger share of a shorter canvas) — both bumped past that with a small clear buffer. Chart-scoped
+    // (this.opts.margin is per-instance), so no other chart's rule or geometry is touched.
+    this.opts.margin = isPhone ? { top: 40, right: 18, bottom: 44, left: 40 } : { top: 24, right: 74, bottom: 20, left: 48 };
     const { width, height } = this.ensureSvg();
     this.W = width; this.H = height;
     this.svg.attr("aria-label", "Euro-area inflation rose from about 1% in 2019 to a peak of 11.5% in October 2022, then returned to near 2% by 2025.");
@@ -114,8 +166,27 @@ export class AnnotatedLine extends BaseChart {
     this._yAxisG = this.g.append("g").attr("class", "axis axis--y").call(d3.axisLeft(y).tickValues(ys.ticks).tickFormat(d => d + "%"));
 
     // ---- event bands (behind the line) + labels INSIDE the band (§B.5) ----
+    // [debug 2026-07-06] Two kinds share this array: PERMANENT historical-event bands (covid, war —
+    // `showAt`, visible from that step onward forever, per §B.3's original design) and TEMPORARY
+    // per-step focus bands (calm/climb — `temporary:true` + `activeStep`, visible ONLY while that
+    // exact step is active, gone the moment you scroll to the next one) — unlabeled (no `pop`/`label`)
+    // since they're a spotlight, not a named marker; `--event-policy` (oxford, unused elsewhere in
+    // this chart) keeps them visually distinct from the historical bands' own event-specific hues.
+    // calm matches its step's own eyebrow year exactly; climb runs 2021-06→2022-02 (the pre-war climb,
+    // ending exactly where the war band starts, zero gap or overlap).
+    // [debug 2026-07-06 — owner: restore "war", remove "return"] A PRIOR session removed "war" as
+    // redundant with the chart's own peak stamp (`_peakG`) — the owner has now asked for it BACK,
+    // unchanged from its original spec, so the Oct-2022 step again carries both the precise stamp AND
+    // the wide band. Separately, the temporary "return" band (2024-01→2026-01, activeStep 4) is REMOVED
+    // outright (not just left temporary) — the owner independently flagged it as the same kind of
+    // redundancy the OLD "war" removal was based on: the last step already marks the 2024+ story via
+    // the chart's own `_tailG` "back to X%" tag + 45° leader (built independently of `_bands`, always
+    // present, just faded in on the last step per §B.4) — a plain unlabeled band added nothing beyond
+    // that. calm/climb/covid are byte-for-byte unchanged.
     this._bands = [
+      { key: "calm",  from: "2019-01", to: "2020-01", fillVar: "--event-policy", temporary: true, activeStep: 0 },
       { key: "covid", from: "2020-03", to: "2021-06", fillVar: "--event-covid",  label: "COVID LOCKDOWNS",  showAt: 1, pop: POP.covid },
+      { key: "climb", from: "2021-06", to: "2022-02", fillVar: "--event-policy", temporary: true, activeStep: 2 },
       { key: "war",   from: "2022-02", to: "2023-06", fillVar: "--event-energy", label: "WAR + ENERGY SHOCK", showAt: 3, pop: POP.war },
     ];
     this._bandG = new Map();
@@ -124,7 +195,10 @@ export class AnnotatedLine extends BaseChart {
       const clipId = `anno-band-${b.key}-${uid}`;
       const bandClip = defs.append("clipPath").attr("id", clipId).append("rect").attr("class", "anno-band-clip");
       g.append("rect").attr("class", "anno-band-rect").attr("y", 0).attr("height", ih).attr("fill", `var(${b.fillVar})`);
-      const lbl = g.append("text").attr("class", "anno-band-label").attr("y", 15).attr("text-anchor", "middle")
+      // [debug 2026-07-06] data-band on the label itself (not just the group) keeps it identifiable
+      // after being raised elsewhere in the DOM — only SOME bands (the ones with real popover copy)
+      // get raised, so .anno-band / .anno-band-label no longer share one predictable DOM order.
+      const lbl = g.append("text").attr("class", "anno-band-label").attr("data-band", b.key).attr("y", 15).attr("text-anchor", "middle")
         .attr("clip-path", `url(#${clipId})`).text(b.label)
         .style("opacity", 0);   // matches g's own start state — raised out of g into _triggersG (§5.1), so it no longer inherits g's opacity
       b._clipRect = bandClip; b._lbl = lbl; b._g = g;
@@ -186,21 +260,34 @@ export class AnnotatedLine extends BaseChart {
       .on("mousemove", (event) => {
         const [mx] = d3.pointer(event, this.g.node());
         const t = this._x.invert(mx), dom = this._x.domain();
-        // visible series in draw order — EU average first, then each compared country (CMP colours)
+        // visible series in draw order — EU average first, then each compared slot (code or group),
+        // same shared codes-then-groups CMP index `_drawExtras` uses so tooltip swatches always match
+        // the actual line colours. A group contributes its own average PLUS one row per member — but
+        // only when `showMembers` (only those members actually have a line drawn to point a dot at).
         const series = [{ key: "eu", name: "EU average", color: "var(--accent)", data: this._all, sw: "ac-sw--eu" }];
-        this._selectedCodes.forEach((code, i) => series.push({ key: code, name: this.data.countryName(code), color: CMP[i % CMP.length], data: this._series(code), sw: `ac-sw--c${i % CMP.length}` }));
+        const slots = [
+          ...this._selectedCodes.map(code => ({ kind: "code", code })),
+          ...this._selectedGroups.map(key => ({ kind: "group", key })),
+        ];
+        slots.forEach((slot, i) => {
+          const color = CMP[i % CMP.length], sw = `ac-sw--c${i % CMP.length}`;
+          if (slot.kind === "code") { series.push({ key: slot.code, name: this.data.countryName(slot.code), color, data: this._series(slot.code), sw }); return; }
+          const g = GROUPS[slot.key]; if (!g) return;
+          series.push({ key: `grp:${slot.key}`, name: g.label, color, data: this._groupAverage(g.members), sw });
+          if (g.showMembers) g.members.forEach(code => series.push({ key: `grp:${slot.key}:${code}`, name: this.data.countryName(code), color, data: this._series(code), sw, member: true }));
+        });
         const rows = series.map(s => { const rec = nearest(s.data, t); return rec ? { ...s, rec } : null; })
           .filter(r => r && r.rec.t >= dom[0] && r.rec.t <= dom[1]);
         if (!rows.length) { this._ch.style("opacity", 0); this.ctx.tooltip.hide(); return; }
         const anchorT = rows[0].rec.t;
         this._ch.style("opacity", 1).attr("transform", `translate(${this._x(anchorT)},0)`);
         this._hoverDots.selectAll("circle").data(rows, d => d.key).join(
-          enter => enter.append("circle").attr("r", 4).attr("cx", 0).attr("stroke", "var(--bg)").attr("stroke-width", 1.5),
+          enter => enter.append("circle").attr("cx", 0).attr("stroke", "var(--bg)").attr("stroke-width", 1.5),
           update => update, exit => exit.remove()
-        ).attr("cy", d => this._y(d.rec.v)).attr("fill", d => d.color);
+        ).attr("r", d => d.member ? 2.6 : 4).attr("cy", d => this._y(d.rec.v)).attr("fill", d => d.color).attr("fill-opacity", d => d.member ? 0.6 : 1);
         const multi = rows.length > 1;
         const html = `<h5>${d3.timeFormat("%B %Y")(anchorT)}</h5>` + rows.map(r =>
-          `<div class="row"><span class="key">${multi ? `<span class="ac-sw ${r.sw}"></span>` : ""}${multi ? r.name : "Inflation"}</span><span class="val">${r.rec.v.toFixed(1)}%</span></div>`
+          `<div class="row${r.member ? " row--member" : ""}"><span class="key">${multi ? `<span class="ac-sw ${r.sw}"></span>` : ""}${multi ? r.name : "Inflation"}</span><span class="val">${r.rec.v.toFixed(1)}%</span></div>`
         ).join("");
         this.ctx.tooltip.show(html, event.clientX, event.clientY);
       })
@@ -224,7 +311,15 @@ export class AnnotatedLine extends BaseChart {
     // ---- motion ----
     this._drawnP = 0; this._peakFired = false;
     if (this.ctx.motion.reduced) { this._neutralView(); }
-    else { this._applyFocus(0); this._wireScroll(); }
+    else {
+      this._applyFocus(0);
+      this._wireScroll();
+      // A resize rebuilds the SVG from scratch (_revealRect included, back at width 0) — if the
+      // one-time intro already played earlier in this session, jump straight back to the drawn
+      // end-state instead of replaying it (the IO below only re-fires _playIntro on the NEXT
+      // visibility change, which would leave the line blank in the meantime).
+      if (this._introPlayed) this._completeDraw();
+    }
 
     this._buildControls();
     this._drawExtras();
@@ -250,7 +345,7 @@ export class AnnotatedLine extends BaseChart {
       // multiplicative safety net is gone — track the width-fit explicitly and combine it with
       // the current step-visibility here so a narrow band never shows an overlapping label.
       b._labelFits = bw > 70;
-      const stepOp = this._neutral ? 1 : (this._stepIdx >= b.showAt ? 1 : 0);
+      const stepOp = this._neutral ? 1 : ((b.temporary ? this._stepIdx === b.activeStep : this._stepIdx >= b.showAt) ? 1 : 0);
       sel(b._lbl).style("opacity", b._labelFits ? stepOp : 0);
       const ln = b._lbl.node();
       if (ln && ln.getComputedTextLength) { const w = ln.getComputedTextLength(); if (w > bw - 12) b._lbl.attr("textLength", Math.max(20, bw - 12)).attr("lengthAdjust", "spacingAndGlyphs"); }
@@ -287,22 +382,53 @@ export class AnnotatedLine extends BaseChart {
     this._ecbLine.transition(t).attr("y1", this._y(2)).attr("y2", this._y(2));
     this._ecbLabel.transition(t).attr("y", this._y(2) - 5);
     this._peakDot.transition(t).attr("cy", this._y(this._peak.v));
+    // [debug 2026-07-06] The peak/tail leader lines + tail label track the same y() the dot/line
+    // just moved to — previously only _layoutX (x-window changes) repositioned these, so adding or
+    // removing a compare country (_rescaleY-only, no _layoutX call) left them pointing at the
+    // pre-rescale height while the dot and line moved, visibly disconnecting the leader from its dot.
+    const tly = this._y(this._tail.at(-1).v), ly = tly - 46;
+    this._tailLeader.transition(t).attr("y1", tly - 3).attr("y2", ly + 3);
+    this._tailLabel.transition(t).attr("y", ly);
+    this._peakLeader.transition(t).attr("y2", this._y(this._peak.v) + 3);
     this._drawExtras(t);
   }
 
+  // [debug 2026-07-06] One shared, ordered "slot" list — individual countries then groups — so
+  // every selection (whichever kind) gets its own stable colour from the combined 10-colour CMP
+  // palette, matching the shared 10-slot cap. A group with showMembers draws each member as a thin,
+  // pale line in the group's own colour (a cohesive cluster, not competing with individual-country
+  // colours) plus its average as a bold line labelled with the GROUP's name, not each member's.
   _drawExtras(t) {
     if (!this._extraG) return;
     this._extraG.selectAll("*").remove();
     if (this._extraLabels) this._extraLabels.selectAll("*").remove();
     const line = this._line(), x = this._x, y = this._y, domHi = x.domain()[1];
     const labels = [];
-    this._selectedCodes.forEach((code, i) => {
-      const ser = this._series(code); if (!ser.length) return;
+    const slots = [
+      ...this._selectedCodes.map(code => ({ kind: "code", code })),
+      ...this._selectedGroups.map(key => ({ kind: "group", key })),
+    ];
+    slots.forEach((slot, i) => {
       const col = CMP[i % CMP.length];
-      this._extraG.append("path").datum(ser).attr("class", "anno-extra-line").attr("fill", "none")
-        .attr("stroke", col).attr("stroke-width", 1.5).attr("stroke-opacity", 0.9).attr("stroke-linejoin", "round").attr("d", line);
-      const vis = ser.filter(d => d.t <= domHi), end = vis.at(-1) || ser.at(-1);
-      labels.push({ code, col, x: x(end.t), y: y(end.v) });
+      if (slot.kind === "code") {
+        const ser = this._series(slot.code); if (!ser.length) return;
+        this._extraG.append("path").datum(ser).attr("class", "anno-extra-line").attr("fill", "none")
+          .attr("stroke", col).attr("stroke-width", 1.5).attr("stroke-opacity", 0.9).attr("stroke-linejoin", "round").attr("d", line);
+        const vis = ser.filter(d => d.t <= domHi), end = vis.at(-1) || ser.at(-1);
+        labels.push({ text: slot.code, col, x: x(end.t), y: y(end.v) });
+        return;
+      }
+      const g = GROUPS[slot.key]; if (!g) return;
+      if (g.showMembers) g.members.forEach(code => {
+        const ser = this._series(code); if (!ser.length) return;
+        this._extraG.append("path").datum(ser).attr("class", "anno-extra-line anno-extra-line--member").attr("fill", "none")
+          .attr("stroke", col).attr("stroke-width", 1).attr("stroke-opacity", 0.35).attr("stroke-linejoin", "round").attr("d", line);
+      });
+      const avg = this._groupAverage(g.members); if (!avg.length) return;
+      this._extraG.append("path").datum(avg).attr("class", "anno-extra-line anno-extra-line--avg").attr("fill", "none")
+        .attr("stroke", col).attr("stroke-width", 2.2).attr("stroke-opacity", 0.95).attr("stroke-linejoin", "round").attr("d", line);
+      const vis = avg.filter(d => d.t <= domHi), end = vis.at(-1) || avg.at(-1);
+      labels.push({ text: g.label, col, x: x(end.t), y: y(end.v) });
     });
     // §B.8 end-label collision nudge — stacked codes must never touch.
     labels.sort((a, b) => a.y - b.y);
@@ -310,7 +436,7 @@ export class AnnotatedLine extends BaseChart {
     const host = this._extraLabels || this._extraG;
     labels.forEach(l => host.append("text").attr("class", "anno-extra-label")
       .attr("x", Math.min(l.x + 4, this._iw + 2)).attr("y", l.y + 3).attr("text-anchor", "start")
-      .attr("paint-order", "stroke").attr("stroke", "var(--bg)").attr("stroke-width", 3).attr("fill", l.col).text(l.code));
+      .attr("paint-order", "stroke").attr("stroke", "var(--bg)").attr("stroke-width", 3).attr("fill", l.col).text(l.text));
   }
 
   // ---- brush overview (§B.10) ----
@@ -362,25 +488,43 @@ export class AnnotatedLine extends BaseChart {
   }
 
   // ---- scroll motion ----
+  // [debug 2026-07-06] Watches for the STICKY FIGURE's first appearance (plays the one-time line
+  // draw-in, _playIntro) and for its disappearance after having been visible (§B.4 resets to the
+  // neutral full view).
+  // [debug 2026-07-06 — owner report: "line appears suddenly, no visible motion"] This used to
+  // observe the whole `.chapter` at threshold:0 — which fires the instant the chapter's TOP EDGE
+  // touches the viewport bottom, long before the STICKY figure itself has scrolled into view (a
+  // chapter this tall can be ~5000px; the figure only becomes sticky-engaged partway through that).
+  // Playwright-confirmed: introPlayed flipped true while the figure's own top was still ~934px down
+  // (off-screen in a 900px-tall viewport, i.e. not visible at all), and the whole 900ms draw-in had
+  // finished (_drawComplete) by the time the figure had scrolled up to occupy most of the viewport —
+  // so the reader only ever saw the fully-drawn end state, never the wipe. Observing the figure
+  // itself, with a real threshold (some of it must actually be on screen, not just a 1px sliver),
+  // means the animation starts when there's something to watch it happen ON.
   _wireScroll() {
-    if (this._unwatch) this._unwatch();
     const chapter = this.container.closest(".chapter");
-    this._unwatch = watchChapterProgress(chapter, p => this._onProgress(p));
-    // §B.4 neutral on un-pin — only AFTER the chapter has actually been visible (the IO's initial
-    // not-yet-in-view callback must not pre-complete the draw).
+    const figure = chapter?.querySelector(".scroller__chart") || chapter;
     if (this._io) this._io.disconnect();
     this._wasVisible = false;
     this._io = new IntersectionObserver((es) => es.forEach(e => {
-      if (e.isIntersecting) this._wasVisible = true;
+      if (e.isIntersecting) { this._wasVisible = true; this._playIntro(); }
       else if (this._wasVisible) this._neutralView();
-    }), { threshold: 0 });
-    this._io.observe(chapter);
+    }), { threshold: 0.3 });
+    this._io.observe(figure);
   }
-  _onProgress(p) {
-    if (this._win) return;   // exploring a zoom window; scroll-draw is done
-    const target = smooth(Math.max(0, Math.min(1, (p - 0.02) / 0.40)));   // draw completes ~step 2
-    if (target >= 0.999) this._completeDraw();
-    else if (!this._drawComplete && target > this._drawnP) this._revealTo(target);
+  // [debug 2026-07-06] One-time full-line draw-in, played once ever, the first time the chapter
+  // scrolls into view — replaces the old continuous scroll-progress-tied reveal (owner reported it
+  // read as the line "waiting" on the text steps instead of just telling its own story). Drives the
+  // SAME _revealTo/_completeDraw path the old mechanism used via a fixed-duration tween, so the
+  // clip-reveal wipe + playhead travel-and-fade (§B.2) look identical — only the trigger changed,
+  // from "how far you've scrolled" to "a fixed-length animation that plays once."
+  _playIntro() {
+    if (this._introPlayed) return;
+    this._introPlayed = true;
+    if (this.ctx.motion.reduced) { this._completeDraw(); return; }
+    this._revealRect.transition().duration(DRAW_DUR).ease(d3.easeCubicInOut)
+      .tween("anno-draw", () => t => this._revealTo(t))
+      .on("end", () => this._completeDraw());
   }
   _revealTo(np) {
     this._drawnP = Math.max(this._drawnP, np);
@@ -409,8 +553,7 @@ export class AnnotatedLine extends BaseChart {
     const changed = (i !== this._lastStepIdx);
     this._lastStepIdx = i; this._stepIdx = i;
     if (this.container) { this.container.setAttribute("data-active-focus", STEPS[i]); this.container.setAttribute("data-onstep", i); }
-    if (i >= DRAW_DONE_STEP) this._completeDraw();     // §B.3 fully drawn from step 2 on
-    if (changed && (this._selectedCodes.length || this._win)) { this._resetCountries(); this._resetWindow(true); }   // story rule
+    if (changed && (this._selectedCodes.length || this._selectedGroups.length || this._win)) { this._resetCompare(); this._resetWindow(true); }   // story rule
     this._applyFocus(i);
   }
 
@@ -437,13 +580,22 @@ export class AnnotatedLine extends BaseChart {
   _applyFocus(i) {
     const dur = this.ctx.motion.reduced ? 0 : 420;
     this._neutral = false;
-    this._bands.forEach(b => this._setBandOpacity(b, i >= b.showAt ? 1 : 0, dur));
+    // [debug 2026-07-06] Permanent bands (covid/war) stay lit from their trigger step onward;
+    // temporary bands (calm/climb/return) light up ONLY on their own exact step and fade the moment
+    // you move to another one — a spotlight, not a historical marker.
+    this._bands.forEach(b => this._setBandOpacity(b, (b.temporary ? i === b.activeStep : i >= b.showAt) ? 1 : 0, dur));
     const showPeak = i >= 3;
     this._setPeakOpacity(showPeak ? 1 : 0, dur);
     if (showPeak && !this._peakFired) { this._peakFired = true; this._firePulse(false); }
     // §B.4 last step = FULL line end-to-end (no dim), tail tag + stamp visible.
+    // [debug 2026-07-06] Named "anno-fade" so this interrupt only cancels a PRIOR anno-fade
+    // transition, never the default-named "d"-attribute geometry transition _rescaleY/_layoutX may
+    // have just scheduled on this SAME node moments earlier in the same onStep() call (the story
+    // rule runs _resetCompare/_resetWindow, THEN _applyFocus, synchronously) — an unnamed
+    // .interrupt() cancels ALL transitions on the node regardless of which attribute they target,
+    // which was silently freezing the line mid-rescale, never reaching its reset shape.
     const last = i >= 4;
-    if (this._lineMain) this._lineMain.interrupt().transition().duration(dur).attr("stroke-opacity", 1);
+    if (this._lineMain) this._lineMain.interrupt("anno-fade").transition("anno-fade").duration(dur).attr("stroke-opacity", 1);
     if (this._tailG) this._tailG.interrupt().transition().duration(dur).style("opacity", last ? 1 : 0);
   }
 
@@ -453,7 +605,7 @@ export class AnnotatedLine extends BaseChart {
     this._neutral = true;
     if (this._playhead) this._playhead.style("opacity", 0);
     this._bands.forEach(b => this._setBandOpacity(b, 1));
-    if (this._lineMain) this._lineMain.interrupt().attr("stroke-opacity", 1);
+    if (this._lineMain) this._lineMain.interrupt("anno-fade").attr("stroke-opacity", 1);   // [debug 2026-07-06] named, see _applyFocus
     this._setPeakOpacity(1); if (this._peakG && !this._peakFired) { this._peakFired = true; this._firePulse(true); }
     if (this._tailG) this._tailG.interrupt().style("opacity", 1);
     if (this._win) this._resetWindow(false);
@@ -479,7 +631,10 @@ export class AnnotatedLine extends BaseChart {
     const seq = getComputedStyle(document.documentElement).getPropertyValue("--seq-target").trim();
     const ink = getComputedStyle(document.documentElement).getPropertyValue("--ink-soft").trim();
     const acc = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim();
-    this._bands.forEach(b => { const n = b._lbl.node(); if (n) { this._info.flag(n, b.pop, ink); this._raiseTrigger(n); } });
+    // [debug 2026-07-06] Only bands with real popover copy get flagged — the temporary focus bands
+    // (calm/climb/return) have no label/pop, so flagging them would make an invisible, empty text
+    // node keyboard-focusable (tabindex, role=button) for no reason.
+    this._bands.forEach(b => { const n = b._lbl.node(); if (n && b.pop) { this._info.flag(n, b.pop, ink); this._raiseTrigger(n); } });
     if (this._ecbLabel) { this._info.flag(this._ecbLabel.node(), POP.ecb, seq); this._raiseTrigger(this._ecbLabel.node()); }
     if (this._peakEyebrow) { this._info.flag(this._peakEyebrow.node(), POP.peak, acc); this._raiseTrigger(this._peakEyebrow.node()); }
   }
@@ -499,34 +654,48 @@ export class AnnotatedLine extends BaseChart {
     host.dataset.wired = "1";
     const eu = this.data.euAggregateCode();
     const countries = [...this.data.countriesByCode.values()].filter(c => c.code !== eu && this.data.hicpMonthly[c.code]?.CP00).sort((a, b) => a.name.localeCompare(b.name));
-    const opts = countries.map(c => `<option value="${c.code}">${c.name}</option>`).join("");
+    // [debug 2026-07-06] Groups listed FIRST (their own <optgroup>), individual countries after.
+    const groupOpts = Object.entries(GROUPS).map(([key, g]) => `<option value="group:${key}">${g.label}</option>`).join("");
+    const countryOpts = countries.map(c => `<option value="${c.code}">${c.name}</option>`).join("");
     host.innerHTML =
       `<span class="ac-add"><label for="${this.container.id}-add" class="ac-add-label">Compare</label>` +
-      `<select id="${this.container.id}-add" class="ac-select"><option value="">Add a country…</option>${opts}</select></span>` +
+      `<select id="${this.container.id}-add" class="ac-select"><option value="">Add a country or group…</option>` +
+      `<optgroup label="Groups">${groupOpts}</optgroup><optgroup label="Countries">${countryOpts}</optgroup></select></span>` +
       `<span class="ac-chips" role="list"></span>` +
       `<button type="button" class="ac-reset" hidden>Reset</button>` +
       `<span class="ac-zoom" role="group" aria-label="Zoom the timeline">` +
       `<button type="button" class="ac-zoom-btn is-on" data-zoom="full">2019 – 2025</button>` +
       `<button type="button" class="ac-zoom-btn" data-zoom="crisis">2021 – 2023</button></span>`;
-    host.querySelector(".ac-select").addEventListener("change", (e) => { const c = e.target.value; e.target.value = ""; if (c) this._addCountry(c); });
-    host.querySelector(".ac-reset").addEventListener("click", () => this._resetCountries());
+    host.querySelector(".ac-select").addEventListener("change", (e) => {
+      const v = e.target.value; e.target.value = ""; if (!v) return;
+      if (v.startsWith("group:")) this._addGroup(v.slice(6)); else this._addCountry(v);
+    });
+    host.querySelector(".ac-reset").addEventListener("click", () => this._resetCompare());
     host.querySelectorAll(".ac-zoom-btn").forEach(b => b.addEventListener("click", () => this._presetWindow(b.dataset.zoom, true)));
     this._renderChips();
   }
+  // [debug 2026-07-06] slots = countries + groups sharing one 10-item cap, one slot per SELECTION
+  // (a 5-member group still costs 1 slot, not 5) — matches the shared CMP colour-by-slot-index in
+  // _drawExtras.
+  _slotCount() { return this._selectedCodes.length + this._selectedGroups.length; }
   _renderChips() {
     const host = this._controlsHost(); if (!host) return;
     const chips = host.querySelector(".ac-chips"); if (!chips) return;
-    chips.innerHTML = this._selectedCodes.map(code => `<span class="ac-chip" role="listitem">${this.data.countryName(code)}<button type="button" class="ac-chip-x" data-code="${code}" aria-label="Remove ${this.data.countryName(code)}">×</button></span>`).join("");
-    chips.querySelectorAll(".ac-chip-x").forEach(b => b.addEventListener("click", () => this._removeCountry(b.dataset.code)));
-    const reset = host.querySelector(".ac-reset"); if (reset) reset.hidden = !this._selectedCodes.length;
-    const sel = host.querySelector(".ac-select"); if (sel) sel.disabled = this._selectedCodes.length >= 4;
+    // Groups first (chip shows ONLY the group's name, never its member list), then countries.
+    const groupChips = this._selectedGroups.map(key => `<span class="ac-chip" role="listitem">${GROUPS[key]?.label || key}<button type="button" class="ac-chip-x" data-group="${key}" aria-label="Remove ${GROUPS[key]?.label || key}">×</button></span>`);
+    const codeChips = this._selectedCodes.map(code => `<span class="ac-chip" role="listitem">${this.data.countryName(code)}<button type="button" class="ac-chip-x" data-code="${code}" aria-label="Remove ${this.data.countryName(code)}">×</button></span>`);
+    chips.innerHTML = groupChips.join("") + codeChips.join("");
+    chips.querySelectorAll(".ac-chip-x[data-code]").forEach(b => b.addEventListener("click", () => this._removeCountry(b.dataset.code)));
+    chips.querySelectorAll(".ac-chip-x[data-group]").forEach(b => b.addEventListener("click", () => this._removeGroup(b.dataset.group)));
+    const reset = host.querySelector(".ac-reset"); if (reset) reset.hidden = !this._slotCount();
+    const sel = host.querySelector(".ac-select"); if (sel) sel.disabled = this._slotCount() >= 10;
   }
   _syncChips() { const host = this._controlsHost(); if (!host) return; const k = this._win ? "crisis" : "full"; host.querySelectorAll(".ac-zoom-btn").forEach(b => b.classList.toggle("is-on", b.dataset.zoom === k)); }
   // §2.1 compare-mode doctrine: chips≥1 = EXPLORE mode — the story narration (peak stamp +
   // leader, tail "back to X%" tag) fades out; bands/labels/ECB line STAY (context, not
   // narration). Restores to whatever the current scroll step dictates when chips return to 0.
   _syncCompareMode() {
-    const compare = this._selectedCodes.length > 0;
+    const compare = this._slotCount() > 0;
     if (compare === this._compareMode) return;
     this._compareMode = compare;
     const dur = this.ctx.motion.reduced ? 0 : 280;   // --dur-3
@@ -537,10 +706,12 @@ export class AnnotatedLine extends BaseChart {
       this._applyFocus(this._stepIdx);
     }
   }
-  _addCountry(code) { if (this._selectedCodes.includes(code) || this._selectedCodes.length >= 4) return; this._selectedCodes.push(code); this._rescaleY(true); this._renderChips(); this._syncCompareMode(); }
+  _addCountry(code) { if (this._selectedCodes.includes(code) || this._slotCount() >= 10) return; this._selectedCodes.push(code); this._rescaleY(true); this._renderChips(); this._syncCompareMode(); }
   _removeCountry(code) { this._selectedCodes = this._selectedCodes.filter(c => c !== code); this._rescaleY(true); this._renderChips(); this._syncCompareMode(); }
-  _resetCountries() { if (!this._selectedCodes.length) return; this._selectedCodes = []; this._rescaleY(true); this._renderChips(); this._syncCompareMode(); }
+  _addGroup(key) { if (!GROUPS[key] || this._selectedGroups.includes(key) || this._slotCount() >= 10) return; this._selectedGroups.push(key); this._rescaleY(true); this._renderChips(); this._syncCompareMode(); }
+  _removeGroup(key) { this._selectedGroups = this._selectedGroups.filter(k => k !== key); this._rescaleY(true); this._renderChips(); this._syncCompareMode(); }
+  _resetCompare() { if (!this._slotCount()) return; this._selectedCodes = []; this._selectedGroups = []; this._rescaleY(true); this._renderChips(); this._syncCompareMode(); }
 
-  destroy() { if (this._unwatch) this._unwatch(); if (this._io) this._io.disconnect(); super.destroy(); }
+  destroy() { if (this._io) this._io.disconnect(); super.destroy(); }
   onThemeChange() { this.render(); }
 }

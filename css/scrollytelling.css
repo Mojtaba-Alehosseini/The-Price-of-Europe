@@ -178,27 +178,57 @@
 }
 .scroller__chart[data-chart-mount="choropleth"] .chart-body > svg.chart-svg {
   overflow: visible;
-  -webkit-mask-clip: no-clip;
-  mask-clip: no-clip;
-  /* VIGNETTE — the fade happens INSIDE chart-body's edges so the rectangular
+}
+/* [debug 2026-07-06] Moved the vignette mask from the SVG ROOT to `.map-layer` (the country-shapes
+   group, `this.gMap`) specifically. The comment below always said "text/annotations sit on a layer
+   ABOVE, unaffected" — but a CSS mask on the SVG root fades EVERYTHING painted inside it, including
+   every sibling drawn later (the year-kicker text in the top-left corner, farthest from the radial
+   centre, took the worst of it — objectively low contrast, not just "quieter styling"). A mask
+   cannot be undone by a descendant's own CSS once applied by an ancestor, so the fix is to scope it
+   to the one layer it was actually meant for. `.year-kicker-g`/`.map-label-g`/etc. are siblings of
+   `.map-layer` (not descendants), so they're now completely outside the masked subtree.
+   VIGNETTE — the fade happens INSIDE chart-body's edges so the rectangular
      frame is dissolved into a smooth gradient with no abrupt opacity transition
      anywhere. At chart-body's edges the mask is partially transparent so
      country fills blend gradually into the cream, then continue at ever-lower
      opacity into the bleed area past chart-body.
      Horizontal opaque core: 30 %–70 % of mask (≈ inner 350 px of chart-body).
      Vertical opaque core: 22 %–78 % of mask (≈ inner 64 % of chart-body, more
-     generous because EU fills the panel vertically). */
-  /* [owner review D1 stage 3] RADIAL opacity falloff — the map reads as a full-bleed background
+     generous because EU fills the panel vertically).
+   [owner review D1 stage 3] RADIAL opacity falloff — the map reads as a full-bleed background
      layer: 100% opaque across the central focus region, then dissolving smoothly OUTWARD into the
      paper as distance from the focus grows (a soft radial mask, no hard rectangular frame anywhere).
-     The text/annotations sit on a layer ABOVE; the faded outer map is faint enough that overlaid
-     text always wins. Replaces the old linear edge-vignette. */
+     Replaces the old linear edge-vignette. */
+.scroller__chart[data-chart-mount="choropleth"] .chart-body > svg.chart-svg .map-layer {
+  -webkit-mask-clip: no-clip;
+  mask-clip: no-clip;
+  -webkit-mask-origin: view-box;
+  mask-origin: view-box;
   -webkit-mask-image: radial-gradient(ellipse 66% 74% at 50% 47%,
       #000 0%, #000 46%, rgba(0,0,0,0.62) 68%, rgba(0,0,0,0.18) 86%, transparent 100%);
   mask-image: radial-gradient(ellipse 66% 74% at 50% 47%,
       #000 0%, #000 46%, rgba(0,0,0,0.62) 68%, rgba(0,0,0,0.18) 86%, transparent 100%);
   -webkit-mask-repeat: no-repeat;
   mask-repeat: no-repeat;
+}
+/* [D75 · owner bug report + screen recording] The REAL "white vertical and horizontal lines" during a
+   zoom were NOT the (claret, 0.05-opacity) graticule the earlier `.is-camming` pass hid — they were GPU
+   COMPOSITOR TILE SEAMS. `.map-layer` (this masked `<g>`) is the very group d3 scales/pans on a camera
+   flight, and it carries BOTH this `mask-image` vignette (with `mask-origin: view-box` — i.e. the mask
+   is FIXED in the panel while the content transforms UNDER it) AND `will-change: transform`. Because
+   the mask can't ride along with the transform, Chrome cannot pre-rasterise (content+mask) and move it
+   as one texture — it must re-composite the fixed mask over freshly-transformed content every frame;
+   `will-change` keeps that large layer permanently promoted and TILED; and the tile boundaries leak the
+   paper background as a white horizontal/vertical grid. It's a live-compositor artifact, invisible to
+   paint-based headless screenshots — which is exactly why the first `.is-camming` fix (verified only in
+   Playwright) never caught it. Fix: drop the mask ONLY while the camera is flying. The map is moving
+   fast then, so the momentary loss of the soft edge is imperceptible; the instant it settles,
+   `.is-camming` clears and the full vignette snaps back. The RESTING map (every screenshot / sentinel
+   state — essentially all viewing time) is byte-for-byte unchanged. Selector MUST match this block's own
+   chain + `.is-camming` on the svg, or it loses the specificity contest to the rule above and no-ops. */
+.scroller__chart[data-chart-mount="choropleth"] .chart-body > svg.chart-svg.is-camming .map-layer {
+  -webkit-mask-image: none;
+  mask-image: none;
 }
 .scroller__chart .chart-body svg.chart-svg { max-block-size: 100%; inline-size: 100%; }
 .scroller__chart .chart-controls {
@@ -347,7 +377,10 @@
    from the card column, vertically centered; footer strip source-left/controls-right.
    Placed after the .chapter--v2 block so it wins the equal-specificity overrides.
    ============================================================ */
-.chapter--a2 .scroller__chart { grid-template-rows: auto 1fr auto; gap: 0; padding: 0; }
+/* [AMENDMENT-3 §4] "→12px→panel bottom" rolled to all 11 consumers (was 0). Consumer census
+   (LAW §1.1): annotatedLine, smallMultiples, choropleth, heatmap, rateLevel, waffle, housing,
+   race, divergingBar, scoreMap, boxplot — every `.chapter--a2` gets gated after this change. */
+.chapter--a2 .scroller__chart { grid-template-rows: auto 1fr auto; gap: 0; padding-inline: 0; padding-block: 0 12px; }
 
 /* §A.1 · panel head — title top-center, legend top-right, both pinned with the panel */
 .chapter--a2 .panel-head { position: relative; text-align: center; min-block-size: 0; }
@@ -370,8 +403,9 @@
 /* §A.4 · breathing — 24px above the plot, 20px below (before the footer strip) */
 .chapter--a2 .scroller__chart .chart-body { margin-block: 24px 0; }
 
-/* §A.5 · footer strip — source LEFT, controls RIGHT, one row, no collision */
-.chapter--a2 .panel-foot { display: flex; justify-content: space-between; align-items: center; gap: var(--space-5); margin-block-start: 20px; }
+/* §A.5 · footer strip — source LEFT, controls RIGHT, one row, no collision.
+   [AMENDMENT-3 §4] "→16px→footer row" rolled to all 11 consumers (was 20px). */
+.chapter--a2 .panel-foot { display: flex; justify-content: space-between; align-items: center; gap: var(--space-5); margin-block-start: 16px; }
 .chapter--a2 .panel-foot .chart-source { margin: 0; text-align: left; flex: 0 1 auto; font-size: 10px; }
 .chapter--a2 .panel-foot .chart-controls { margin: 0; justify-content: flex-end; flex-wrap: nowrap; flex: 0 0 auto; gap: var(--space-2); }
 
@@ -397,6 +431,21 @@
 .chapter[data-chart="annotatedLine"] .panel-foot { margin-block-start: 14px; min-block-size: 64px; }
 /* [AMENDMENT-3 §4] "→12px→panel bottom" — the panel had 0 bottom breathing before this. */
 .chapter[data-chart="annotatedLine"] .scroller__chart { padding-block-end: 10px; }
+
+/* [AMENDMENT-3 §2.4] race: measured — at its 2-chip max the shared rule's unconstrained
+   chart-controls (flex:0 0 auto, single line, ~720px natural width) crowded chart-source
+   (flex:0 1 auto) down to ~83px, wrapping its long source line to ~8 rows (110px) and shrinking
+   the plot by 75px vs 0 chips. Same root cause as CH1 (source/controls fight for width with no
+   agreed split), opposite symptom (source balloons instead of controls wrapping) — same fix:
+   bound source, let controls wrap/shrink, then reserve the measured worst-case footer height. */
+.chapter[data-chart="race"] .panel-foot .chart-source { flex: 0 1 300px; }
+.chapter[data-chart="race"] .panel-foot .chart-controls { flex: 1 1 auto; min-inline-size: 0; flex-wrap: wrap; row-gap: 5px; }
+.chapter[data-chart="race"] .ac-reset, .chapter[data-chart="race"] .ac-zoom-btn { padding-block: 2px; }
+/* measured natural 2-chip footer = 63px; reserve 64px so 0-chip and 2-chip render identically
+   (§2.4 gate: svg height ±2px @0 vs @2 chips). margin/padding trimmed same as CH1 (16→14,
+   12→10) to recover the few px the 64px reservation costs the breathing floor. */
+.chapter[data-chart="race"] .panel-foot { min-block-size: 64px; margin-block-start: 14px; }
+.chapter[data-chart="race"] .scroller__chart { padding-block-end: 10px; }
 
 /* §A.2 · subtitle — NO box, plain text, own slot; 3-line max; z BELOW cards */
 .chapter--a2 .scroller__text { display: grid; grid-template-columns: 0 minmax(0, 1fr); column-gap: 0; padding-block: 0; }

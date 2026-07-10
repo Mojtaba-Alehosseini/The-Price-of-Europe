@@ -8,10 +8,11 @@ import { MotionManager }   from "./modules/MotionManager.js";
 import { DataManager }     from "./modules/DataManager.js";
 import { ScrollController }from "./modules/ScrollController.js";
 import { Tooltip }         from "./modules/Tooltip.js";
+import { initStaticInfoPops } from "./modules/StaticInfoPops.js";
 import { ReceiptHero }     from "./charts/ReceiptHero.js";
 
 import { Choropleth }         from "./charts/Choropleth.js";
-import { CompareMap }         from "./charts/CompareMap.js";
+// CompareMap is now instantiated INSIDE Choropleth (compare step, D54) — no standalone chapter.
 import { SmallMultiplesLine } from "./charts/SmallMultiplesLine.js";
 import { AnnotatedLine }      from "./charts/AnnotatedLine.js";
 import { Heatmap }            from "./charts/Heatmap.js";
@@ -65,6 +66,11 @@ async function boot() {
     reveals.forEach(el => el.classList.add("is-in"));
   }
 
+  // 2d. Invisible click-to-info affordances on the hero receipt, the about-credit block, and
+  //     every chart's source line (owner feature request, scoped exception to hero hands-off —
+  //     see docs/design_decisions.md). All static markup already in the DOM at this point.
+  initStaticInfoPops(ctx);
+
   // 3. data — single Promise.all
   const data = new DataManager();
   try {
@@ -87,7 +93,6 @@ async function boot() {
   const charts = {};   // key -> live instance, filled on mount
   const chartFactories = {
     choropleth        : () => new Choropleth        ("#chart-choropleth",        data, ctx),
-    compareMap        : () => new CompareMap        ("#chart-compareMap",        data, ctx),
     smallMultiples    : () => new SmallMultiplesLine("#chart-smallMultiples",    data, ctx),
     annotatedLine     : () => new AnnotatedLine     ("#chart-annotatedLine",     data, ctx),
     heatmap           : () => new Heatmap           ("#chart-heatmap",           data, ctx),

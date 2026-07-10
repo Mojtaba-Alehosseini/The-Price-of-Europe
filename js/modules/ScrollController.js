@@ -111,15 +111,22 @@ export class ScrollController {
     if (prev) { try { prev.destroy(); } catch (e) { /* older scrollama: no destroy */ } }
     const scroller = scrollama();
     scroller.setup({ step: steps, offset: 0.55, progress: false })
-      .onStepEnter(({ element, index }) => {
-        chap.querySelectorAll(".scroller__step").forEach(s => s.classList.remove("is-active"));
-        element.classList.add("is-active");
-        this._updateDock(element);
-        this._updateRail(key, index);   // [amendment §A.4] active/read/ahead dot states
-        const chart = this.charts[key];
-        if (chart && chart.rendered && typeof chart.onStep === "function") chart.onStep(index, element);
-      });
+      .onStepEnter(({ element, index }) => this._activateStep(chap, key, index, element));
     this._scrollerByKey.set(key, scroller);
+  }
+
+  // [debug 2026-07-06] What "step `index` is active" means — dot state, mobile dock, chart onStep.
+  // Shared by the natural onStepEnter path above and the rail's click-to-jump path (_scrollToStep)
+  // below, so a deliberate rail jump agrees with organic scrolling on the same activation logic
+  // instead of depending on scrollama's own trigger re-firing (see _scrollToStep for why that can't
+  // be relied on for a jump).
+  _activateStep(chap, key, index, element) {
+    chap.querySelectorAll(".scroller__step").forEach(s => s.classList.remove("is-active"));
+    element.classList.add("is-active");
+    this._updateDock(element);
+    this._updateRail(key, index);   // [amendment §A.4] active/read/ahead dot states
+    const chart = this.charts[key];
+    if (chart && chart.rendered && typeof chart.onStep === "function") chart.onStep(index, element);
   }
 
   // [amendment §A.4] STEP RAIL — a thin sticky column of dots, one per step, left of the step
@@ -153,7 +160,7 @@ export class ScrollController {
       micro.className = "rail-microlabel";
       micro.textContent = eyebrow || `Step ${i + 1}`;
       btn.appendChild(micro);
-      btn.addEventListener("click", () => this._scrollToStep(step));
+      btn.addEventListener("click", () => this._scrollToStep(chap, key, step, allSteps.indexOf(step)));
       rail.appendChild(btn);
     });
     text.prepend(rail);
@@ -175,11 +182,39 @@ export class ScrollController {
     });
   }
 
-  // Smooth-scroll so the step's top sits at the scrollama trigger line (offset 0.55 of the viewport),
-  // which activates that step — the chart reacts through the normal onStepEnter path.
-  _scrollToStep(step) {
-    const top = step.getBoundingClientRect().top + scrollY - innerHeight * 0.55 + 2;
+  // [debug 2026-07-06] Jump to a step from the rail. Activate it synchronously FIRST (via
+  // _activateStep) rather than leaving activation to scrollama's own onStepEnter: onStepEnter only
+  // fires on freshly CROSSING a step's trigger line, and a rail jump can start from anywhere on the
+  // page, so the destination may already be past that step's trigger line by the time the scroll
+  // settles (Playwright-confirmed: for step 0 specifically, one candidate target left the
+  // PREVIOUSLY-active step still marked active — scrollama never re-fired). Doing it ourselves means
+  // correctness never depends on scrollama's async IntersectionObserver timing for this jump.
+  //
+  // Then scroll so the chart is correctly framed. Two framing needs can conflict for an early step:
+  // (a) the scrollama trigger line (kept so a LATER organic scroll agrees with where we landed) and
+  // (b) .scroller__chart's sticky range actually being engaged — early steps can sit before it,
+  // since .scroller__text's 20dvh top padding is less than the trigger's 55%-of-viewport line, so
+  // the naive target lands with the sticky figure still in normal flow (offset down the page,
+  // bottom half off-screen). Take whichever position satisfies both; later steps already clear
+  // the sticky floor naturally, so the clamp is a no-op for them.
+  _scrollToStep(chap, key, step, index) {
+    this._activateStep(chap, key, index, step);
+    let top = step.getBoundingClientRect().top + scrollY - innerHeight * 0.55 + 2;
+    const scroller = step.closest(".scroller");
+    const figure = scroller && scroller.querySelector(".scroller__chart");
+    if (figure) {
+      const stickyOffset = parseFloat(getComputedStyle(figure).top) || 0;
+      const engageAt = scroller.getBoundingClientRect().top + scrollY - stickyOffset + 1;
+      top = Math.max(top, engageAt);
+    }
     scrollTo({ top, behavior: "smooth" });
+    // [debug 2026-07-06] A long jump can have scrollama's own IntersectionObserver fire onStepEnter
+    // for a DIFFERENT step it passes through mid-flight, stomping the activation above before the
+    // animation settles. Re-assert once the scroll actually stops so the final resting state always
+    // matches the dot that was clicked.
+    const resettle = () => this._activateStep(chap, key, index, step);
+    if ("onscrollend" in window) addEventListener("scrollend", resettle, { once: true });
+    else setTimeout(resettle, 700);
   }
 
   // [R2·1b] Mobile step-dock — a single fixed card at the bottom mirroring the active step's

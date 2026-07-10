@@ -49,12 +49,28 @@
   --seq-4 : #F46D43;   /* high 5–10% — orange-red */
   --seq-5 : #D73027;   /* extreme >10% — red */
   --seq-target : #0F5499;   /* ECB 2% reference — FT oxford, 6.90:1 */
+  /* [debug 2026-07-06] seq-1/seq-4 read fine as large MAP FILL patches (their whole point is
+     hue-coded severity, not text contrast) but fail WCAG AA as small TEXT fill — measured 3.36:1 /
+     2.67:1 against --bg, both under the 4.5:1 small-text bar (the choropleth kicker's "▲ RO 3.9%" /
+     "▼ PT 0.3%" extreme-country lines use these as `fill`, at 11.5px — text, not a colour patch).
+     Same pattern as --accent-text below: a darker, same-hue variant, text-safe, for when a severity
+     colour needs to render AS TEXT rather than as a shape. */
+  --seq-hi-text : #B8431A;   /* darker seq-4 orange, 4.92:1 */
+  --seq-lo-text : #157A40;   /* darker seq-1 green, 4.88:1 */
 
-  /* Comparison-line palette (AMENDMENT-2 §B.8) — country lines in selection order; EU stays claret. */
+  /* Comparison-line palette (AMENDMENT-2 §B.8) — country lines in selection order; EU stays claret.
+     [debug 2026-07-06] Extended 4→10 for the country-groups feature (a shared 10-slot cap across
+     individual countries + groups, each slot its own hue). 5-10 checked ≥4.5:1 against --bg. */
   --cmp-1 : #0F5499;   /* oxford */
   --cmp-2 : #0D7680;   /* teal */
   --cmp-3 : #593380;   /* velvet */
   --cmp-4 : #806B00;   /* olive-dark */
+  --cmp-5 : #2E6B4F;   /* forest, 5.69:1 */
+  --cmp-6 : #B5502E;   /* rust, 4.57:1 */
+  --cmp-7 : #4C5B66;   /* slate, 6.33:1 */
+  --cmp-8 : #8A6416;   /* gold, 4.84:1 */
+  --cmp-9 : #8A3E63;   /* plum, 6.43:1 */
+  --cmp-10: #6B4226;   /* cocoa, 7.80:1 */
 
   /* Categorical — FT g-chartcolour. LOCK these; a category keeps its hue in EVERY chart. */
   --cat-overall   : #33302E;
@@ -212,12 +228,22 @@
   --seq-4 : #FB8C5A;   /* orange-red, lifted */
   --seq-5 : #F2564B;   /* red, lifted for >=3:1 on slate */
   --seq-target : #5BA3E0;
+  /* [debug 2026-07-06] dark seq-1/seq-4 already clear 4.5:1 as text (5.39/6.16, see
+     tools/check-dark-contrast.mjs), so text-safe = the same values here, unlike light theme. */
+  --seq-hi-text : #FB8C5A;
+  --seq-lo-text : #3CB371;
 
-  /* Comparison-line palette (AMENDMENT-2 §B.8) — dark theme */
+  /* Comparison-line palette (AMENDMENT-2 §B.8) — dark theme. 5-10 added alongside the light set. */
   --cmp-1 : #5BA3E0;
   --cmp-2 : #3FB8C4;
   --cmp-3 : #A98FD6;
   --cmp-4 : #C7A800;   /* olive → brighter for dark */
+  --cmp-5 : #5FBF93;
+  --cmp-6 : #E08860;
+  --cmp-7 : #93A9B8;
+  --cmp-8 : #D9B24C;
+  --cmp-9 : #D080A8;
+  --cmp-10: #C08860;
 
   --cat-overall   : #FFF1E5;
   --cat-energy    : #FF9D52;

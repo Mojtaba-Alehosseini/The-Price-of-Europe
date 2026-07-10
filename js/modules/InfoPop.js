@@ -47,7 +47,9 @@ class InfoPop {
     this.close();
     if (wasOpen) return;                 // toggle off if re-clicking the same anchor
     this._anchor = anchor;
-    this._textEl.textContent = text;
+    // Card text is always an authored, hardcoded string (never user/data-derived) — safe to render
+    // as HTML on the rare cards that embed a verbatim <a>; every other card keeps the plain-text path.
+    if (/<a\s/i.test(text)) this._textEl.innerHTML = text; else this._textEl.textContent = text;
     this.el.hidden = false;
     this._place(anchor);
     if (this._reduced()) { this.el.classList.add("is-in"); }
