@@ -261,19 +261,11 @@
 }
 
 /* ===== Chart 9 · WaffleChart =====
-   [R2-elevate] Survivors hold the signature terracotta; eroded cells become a
-   faint hatched "ghost" so the LOST purchasing power reads as missing, not as a
-   second category. Cell fills are set inline in JS (tokens read at draw time);
-   these rules cover stroke + the fallback + the eroded ghost + hero typography. */
-.chart-svg .waffle-cell {
-  stroke: var(--bg);          /* crisp grid: cells read as discrete squares */
-  stroke-width: 1.5;
-}
-.chart-svg .waffle-cell--on  { fill: var(--accent); }      /* fallback; JS sets inline */
-.chart-svg .waffle-cell--off { fill: url(#waffle-erode-hatch); }
-/* Eroded "ghost" hatch — a torn, faint fill so loss looks subtracted from €100 */
-.chart-svg .waffle-hatch-bg   { fill: var(--rule-soft); }
-.chart-svg .waffle-hatch-line { stroke: var(--rule-bold); stroke-width: 0.8; opacity: 0.55; }
+   [D87] cell stroke/fill semantics now live in one place, further down this file
+   (search "waffle-cell--on") — kept + lost tile colours, theme-swapped for contrast.
+   The pre-D86 hatch-pattern fallback that used to sit here is gone: no JS ever built
+   the #waffle-erode-hatch pattern it pointed to, and .waffle-cell/--on/--off is
+   redefined below, so the two definitions would have silently collided. */
 
 /* Hero: big Fraunces survivor number + accent loss-delta + insight sentence.
    .waffle-kicker piggybacks on .year-kicker (shared system); we only size it.
@@ -725,10 +717,63 @@
 .scroller__chart[data-chart-mount="waffle"] header { gap: 1px; }
 .scroller__chart[data-chart-mount="waffle"] .chart-subtitle { line-height: 1.22; }
 .scroller__chart[data-chart-mount="waffle"] .chart-source { font-size: 10.5px; line-height: 1.1; margin: 0; letter-spacing: 0.03em; }
-/* respin waffle: eroded cell = claret (the loss), survived = muted wheat (later rules override the old --on/--off) */
-.chart-svg .waffle-cell { stroke: var(--bg); stroke-width: 1.5; cursor: pointer; transition: fill var(--dur-3) var(--ease-out); }
-.chart-svg .waffle-cell--on  { fill: var(--bg-sunken); }
-.chart-svg .waffle-cell--off { fill: var(--accent); }
+/* [D87] waffle colour semantics, corrected: a KEPT euro is the loud one now — a solid warm-gold
+   coin-like tile; a LOST euro is a quiet hollow socket (transparent + a thin ink-fainter ring).
+   Claret is reserved for THE MOMENT OF TAKING (the erosion's own flash + the step-echo pulse on
+   the bars) — never for a resting state. Erosion/refill transitions are driven by JS d3
+   transitions (_animateErosion), not this CSS fill-transition, so cutting it here is safe. */
+.chart-svg .waffle-cell { stroke: none; cursor: pointer; }
+/* --coin-gold itself only measures 2.48:1 against the LIGHT paper (--bg #FFF1E5) -- fails the
+   owner's own >=3:1 ask (it was tuned to sit on the hero's darker medallion backdrop, not flat
+   paper). --coin-gold-lo (the "darker edge" token) measures 5.72:1 there and reads as a rich,
+   still-gold ochre, so light theme's FILL uses -lo instead, with the same -lo doubling as its own
+   edge stroke (a crisp same-tone border, not a two-tone bevel, since there's no darker family
+   member to draw a genuinely darker edge inside -lo itself). Dark theme is the opposite case --
+   --coin-gold reads 5.22:1 there (passes) while --coin-gold-lo would FAIL dark (2.27:1) -- so dark
+   gets the token pair the owner's own spec named literally: gold fill, gold-lo edge. Neither coin
+   token is redefined per-theme at the root (the hero medallion also reads them and must not
+   change) -- both swaps are scoped to .waffle-cell--on only. */
+/* settle transition lives on --on/--off only (never the base rule or --flash), so a tile's own
+   ENTRY into --flash is a crisp, un-eased class swap (it needs to read instantly, not fade in),
+   while its EXIT from --flash into --off (or a refill's --off-to-on) glides. 530ms here must match
+   ERODE_SETTLE_MS in WaffleChart.js -- together with the 25ms stagger and 120ms flash hold, that's
+   what makes the EU case (23 cells) land on the owner's own "~1.2s" figure. */
+.chart-svg .waffle-cell--on {
+  fill: var(--coin-gold-lo);
+  stroke: var(--coin-gold-lo);
+  stroke-width: 1px;
+  transition: fill 530ms var(--ease-out), stroke 530ms var(--ease-out);
+}
+[data-theme="dark"] .chart-svg .waffle-cell--on {
+  fill: var(--coin-gold);
+  stroke: var(--coin-gold-lo);
+}
+.chart-svg .waffle-cell--off {
+  fill: transparent;
+  stroke: var(--ink-fainter);
+  stroke-width: 1.5px;
+  transition: fill 530ms var(--ease-out), stroke 530ms var(--ease-out);
+}
+/* the one-shot claret flash a dying tile passes through mid-erosion (see _animateErosion) --
+   applied as a class for the flash's brief life, then removed in favour of --off. No transition
+   here (or on the base .waffle-cell rule) so gold-to-claret is an instant, crisp cut, not a fade. */
+.chart-svg .waffle-cell--flash { fill: var(--accent); stroke: var(--accent); }
+
+/* [D87] waffle's own mini-header, verbatim, same voice as the bars' header. */
+.chart-svg .wf-waffle-title { font-family: var(--font-body); font-size: 9.5px; fill: var(--ink-faint); letter-spacing: 0.26em; font-weight: 500; }
+/* legend line under the grid -- real 10px swatches (one gold tile, one hollow), not glyphs. */
+.chart-svg .wf-legend-text { font-family: var(--font-ui); font-size: 10.5px; fill: var(--ink-soft); }
+.chart-svg .wf-legend-swatch--on  { fill: var(--coin-gold-lo); stroke: var(--coin-gold-lo); stroke-width: 1px; }
+[data-theme="dark"] .chart-svg .wf-legend-swatch--on { fill: var(--coin-gold); stroke: var(--coin-gold-lo); }
+.chart-svg .wf-legend-swatch--off { fill: transparent; stroke: var(--ink-fainter); stroke-width: 1.5px; }
+/* kicker sub-line, attached directly under the €77/€61 number. The shared .kick-num rule
+   (~L545) already sets font-variant-numeric:tabular-nums, so the countdown's mono-stable width
+   requirement needs no addition here. */
+.chart-svg .wf-kick-sub { font-family: var(--font-ui); font-size: 11px; fill: var(--ink-faint); letter-spacing: 0.02em; }
+/* [D87] step-echo pulse — one rounded-rect outline framing a cited bar pair, expand+fade once
+   (_pulseBarPair), no loop. Size/position/opacity are driven entirely by the JS d3 transition;
+   this only fixes the stroke voice so every call reads consistently. */
+.chart-svg .wf-echo-pulse { fill: none; stroke: var(--accent); stroke-width: 2px; pointer-events: none; }
 /* [D86] the right column's own reserved label gutter — left-aligned, lives ENTIRELY inside the
    ~140px gutter reserved by the JS layout, so a label can never cross into the waffle's zone at
    any width (the structural fix for the overlap bug). */
@@ -743,7 +788,7 @@
 .chart-svg .wf-barrow[data-cat="SERV"]  .wf-bar-2025 { fill: var(--cat-services); }
 .chart-svg .wf-barrow[data-cat="CP07"]  .wf-bar-2025 { fill: var(--cat-transport); }
 .chart-svg .wf-barrow[data-cat="CP045"] .wf-bar-2025 { fill: var(--cat-energy); }
-.chart-svg .wf-barrow[data-cat="CP11"]  .wf-bar-2025 { fill: var(--cat-other); }
+.chart-svg .wf-barrow[data-cat="CP11"]  .wf-bar-2025 { fill: var(--cat-restaurants); }   /* [D90-I3] was --cat-other */
 .chart-svg .wf-bar-v2019 { font-family: var(--font-mono); font-size: 9.5px; fill: var(--ink-faint); font-variant-numeric: tabular-nums; }
 .chart-svg .wf-bar-v2025 {
   font-family: var(--font-mono); font-size: 11.5px; font-weight: 700; fill: var(--ink); font-variant-numeric: tabular-nums;
@@ -775,6 +820,13 @@
 .chart-svg .hs-base { stroke: var(--ink-soft); stroke-width: 1; stroke-opacity: 0.5; stroke-dasharray: 3 3; }
 .chart-svg .hs-base-label { font-family: var(--font-mono); font-size: 9.5px; fill: var(--ink-faint); letter-spacing: 0.02em; }
 .chart-svg .hs-end-label { font-family: var(--font-mono); font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; paint-order: stroke; stroke: var(--bg); stroke-width: 3px; stroke-linejoin: round; }
+/* [D88 R1] explicit per-series colour, in CSS not a JS presentation attribute — an SVG
+   presentation attribute (a plain fill="..." set via .attr()) loses to ANY stylesheet rule
+   touching the same property, including the broad ".chart-svg text{fill:--ink-soft}"
+   default a few rules down; found because the hicp label kept rendering ink-soft instead
+   of the --ink 0.75-opacity this ruling asked for, no matter what the JS set inline. */
+.chart-svg .hs-end-label--hpi, .chart-svg .hs-end-hpi { fill: var(--accent); }
+.chart-svg .hs-end-label--hicp, .chart-svg .hs-end-hicp { fill: var(--ink); fill-opacity: 0.75; }
 .chart-svg .hs-end-name { font-family: var(--font-ui); font-size: 10px; fill: var(--ink-soft); }
 .chart-svg .hs-end-dot { stroke: var(--bg); stroke-width: 1.4; }
 .chart-svg .hs-gap { fill: var(--accent); fill-opacity: 0.11; }   /* the housing-excess gap, faint claret (event-band style) */
@@ -783,11 +835,21 @@
 .chart-svg .hs-dot-tick { font-family: var(--font-mono); font-size: 9px; fill: var(--ink-faint); font-variant-numeric: tabular-nums; }
 .chart-svg .hs-dot-name { font-family: var(--font-ui); font-size: 11.5px; font-weight: 600; fill: var(--ink); }
 .chart-svg .hs-dot-stem { stroke: var(--rule); stroke-width: 1; }
-.chart-svg .hs-dot { stroke: var(--bg); stroke-width: 1.4; }
-.chart-svg .hs-dot--top { fill: var(--accent); }
-.chart-svg .hs-dot--bot { fill: var(--seq-target); }
+/* [D88 R1] ALL house-price dots are --accent regardless of top/bottom group — the row's own
+   position already carries the ranking (top group first, divider, bottom group after);
+   colour must not double-encode a signal position already carries. No --top/--bot split. */
+.chart-svg .hs-dot { fill: var(--accent); stroke: var(--bg); stroke-width: 1.4; }
 .chart-svg .hs-dot-val { font-family: var(--font-mono); font-size: 11px; font-weight: 700; fill: var(--ink); font-variant-numeric: tabular-nums; paint-order: stroke; stroke: var(--bg); stroke-width: 2.5px; stroke-linejoin: round; }
 .chart-svg .hs-dot-sep { font-family: var(--font-ui); font-size: 10px; fill: var(--ink-fainter); letter-spacing: 0.04em; }
+/* [D88 R3] the second marker proving the claim per-country: consumer-price rise, same
+   window, same row — a short --ink tick, never competing with the --accent house-price dot. */
+.chart-svg .hs-tick { stroke: var(--ink); stroke-width: 2px; }
+.chart-svg .hs-row-hit { cursor: pointer; }
+/* [D88 R3] legend line under the dot-range's own mini-header — real dot/tick SVG swatches,
+   not glyph characters, so they read identically to the marks they explain. */
+.chart-svg .hs-legend-dot { fill: var(--accent); }
+.chart-svg .hs-legend-tick { stroke: var(--ink); stroke-width: 2px; }
+.chart-svg .hs-legend-text { font-family: var(--font-ui); font-size: 10.5px; fill: var(--ink-soft); }
 
 /* ===== CH8 · RaceChart (respin, NEW) — pay vs prices ===== */
 .scroller__chart[data-chart-mount="race"] { padding-block: 0; gap: 0; }

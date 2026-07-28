@@ -30,6 +30,7 @@ export function readPalette() {
       services:  css("--cat-services"),
       wages:     css("--cat-wages"),
       transport: css("--cat-transport"),
+      restaurants: css("--cat-restaurants"),   // [D90-I3] CP11's own hue
       other:     css("--cat-other")
     },
 
@@ -70,7 +71,7 @@ export const CATEGORY_TO_PALETTE = {
   CP08: "services",
   CP09: "services",
   CP10: "services",
-  CP11: "services",
+  CP11: "restaurants",   // [D90-I3] was "services" — CP11 has its own token now
   CP12: "services",
   NRG:  "energy",
   FOOD: "food",

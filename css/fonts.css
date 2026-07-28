@@ -1,0 +1,49 @@
+/* ============================================================
+   fonts.css — self-hosted variable webfonts (D90-I2c).
+
+   Replaces the render-blocking <link> to fonts.googleapis.com. That stylesheet cost two
+   third-party DNS+TLS handshakes on the critical path BEFORE a single font byte could be
+   requested, and it was the largest single lever on LCP (the hero's display-italic question).
+
+   Files are built by scripts/build_fonts.py from the upstream google/fonts variable TTFs
+   (OFL-1.1, licence vendored at assets/fonts/OFL.txt). They are real subsets, not mirrors of
+   Google's: Google's own `latin` subset omits U+2192 (->) and U+2194 (<->), both of which this
+   essay sets mid-sentence ("2019 -> NOW", "2019 <-> 2022"), so those arrows used to fall back
+   to a system face. They are included here.
+
+   Variable axes are preserved — charts.css drives `font-variation-settings: "opsz" ...` on
+   display text, and weight varies across the UI, so instancing to static cuts was not an option.
+
+   font-display: swap everywhere — the fallback stack in tokens.css (Georgia / system-ui /
+   ui-monospace) is metrically close enough that the swap reads as a weight settle, never a
+   reflow of the layout.
+   ============================================================ */
+
+@font-face {
+  font-family: "Source Serif 4";
+  src: url("../assets/fonts/source-serif-4-var.woff2") format("woff2");
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Source Serif 4";
+  src: url("../assets/fonts/source-serif-4-italic-var.woff2") format("woff2");
+  font-weight: 400 600;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Schibsted Grotesk";
+  src: url("../assets/fonts/schibsted-grotesk-var.woff2") format("woff2");
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("../assets/fonts/jetbrains-mono-var.woff2") format("woff2");
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}

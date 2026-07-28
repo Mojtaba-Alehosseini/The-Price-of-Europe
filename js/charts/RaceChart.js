@@ -249,7 +249,7 @@ export class RaceChart extends BaseChart {
       `<button type="button" class="ac-reset" hidden>Reset</button>` +
       `<span class="ac-zoom" role="group" aria-label="Zoom the timeline">` +
       `<button type="button" class="ac-zoom-btn is-on" data-zoom="full">2019 – 2025</button>` +
-      `<button type="button" class="ac-zoom-btn" data-zoom="crisis">The crisis · 2021 – 23</button></span>`;
+      `<button type="button" class="ac-zoom-btn" data-zoom="crisis">2021 – 2023</button></span>`;
     host.querySelector(".ac-select").addEventListener("change", (e) => { const code = e.target.value; e.target.value = ""; if (code) this._addCountry(code); });
     host.querySelector(".ac-reset").addEventListener("click", () => this._resetCountries());
     host.querySelectorAll(".ac-zoom-btn").forEach(b => b.addEventListener("click", () => this._applyZoom(b.dataset.zoom, true)));

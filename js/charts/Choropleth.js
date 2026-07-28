@@ -2163,11 +2163,15 @@ export class Choropleth extends BaseChart {
         .style("opacity", 0)
         .node();
 
-      // Bar rect
+      // Bar rect. height is clamped for the same reason BaseChart.innerSize() clamps its box (and
+      // the row hit-area below already clamps its width): during a transient relayout — a fullPage
+      // capture, an orientation flip mid-transition — the panel can measure a few px tall, so
+      // yBand.bandwidth() collapses (~0.8px) and rowH-2 goes NEGATIVE. The browser then rejects the
+      // attribute and logs an invalid-attribute error (27 hits in diag-negrect). No-op normally.
       const rectEl = g.append("rect").attr("class", "bar-rect")
         .attr("x", barX).attr("y", 1)
         .attr("width", 0)
-        .attr("height", rowH - 2)
+        .attr("height", Math.max(0, rowH - 2))
         .attr("rx", 2)
         .attr("fill", fill)
         .attr("data-target-width", barW)

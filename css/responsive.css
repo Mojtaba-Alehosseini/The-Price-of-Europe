@@ -164,6 +164,16 @@
   }
   .scroller__chart[data-chart-mount="heatmap"] .chart-source { font-size: 9.5px; }
 
+  /* [D87] waffle stacks its OWN header+kicker+legend above a still-full 6-row bars block on
+     phone (D86's stacked layout) -- more content than the base 56dvh panel has room for. Without
+     this the JS floor-clamp masked a too-small clientHeight reading, then this chart's own
+     size()'s old Math.max(360,h) floor made it WORSE by handing the SVG a taller box than the
+     (correctly, ~310px) measured container actually had -- silently clipped by .chart-body's
+     overflow:hidden, and the grid itself shrank to ~2px "dust" cells fighting the leftover ~39px.
+     92dvh (vs heatmap's 88dvh) because this chapter stacks header+legend/kicker chrome on TOP of
+     a full 6-row bars block, not just one dense grid. */
+  .scroller__chart[data-chart-mount="waffle"] { block-size: 92dvh; }
+
   /* [R2·1e] Chart 2 — SmallMultiples: 8 panels must stay legible inside the
      ~56dvh sticky area that clears the bottom step-dock. The body is 1fr after
      the header + 2-line subtitle + source (~200px of chrome) — leaving the eight

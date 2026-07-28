@@ -246,7 +246,11 @@
 .rc-tl-play[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
 .rc-tl-play[aria-pressed="true"] .rc-tl-ic-play { display: none; }
 .rc-tl-play[aria-pressed="true"] .rc-tl-ic-stop { display: block; }
-.rc-tl-year { font-size: 9.5px; letter-spacing: 0.06em; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
+/* [D90-I1] --ink-soft, not --ink-faint: at 9.5px these are small text and need 4.5:1, but
+   --ink-faint is documented (tokens.css) as ">=18px text or graphics only" and measures 3.87:1
+   on paper -- the one contrast failure Lighthouse and axe both flagged in the hero. --ink-soft
+   is 8.15:1 light / 8.83:1 dark. Size and weight unchanged; only the ink darkens. */
+.rc-tl-year { font-size: 9.5px; letter-spacing: 0.06em; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
 .rc-tl-line { position: relative; flex: 1; block-size: 20px; cursor: pointer; touch-action: none; }
 .rc-tl-line:active { cursor: grabbing; }
 .rc-tl-line::before {

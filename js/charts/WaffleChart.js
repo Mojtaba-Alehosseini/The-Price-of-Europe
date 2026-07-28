@@ -1,21 +1,26 @@
 /* ============================================================
-   WaffleChart — CH6 "The kitchen table" (D86 two-column redesign).
+   WaffleChart — CH6 "The kitchen table" (D87 semantics + step-echo redesign).
    Two columns in one body:
-     LEFT  — the 100-cell waffle: €1 of 2019 purchasing power; eroded cells (ghost hatch→claret).
-             EU-27 = 77 solid / 23 eroded; Hungary = 61.
+     LEFT  — the 100-cell waffle: a KEPT euro is a solid warm-gold coin-like tile; a LOST euro is
+             a hollow socket (transparent + thin ink-fainter ring). Claret is reserved for the
+             MOMENT OF TAKING — the erosion's own flash and the step-echo pulse on the bars —
+             never a resting-state colour. Own mini-header + legend + attached kicker travel with
+             the grid between its two positions (D86: centered alone at step 0, left column from
+             step 1 on, scale 0.92).
      RIGHT — the hero's six basket lines as paired 2019→NOW bars, each in its own locked --cat-*
              colour, with an OWN reserved label gutter so a label can never cross into the waffle.
-   Step-driven choreography (owner ruling, D86): step 0 = waffle alone, centered, bars hidden;
-   step 1 = waffle glides into its left-column slot (scale 0.92) while bars cascade in; step 2 /
-   any country-picker change = waffle re-erodes + bars re-scale in one 600ms transition, no
-   re-mount, no re-stagger. Reversible: scrolling back to step 0 retracts the bars and re-centers
-   the waffle. Timed on entry (fixed durations), not scroll-scrubbed — same speed on scroll or a
-   rail-dot jump (D70 house ruling). Reduced motion: instant final state of the active step.
+   Choreography: step 0 activation plays the erosion ONCE — grid starts full gold (100), lost
+   cells die top-row-first (claret flash → hollow), kicker counts down in sync, ~1.2s for the EU
+   case. Step 1 = D86's waffle-glide + bar-cascade (unchanged). Step 2 / any country-picker change
+   = the DELTA re-erodes (die-with-flash if worse, silent refill if better) while bars re-scale,
+   kicker counts to the new value — all timed on entry, same speed scroll or rail-jump, never
+   scroll-scrubbed. Step-echo: steps citing specific basket lines (`data-echo="rent,groceries"`)
+   pulse those bar pairs once, tied to their own animation's completion, never a fixed timer.
+   Reduced motion: instant final state of the active step throughout.
    Key stays `waffle` in the factory (brief allows).
    ============================================================ */
 
 import { BaseChart } from "./BaseChart.js";
-import { watchChapterProgress, smooth } from "../modules/ChartMotion.js";
 
 const BASKET = [
   { cat: "CP04",  label: "Rent & water",       base: 30 },
@@ -27,26 +32,53 @@ const BASKET = [
 ];
 const START = "2019-01";
 const WF_SCALE     = 0.92;   // split-mode waffle scale, relative to its solo (centered-alone) size
-const WF_MOVE_MS   = 600;    // waffle glide (enter split) / re-erode+rescale (country change) / return (exit split)
+const WF_MOVE_MS   = 600;    // waffle glide (enter split) / bars re-scale (country change) / return (exit split)
 const BAR_RETRACT_MS  = 280;
 const BAR_STAGGER_MS  = 60;  // per-row cascade delay on first entry into split mode
 const BAR_GROW_MS     = 420; // each bar's own grow duration
 const BAR_NOW_DELAY_MS = 150; // the NOW bar starts this long after its own row's 2019 bar
+
+// [D87] erosion timing — 25ms stagger and 120ms flash are the owner's own literal numbers;
+// SETTLE is derived so the EU reference case (23 lost cells) lands at the owner's stated ~1.2s
+// total: 22 gaps * 25ms + 120ms flash + 530ms settle = 1200ms exactly. SETTLE must match the
+// .waffle-cell--on/--off transition duration in charts.css — that CSS transition is what actually
+// carries the fade from flash to hollow (or off to gold on a refill); this constant only drives
+// how long the KICKER keeps counting, so the number finishes exactly when the last tile does.
+// One shared stagger for both directions — a die and a refill in the SAME batch (only possible
+// after a rapid re-trigger interrupts a still-mid-flight erosion) must share one timeline.
+const STAGGER_MS = 25;
+const ERODE_FLASH_MS   = 120;
+const ERODE_SETTLE_MS  = 530;
+const REFILL_MS = 380;
+const ECHO_PULSE_MS = 420;   // --dur-4, the owner's own named duration for the echo ring
+
+// data-echo="rent,groceries" -> BASKET cat codes. Only "rent"/"groceries" are used by the owner's
+// two steps today, but the full basket is mapped so the attribute can cover any line later without
+// touching this file again.
+const ECHO_MAP = { rent: "CP04", groceries: "CP01", services: "SERV", transport: "CP07", energy: "CP045", cafe: "CP11" };
 
 export class WaffleChart extends BaseChart {
   constructor(sel, data, ctx) {
     super(sel, data, ctx, { margin: { top: 56, right: 20, bottom: 24, left: 20 }, aspect: 1.3 });
     this.geo = "EU27_2020";
     this.controlsEl = document.getElementById("chart-waffle-controls");
-    this._erodeP = 0;
     this._mode = "solo";   // "solo" (step 0, waffle alone) | "split" (step 1+, two columns)
+    this._shownN = null;   // the fill count CURRENTLY represented on screen (vs _fillN, the target)
+    this._erosionSeq = 0;
+    this._erosionTimers = [];
+    this._erosionPlayed = false;
+    this._echoCats = [];
   }
 
   size() {
     if (!this.container) return { width: 720, height: 560 };
     const w = this.container.clientWidth || 720;
     const h = this.container.clientHeight || Math.round(w / this.opts.aspect);
-    return { width: w, height: Math.max(360, h) };
+    // 200 is an anti-degenerate floor (a transient pre-layout frame reading ~0), not a "usual
+    // minimum" — the phone sticky panel legitimately gives this chart ~300px of chart-body, and
+    // clamping that up to some larger floor would make the SVG taller than its own container,
+    // silently clipped by .chart-body's overflow:hidden (found via a broken phone screenshot).
+    return { width: w, height: Math.max(200, h) };
   }
 
   // carry-forward guard (last known value at or before t) — matches ReceiptHero.
@@ -82,66 +114,80 @@ export class WaffleChart extends BaseChart {
     this.opts.margin = isPhone ? { top: 48, right: 14, bottom: 20, left: 14 } : { top: 56, right: 20, bottom: 24, left: 20 };
     const { width, height } = this.ensureSvg();
     this.W = width; this.H = height;
-    this.svg.attr("aria-label", "The €100 monthly basket of 2019, priced for one country: on the left, its purchasing power today (77 of 100 euros for the EU-27); on the right, the six spending lines paired 2019 against now.");
+    this.svg.attr("aria-label", "What €100 of 2019 still buys, priced for one country: on the left, a 100-tile grid where gold tiles are the euros that still buy the same and hollow tiles are the euros lost to prices; on the right, the six spending lines paired 2019 against now.");
     const M = this.opts.margin;
     const iw = width - M.left - M.right, ih = height - M.top - M.bottom;
     this._iw = iw; this._ih = ih;
     const contentY = M.top;
 
-    // ── D86 layout: strict two columns. LEFT = waffle, fixed width min(42%,420px), vertically
-    // centered. RIGHT = bars, with their OWN reserved label gutter so a label can never cross
-    // into the waffle's zone at any width (the structural fix for the overlap bug). Phone <=~620px
-    // container (matches the project's own isPhone threshold, well under the 860px the owner
-    // named as the stacking break) stacks: waffle above bars, both full width. ──
+    // ── D86 two-column layout (unchanged shape). LEFT = waffle, fixed width min(42%,420px),
+    // vertically centered. RIGHT = bars with their OWN reserved label gutter. Phone stacks. ──
     const gap = isPhone ? 20 : 34;
     const leftW = isPhone ? iw : Math.min(iw * 0.42, 420);
     const rightW = isPhone ? iw : iw - leftW - gap;
-    const rightX0 = isPhone ? 0 : leftW + gap;           // right column's local x start
-    const labelGutter = isPhone ? 104 : 140;               // reserved, label-only zone inside the right column
-    const tagRoom = isPhone ? 54 : 66;                     // room for the "→ €40.46" tag past the bar's end
+    const rightX0 = isPhone ? 0 : leftW + gap;
+    const labelGutter = isPhone ? 104 : 140;
+    const tagRoom = isPhone ? 54 : 66;
     const rowH = isPhone ? 38 : 44;
     const rowGap = isPhone ? 9 : 14;
     const totalBarsH = BASKET.length * rowH + (BASKET.length - 1) * rowGap;
-    const titleGapH = isPhone ? 22 : 26;                   // room reserved for the section title above the row block
+    const titleGapH = isPhone ? 22 : 26;
 
-    // waffle geometry: a single BASE size (the grid's own local coordinate span, 0..waffleSideBase)
-    // that the group's own `transform` scales/positions for either mode — never recomputed per
-    // mode, so cell x/y attrs are set exactly once and only the wrapping <g> ever animates.
+    // [D87] the waffle now carries its own attached header + kicker (above) and legend (below) —
+    // reserve fixed pixel headroom/footroom for them in the grid's OWN local coordinate space, so
+    // the same reserved band applies at both scales (solo=1, split=0.92) via the group transform.
+    // Baselines are stacked EXPLICITLY upward from the grid's own y=0, each a fixed clearance from
+    // its neighbour, rather than dividing a chosen headroom total by formula — a formula like
+    // "-wfHeadroom+62" only clears the grid for the desktop headroom it was tuned against; at
+    // phone's smaller headroom the same offset lands PAST y=0 and the sub-line cuts into row 0
+    // (found by reading a phone screenshot, not by inspecting the numbers).
+    const kickSubY  = -8;                                     // baseline, clears the grid's own top edge
+    const kickNumY  = kickSubY - (isPhone ? 26 : 36);          // clears kickSub's own ascender + a gap
+    const titleY    = kickNumY - (isPhone ? 26 : 36);          // clears kickNum's own (larger) ascender + a gap
+    const wfHeadroom = Math.round(-titleY + 10);
+    const wfFootroom = isPhone ? 20 : 28;
+
     const cols = 10, rows = 10;
     let waffleSideBase, soloX, soloY, splitX, splitY, splitScale;
     if (isPhone) {
-      splitScale = 1;   // phone: simpler vertical reflow, no scale change
-      waffleSideBase = Math.min(iw, ih * 0.4);
+      splitScale = 1;
+      // phone stacks waffle-then-bars (D86) rather than shrinking a second time (desktop's
+      // split-mode 0.92): the grid keeps one constant size and only its Y position changes
+      // between solo (centered in the full body) and split (pinned under the header, with the
+      // bars' own reserved zone below it) — so size it to whatever's left ABOVE that bars zone,
+      // not a flat 40%-of-height guess (which, before the panel got its own taller phone
+      // block-size below, produced a barely-visible ~39px grid).
+      const splitAvailH = ih - wfHeadroom - wfFootroom - titleGapH - totalBarsH;
+      waffleSideBase = Math.max(100, Math.min(iw, splitAvailH));
       soloX = (iw - waffleSideBase) / 2;
-      soloY = Math.max(0, (ih - waffleSideBase) / 2);
+      soloY = wfHeadroom + Math.max(0, (ih - wfHeadroom - wfFootroom - waffleSideBase) / 2);
       splitX = (iw - waffleSideBase) / 2;
-      splitY = 0;
+      splitY = wfHeadroom;
     } else {
       splitScale = WF_SCALE;
-      const splitSide = Math.min(leftW, ih);
-      waffleSideBase = splitSide / splitScale;   // solo (scale=1) size that shrinks to fit the column at 0.92
+      // largest square base grid that, once the attached header/kicker/legend are included, fits
+      // BOTH the split-mode left column AND the solo-mode full body — see D87 design decision for
+      // the derivation (three simultaneous constraints, take the tightest).
+      const byWidthSplit = leftW / splitScale;
+      const byHeightSplit = ih / splitScale - wfHeadroom - wfFootroom;
+      const byHeightSolo = ih - wfHeadroom - wfFootroom;
+      waffleSideBase = Math.max(120, Math.min(byWidthSplit, byHeightSplit, byHeightSolo));
       soloX = (iw - waffleSideBase) / 2;
-      soloY = (ih - waffleSideBase) / 2;
+      soloY = wfHeadroom + (ih - wfHeadroom - wfFootroom - waffleSideBase) / 2;
+      const splitSide = waffleSideBase * splitScale;
       splitX = (leftW - splitSide) / 2;
-      splitY = (ih - splitSide) / 2;
+      splitY = wfHeadroom * splitScale + (ih - (wfHeadroom + waffleSideBase + wfFootroom) * splitScale) / 2;
     }
     const cellPitch = waffleSideBase / cols;
     const cellGap = Math.max(2, cellPitch * 0.12);
     const cellSize = cellPitch - cellGap;
-    this._waffle = { cols, rows, cellPitch, cellSize };
+    this._waffle = { cols, rows, cellPitch, cellSize, base: waffleSideBase };
     this._waffleXform = {
       solo:  `translate(${soloX},${soloY}) scale(1)`,
       split: `translate(${splitX},${splitY}) scale(${splitScale})`,
     };
 
-    // bars block: the 6 rows form a compact group, vertically centered in the space BELOW the
-    // section title (desktop) or below the waffle's OWN split-mode footprint (phone stacked) —
-    // never spread across the full panel height. Phone fix (D86 gate caught this): the waffle
-    // occupies real vertical space at the top of the stack in split mode, so the bars' own zone
-    // must start AFTER it, not from the panel's top margin like the desktop two-column case.
-    const phoneWaffleBottom = splitY + waffleSideBase * splitScale;
-    const phoneGap = 22;
-    const rowsTop = isPhone ? phoneWaffleBottom + phoneGap + titleGapH : contentY + titleGapH;
+    const rowsTop = isPhone ? splitY + waffleSideBase * splitScale + wfFootroom + titleGapH : contentY + titleGapH;
     const rowsAvailBottom = height - M.bottom;
     const rowsAvailH = Math.max(totalBarsH, rowsAvailBottom - rowsTop);
     const barsGroupY = rowsTop + Math.max(0, (rowsAvailH - totalBarsH) / 2);
@@ -150,12 +196,17 @@ export class WaffleChart extends BaseChart {
     const plotW = rightW - labelGutter - tagRoom;
     this._bars = { x: barsX, y: barsGroupY, w: rightW, labelGutter, plotW, rowH, rowGap };
 
-    // ── kicker (purchasing power €77 / €61) — stays fixed regardless of mode ──
-    this._kickNum = this.svg.append("text").attr("class", "kick-num").attr("x", M.left).attr("y", isPhone ? 38 : 46).style("font-size", isPhone ? "30px" : "42px");
-    // right-column section title — lives INSIDE the bars group so it hides/shows with the rows.
-
-    // ── waffle cells (persistent, local coords 0..waffleSideBase; the WRAPPING group animates) ──
+    // ── waffle group: cells + attached header/kicker/legend, all in LOCAL coordinates
+    // (0,0 = grid top-left at base scale) — the group's own transform positions/scales the
+    // whole unit for either mode, so nothing inside it is ever repositioned per-mode. ──
     this._waffleG = this.g.append("g").attr("class", "wf-waffle-group");
+    this._waffleG.append("text").attr("class", "wf-waffle-title")
+      .attr("x", 0).attr("y", titleY).text("WHAT €100 OF 2019 STILL BUYS");
+    this._kickNum = this._waffleG.append("text").attr("class", "kick-num")
+      .attr("x", 0).attr("y", kickNumY).style("font-size", isPhone ? "30px" : "42px");
+    this._kickSub = this._waffleG.append("text").attr("class", "wf-kick-sub")
+      .attr("x", 0).attr("y", kickSubY).text("of your 2019 €100");
+
     const cellData = d3.range(100).map(i => { const col = i % cols, row = Math.floor(i / cols); return { i, col, row, idx: (rows - 1 - row) * cols + col }; });
     const wf = this._waffle;
     this._cells = this._waffleG.selectAll("rect.waffle-cell").data(cellData, d => d.i).join("rect")
@@ -167,33 +218,74 @@ export class WaffleChart extends BaseChart {
       .on("mouseleave", () => this.ctx.tooltip.hide())
       .on("pointerdown", (e) => { if (e.pointerType !== "mouse") this._cellTip(e); });
 
+    // legend line — real 10px swatches, verbatim text.
+    const legendY = waffleSideBase + wfFootroom - 6;
+    const legend = this._waffleG.append("g").attr("class", "wf-legend");
+    legend.append("rect").attr("class", "wf-legend-swatch--on").attr("x", 0).attr("y", legendY - 9).attr("width", 10).attr("height", 10).attr("rx", 2);
+    legend.append("text").attr("class", "wf-legend-text").attr("x", 15).attr("y", legendY).text("€1 that still buys");
+    const legend2X = 15 + 130;
+    legend.append("rect").attr("class", "wf-legend-swatch--off").attr("x", legend2X).attr("y", legendY - 9).attr("width", 10).attr("height", 10).attr("rx", 2);
+    legend.append("text").attr("class", "wf-legend-text").attr("x", legend2X + 15).attr("y", legendY).text("€1 lost to prices");
+
     // ── basket bars (persistent groups, inside a single show/hide wrapper) ──
     this._buildBars();
 
     // country picker
     this._renderControls();
 
-    // ── initial state: SOLO (step 0), no animation on first paint ────────────
+    // ── initial paint vs a re-render (resize / theme change). A TRUE first mount starts the
+    // grid full-gold, awaiting step 0's own erosion. A re-render must instead repaint whatever
+    // is ALREADY current (mode, shown fill count, bar widths) at the new geometry — render() is
+    // called bare by BaseChart.resize(), with no step re-entry guaranteed to follow, so resetting
+    // unconditionally here would strand a mid-story reader's waffle back at "100, solo" until
+    // their next step change. ──────────────────────────────────────────────────────────────────
+    const firstMount = this._shownN == null;
     this._recompute();
-    this._mode = "solo";
-    this._waffleG.attr("transform", this._waffleXform.solo);
-    this._erodeP = this.ctx.motion.reduced ? 1 : 0;
-    this._applyWaffle(this._erodeP);
-    this._barsGroupEl.classed("is-shown", false);
-    BASKET.forEach(b => {
-      const g = this._barG.get(b.cat);
-      g.select(".wf-bar-2019").attr("width", 0);
-      g.select(".wf-bar-2025").attr("width", 0);
-      g.select(".wf-bar-v2019").style("opacity", 0).text(`€${b.base}`);
-      g.select(".wf-bar-v2025").style("opacity", 0);
-    });
-    this._kickShown = this._fillN;
-    this._kickNum.text(this._fillN == null ? "—" : `€${this._fillN}`);
-
-    if (!this.ctx.motion.reduced) {
-      if (this._unsub) this._unsub();
-      const chapter = this.container.closest(".chapter");
-      this._unsub = watchChapterProgress(chapter, p => this._onProgress(p));
+    if (firstMount) {
+      this._mode = "solo";
+      this._erosionPlayed = false;
+      this._waffleG.attr("transform", this._waffleXform.solo);
+      if (this.ctx.motion.reduced) {
+        this._shownN = this._fillN;
+        this._snapCells(this._fillN);
+        this._kickNum.text(this._fillN == null ? "—" : `€${this._fillN}`);
+      } else {
+        this._shownN = 100;
+        this._snapCells(100);
+        this._kickNum.text("€100");
+      }
+      this._barsGroupEl.classed("is-shown", false);
+      BASKET.forEach(b => {
+        const g = this._barG.get(b.cat);
+        g.select(".wf-bar-2019").attr("width", 0);
+        g.select(".wf-bar-2025").attr("width", 0);
+        g.select(".wf-bar-v2019").style("opacity", 0).text(`€${b.base}`);
+        g.select(".wf-bar-v2025").style("opacity", 0);
+      });
+    } else {
+      this._waffleG.attr("transform", this._waffleXform[this._mode]);
+      this._snapCells(this._shownN);
+      this._kickNum.text(this._shownN == null ? "—" : `€${this._shownN}`);
+      const split = this._mode === "split";
+      this._barsGroupEl.classed("is-shown", split);
+      BASKET.forEach(b => {
+        const g = this._barG.get(b.cat);
+        const v2019 = g.select(".wf-bar-v2019"), v2025 = g.select(".wf-bar-v2025");
+        if (!split) {
+          g.select(".wf-bar-2019").attr("width", 0);
+          g.select(".wf-bar-2025").attr("width", 0);
+          v2019.style("opacity", 0);
+          v2025.style("opacity", 0);
+          return;
+        }
+        const lv = this._lineVals.find(x => x.cat === b.cat);
+        const w2019 = Math.max(0, this._barX(b.base));
+        const w2025 = Math.max(0, this._barX(lv?.v ?? b.base));
+        g.select(".wf-bar-2019").attr("width", w2019);
+        g.select(".wf-bar-2025").attr("width", w2025);
+        v2019.attr("x", this._bars.labelGutter + w2019 + 6).style("opacity", 1).text(`€${b.base}`);
+        v2025.attr("x", this._bars.labelGutter + w2025 + 6).style("opacity", 1).text(lv?.v == null ? "" : `→ €${lv.v.toFixed(2)}`);
+      });
     }
   }
 
@@ -216,11 +308,8 @@ export class WaffleChart extends BaseChart {
         .on("mouseenter", (e) => this._barTip(e, b))
         .on("mousemove", (e) => this.ctx.tooltip.move(e.clientX, e.clientY))
         .on("mouseleave", () => this.ctx.tooltip.hide());
-      // full-row hit area, confined to this row's OWN column — never reaches into the waffle.
       g.append("rect").attr("class", "wf-bar-hit").attr("x", 0).attr("y", -2).attr("width", w).attr("height", rowH + 4).attr("fill", "transparent");
-      // category label — LEFT-aligned, lives entirely inside the reserved gutter.
       g.append("text").attr("class", "wf-bar-label").attr("x", 0).attr("y", rowH / 2 + 4).attr("text-anchor", "start").text(b.label);
-      // 2019 base bar (top half, --ink-fainter) + NOW bar (bottom half, category's own --cat-* colour).
       g.append("rect").attr("class", "wf-bar-2019").attr("x", labelGutter).attr("y", 0).attr("height", rowH * 0.4).attr("width", 0).attr("rx", 1.5);
       g.append("rect").attr("class", "wf-bar-2025").attr("x", labelGutter).attr("y", rowH * 0.5).attr("height", rowH * 0.4).attr("width", 0).attr("rx", 1.5);
       g.append("text").attr("class", "wf-bar-v2019").attr("x", labelGutter).attr("y", rowH * 0.4 - 3).attr("text-anchor", "start");
@@ -254,49 +343,123 @@ export class WaffleChart extends BaseChart {
     this.geo = geo;
     this._recompute();
     const reduced = this.ctx.motion.reduced;
-    if (this._mode === "split") {
-      this._rescaleSplit(reduced);
-    } else {
-      // solo mode: no bars to rescale yet — just re-erode the waffle to the new country, honouring
-      // whatever erosion progress the reader has already scrolled to (or full, under reduced motion).
-      this._applyWaffle(reduced ? 1 : this._erodeP);
+    this._animateErosion(this._fillN, reduced);
+    if (this._mode === "split") this._rescaleSplit(reduced);
+  }
+
+  // ── [D87] erosion / refill — timed on entry, never scroll-scrubbed. Cells transitioning
+  // on->off "die" (claret flash then hollow); cells transitioning off->on "refill" (straight to
+  // gold, no flash). idx-descending order reads as "top-row-first" for an initial 100->N erosion
+  // and as "the erosion/recovery continues from where it left off" for any later delta.
+  // Sequence-guarded setTimeouts (not d3 transitions) drive the discrete per-cell state flips,
+  // matching the D84 swap-timer pattern — a rapid country change cleanly supersedes any
+  // still-pending timers from the previous call instead of letting them fire out of order.
+  //
+  // The "changing" set is derived from each cell's OWN live class right now, never from a
+  // trusted fromN scalar: a call that interrupts an earlier still-mid-flight erosion can leave a
+  // ragged on/off boundary (some cells in the old delta already flipped, others not), and only
+  // the actual DOM state can tell the two apart. This makes a rapid re-trigger converge correctly
+  // instead of stranding whichever cells the superseded timers hadn't reached yet — the ONE bug
+  // an earlier fromN/toN-scalar version of this method had, caught by a rapid-re-trigger probe. ──
+  _animateErosion(toN, reduced) {
+    const seq = ++this._erosionSeq;
+    this._erosionTimers.forEach(t => clearTimeout(t));
+    this._erosionTimers = [];
+    this._shownN = toN;
+
+    // a cell caught mid-flash by a rapid re-trigger just had its OWN completion timer cancelled
+    // above. --flash already dropped --on, so left alone it would misread as "already off" to the
+    // comparison below and get abandoned mid-flash forever. Resolve it to the settled --off state
+    // it was already committed to — a half-finished flash is not a valid resting state — so the
+    // comparison sees a clean on/off boolean and decides correctly whether the NEW target wants
+    // this cell back on or still off.
+    this._cells.filter(function () { return this.classList.contains("waffle-cell--flash"); })
+      .classed("waffle-cell--flash", false).classed("waffle-cell--off", true);
+
+    if (reduced) {
+      this._snapCells(toN);
+      this._kickNum.interrupt("kick").text(toN == null ? "—" : `€${toN}`);
+      return;
     }
-    if (reduced) this._kickNum.text(this._fillN == null ? "—" : `€${this._fillN}`);
-    else this._tweenKicker(this._fillN);
+
+    const changing = this._cells.nodes()
+      .filter(n => (d3.select(n).datum().idx < toN) !== n.classList.contains("waffle-cell--on"))
+      .sort((a, b) => d3.select(b).datum().idx - d3.select(a).datum().idx);
+
+    if (!changing.length) { this._tweenKickerErosion(toN, 0); return; }
+
+    const anyDying = changing.some(n => d3.select(n).datum().idx >= toN);
+    const perCellMs = anyDying ? ERODE_FLASH_MS + ERODE_SETTLE_MS : REFILL_MS;
+    const totalMs = (changing.length - 1) * STAGGER_MS + perCellMs;
+
+    changing.forEach((node, i) => {
+      const dying = d3.select(node).datum().idx >= toN;
+      const delay = i * STAGGER_MS;
+      if (dying) {
+        this._erosionTimers.push(setTimeout(() => {
+          if (seq !== this._erosionSeq) return;
+          d3.select(node).classed("waffle-cell--on", false).classed("waffle-cell--flash", true);
+        }, delay));
+        this._erosionTimers.push(setTimeout(() => {
+          if (seq !== this._erosionSeq) return;
+          d3.select(node).classed("waffle-cell--flash", false).classed("waffle-cell--off", true);
+        }, delay + ERODE_FLASH_MS));
+      } else {
+        this._erosionTimers.push(setTimeout(() => {
+          if (seq !== this._erosionSeq) return;
+          d3.select(node).classed("waffle-cell--off", false).classed("waffle-cell--flash", false).classed("waffle-cell--on", true);
+        }, delay));
+      }
+    });
+
+    this._tweenKickerErosion(toN, totalMs);
   }
 
-  _tweenKicker(to) {
-    const from = this._kickShown ?? to; this._kickShown = to;
+  _snapCells(n) {
+    this._cells.classed("waffle-cell--flash", false)
+      .classed("waffle-cell--on", d => d.idx < n)
+      .classed("waffle-cell--off", d => d.idx >= n);
+  }
+
+  // Named transition on the persistent kicker element (not a throwaway object) so a second call
+  // cleanly interrupts a still-running first one instead of two tweens fighting over the same
+  // text node. Reads the CURRENTLY DISPLAYED number as its own starting point rather than trusting
+  // a passed-in "from" — the same live-state discipline as _animateErosion, for the same reason.
+  _tweenKickerErosion(to, ms) {
     const num = this._kickNum;
-    d3.select({ v: from }).transition().duration(560).ease(d3.easeCubicInOut).tween("k", function () {
-      const i = d3.interpolateNumber(from, to); return t => num.text(`€${Math.round(i(t))}`);
+    num.interrupt("kick");
+    if (ms <= 0) { num.text(to == null ? "—" : `€${to}`); return; }
+    const from = +((num.text().match(/\d+/) || [to])[0]);
+    num.transition("kick").duration(ms).ease(d3.easeLinear).tween("k", () => {
+      const i = d3.interpolateNumber(from, to);
+      return t => num.text(`€${Math.round(i(t))}`);
     });
   }
 
-  // waffle fill: erodeP 0→1 stages the erosion of the lost cells (top-down), latched. Each cell
-  // flips class as the erosion wave (from the top) reaches it — the stagger IS the erodeP threshold,
-  // so scrolling drives it and reduced-motion (erodeP=1) shows the full loss. --off = claret (loss).
-  _applyWaffle(erodeP) {
-    if (!this._cells) return;
-    const lost = 100 - this._fillN;
-    this._cells.each(function (d) {
-      const el = d3.select(this);
-      if (d._on) { el.classed("waffle-cell--on", true).classed("waffle-cell--off", false); return; }
-      const rank = 99 - d.idx;                 // 0 = topmost eroded target
-      const threshold = lost > 0 ? rank / lost : 1;
-      const gone = erodeP >= threshold;
-      el.classed("waffle-cell--on", !gone).classed("waffle-cell--off", gone);
-    });
+  // ── [D87] step-echo — one reusable helper, called for any bar pair a step's copy cites. A
+  // single rounded-rect claret outline frames the pair's current extent and expands+fades once
+  // over --dur-4; the element is appended fresh and removed at the end of its own transition, so
+  // there is never a persistent class to toggle and never an interval to leak. ──────────────────
+  _pulseBarPair(cat) {
+    if (this.ctx.motion.reduced) return;
+    const g = this._barG.get(cat); if (!g) return;
+    const w2019 = +g.select(".wf-bar-2019").attr("width") || 0;
+    const w2025 = +g.select(".wf-bar-2025").attr("width") || 0;
+    const w = Math.max(w2019, w2025, 1);
+    const rowH = this._bars.rowH;
+    const x0 = this._bars.labelGutter;
+    g.append("rect").attr("class", "wf-echo-pulse")
+      .attr("x", x0 - 3).attr("y", -3).attr("width", w + 6).attr("height", rowH + 6).attr("rx", 4)
+      .style("opacity", 0.9)
+      .transition().duration(ECHO_PULSE_MS).ease(d3.easeCubicOut)
+      .attr("x", x0 - 8).attr("y", -8).attr("width", w + 16).attr("height", rowH + 16).attr("rx", 6)
+      .style("opacity", 0)
+      .remove();
   }
 
-  _onProgress(p) {
-    if (this._mode !== "solo" || this._erodeP >= 1) return;   // step 0's own entrance reveal only
-    const er = smooth(Math.max(0, Math.min(1, (p - 0.02) / 0.24)));
-    if (er > this._erodeP) { this._erodeP = er; this._applyWaffle(er); }
-  }
-
-  // ── D86 step-driven choreography: timed on entry, identical whether reached by scroll or a
-  // rail-dot jump (onStep fires the same either way) — never scroll-scrubbed. ──────────────────
+  // ── D86 step-driven split choreography (layout unchanged) — timed on entry, identical whether
+  // reached by scroll or a rail-dot jump. Echo pulses are appended here (step 1's own cascade)
+  // and in _rescaleSplit (step 2 / picker change), each tied to that row's OWN completion. ──────
 
   _enterSplit(reduced) {
     this._mode = "split";
@@ -321,9 +484,12 @@ export class WaffleChart extends BaseChart {
       }
       v2019.style("opacity", 0); v2025.style("opacity", 0);
       bar2019.transition("gb").delay(i * BAR_STAGGER_MS).duration(BAR_GROW_MS).ease(d3.easeCubicOut)
-        .attr("width", w2019).on("end", function () { if (this === bar2019.node()) v2019.style("opacity", 1); });
+        .attr("width", w2019).on("end", () => v2019.style("opacity", 1));
       bar2025.transition("gb").delay(i * BAR_STAGGER_MS + BAR_NOW_DELAY_MS).duration(BAR_GROW_MS).ease(d3.easeCubicOut)
-        .attr("width", w2025).on("end", function () { if (this === bar2025.node()) v2025.style("opacity", 1); });
+        .attr("width", w2025).on("end", () => {
+          v2025.style("opacity", 1);
+          if (this._echoCats.includes(b.cat)) this._pulseBarPair(b.cat);
+        });
     });
   }
 
@@ -345,10 +511,11 @@ export class WaffleChart extends BaseChart {
     });
   }
 
-  // step 2 entry (new geo) or any picker change while already split: waffle re-erodes + bars
-  // re-scale together, ONE 600ms transition, no stagger, no re-mount.
+  // step 2 entry (new geo) or any picker change while already split: bars re-scale, ONE 600ms
+  // transition, no stagger, no re-mount. Erosion/kicker are handled separately by
+  // _animateErosion (called alongside this, not from within it) so the two stay independently
+  // testable and _rescaleSplit only ever touches the bars.
   _rescaleSplit(reduced) {
-    this._applyWaffle(1);
     BASKET.forEach(b => {
       const g = this._barG.get(b.cat);
       const lv = this._lineVals.find(x => x.cat === b.cat);
@@ -369,12 +536,18 @@ export class WaffleChart extends BaseChart {
       v2019.transition("gb").duration(WF_MOVE_MS).ease(d3.easeCubicInOut).attr("x", this._bars.labelGutter + w2019 + 6).style("opacity", 1);
       v2025.transition("gb").duration(WF_MOVE_MS).ease(d3.easeCubicInOut).attr("x", this._bars.labelGutter + w2025 + 6).style("opacity", 1);
     });
+    clearTimeout(this._echoRescaleT);
+    if (!reduced && this._echoCats.length) {
+      this._echoRescaleT = setTimeout(() => { this._echoCats.forEach(cat => this._pulseBarPair(cat)); }, WF_MOVE_MS);
+    }
   }
 
   onStep(index, el) {
     const geo = (el && el.dataset.geo) || this.geo;
     const mode = el && el.dataset.mode;
     const wantSplit = mode === "bars" || index >= 1;
+    const echoAttr = el && el.dataset.echo;
+    this._echoCats = echoAttr ? echoAttr.split(",").map(s => ECHO_MAP[s.trim()]).filter(Boolean) : [];
     if (this.container) { this.container.setAttribute("data-active-geo", geo); this.container.setAttribute("data-onstep", index); }
 
     const geoChanged = geo !== this.geo;
@@ -385,17 +558,31 @@ export class WaffleChart extends BaseChart {
     }
 
     const reduced = this.ctx.motion.reduced;
+
+    // 1. Erosion: step 0's own one-time "start full, die down to fillN" sequence; a rail-jump
+    // that lands directly on step 1/2 before step 0 ever fired snaps instantly instead (there was
+    // no time to watch the 1.2s sequence anyway); once already played, a geo change animates the
+    // delta.
+    if (index === 0 && !this._erosionPlayed) {
+      this._erosionPlayed = true;
+      this._animateErosion(this._fillN, reduced);
+    } else if (wantSplit && this._shownN !== this._fillN) {
+      this._erosionPlayed = true;
+      this._shownN = this._fillN;
+      this._snapCells(this._fillN);
+      this._kickNum.interrupt("kick").text(this._fillN == null ? "—" : `€${this._fillN}`);
+    } else if (wantSplit && geoChanged) {
+      this._animateErosion(this._fillN, reduced);
+    }
+
+    // 2. Split-mode transitions (D86, unchanged).
     if (wantSplit && this._mode !== "split") {
-      // rail-jump safety: fully erode before/while gliding, so the waffle never arrives at its
-      // left-column slot still showing an unfinished (mid-scroll) erosion pattern.
-      this._erodeP = 1;
       this._enterSplit(reduced);
     } else if (!wantSplit && this._mode === "split") {
       this._exitSplit(reduced);
     } else if (wantSplit && geoChanged) {
       this._rescaleSplit(reduced);
     }
-    if (geoChanged) { if (reduced) this._kickNum.text(this._fillN == null ? "—" : `€${this._fillN}`); else this._tweenKicker(this._fillN); }
   }
 
   _cellTip(e) {
@@ -411,6 +598,6 @@ export class WaffleChart extends BaseChart {
       e.clientX, e.clientY);
   }
 
-  destroy() { if (this._unsub) this._unsub(); super.destroy(); }
+  destroy() { this._erosionTimers.forEach(t => clearTimeout(t)); clearTimeout(this._echoRescaleT); super.destroy(); }
   onThemeChange() { this.render(); }
 }

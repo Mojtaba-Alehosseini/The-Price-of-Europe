@@ -80,6 +80,15 @@
   --cat-services  : #593380;   /* velvet */
   --cat-wages     : #00994D;   /* jade */
   --cat-transport : #70DCE6;
+  /* [D90-I3] Café & restaurants (CP11) gets its OWN hue at last. It had been coloured three
+     different ways — housing blue in CH2, --cat-other grey in the CH6 bars, services violet in
+     palette.js — which broke the "a category keeps its hue in EVERY chart" lock above. Tobacco:
+     warm (it should read as coffee), 5.30:1 on paper, and separated from the neighbouring
+     mandarin --cat-energy by LIGHTNESS and saturation rather than hue (30° vs 25°, but L 35%
+     vs 60% and far less saturated) — the warm end of the wheel has no free hue slot that is not
+     already claret. Every consumer labels the series directly, and the two only ever sit
+     adjacent in the CH6 bar rows, where bright mandarin vs dark tobacco is unmistakable. */
+  --cat-restaurants: #8A5A2B;
   --cat-other     : #C2B7AF;
 
   /* Coin metals (hero, PART 7) */
@@ -252,6 +261,7 @@
   --cat-services  : #8A6DB8;
   --cat-wages     : #1FB36A;
   --cat-transport : #8FE6EE;
+  --cat-restaurants: #C98A4E;   /* [D90-I3] tobacco, lifted for slate: 4.95:1 on --bg */
   --cat-other     : #C2B7AF;
 
   /* Receipt hero on slate: tokens intentionally NOT overridden — the receipt is a lit object

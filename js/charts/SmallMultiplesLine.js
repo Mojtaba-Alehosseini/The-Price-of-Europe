@@ -16,15 +16,16 @@ import { getInfoPop } from "../modules/InfoPop.js";
 import { smooth } from "../modules/ChartMotion.js";
 
 // 3 cols × 2 rows. Order places Energy (0,1) directly above Transport (1,1) so the
-// "spark" highlight of the two lights one column. CP11 has no dedicated --cat token
-// (restaurants ⊂ services), so it borrows --cat-housing as its distinct 6th hue.
+// "spark" highlight of the two lights one column.
+// [D90-I3] CP11 now uses its OWN --cat-restaurants token. It used to borrow --cat-housing,
+// which meant blue carried two meanings across the essay (rent in CH6, restaurants here).
 const CATS = [
-  { code: "CP00", label: "Overall",     cls: "overall"   },
-  { code: "NRG",  label: "Energy",      cls: "energy"    },
-  { code: "FOOD", label: "Food",        cls: "food"      },
-  { code: "SERV", label: "Services",    cls: "services"  },
-  { code: "CP07", label: "Transport",   cls: "transport" },
-  { code: "CP11", label: "Restaurants", cls: "housing"   },
+  { code: "CP00", label: "Overall",     cls: "overall"     },
+  { code: "NRG",  label: "Energy",      cls: "energy"      },
+  { code: "FOOD", label: "Food",        cls: "food"        },
+  { code: "SERV", label: "Services",    cls: "services"    },
+  { code: "CP07", label: "Transport",   cls: "transport"   },
+  { code: "CP11", label: "Restaurants", cls: "restaurants" },
 ];
 const COLS = 3, ROWS = 2;
 

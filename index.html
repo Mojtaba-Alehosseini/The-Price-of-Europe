@@ -8,6 +8,9 @@
   <meta name="theme-color" content="#FFF1E5" media="(prefers-color-scheme: light)" />
   <meta name="theme-color" content="#262A33" media="(prefers-color-scheme: dark)" />
   <title>The Price of Europe · 2019 – 2025</title>
+  <!-- [D90-I4] A claret € on FT paper. Also silences the favicon.ico 404 that was the sole
+       entry in Lighthouse's errors-in-console audit. -->
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
 
   <!-- The Receipt hero (D43) is live type + inline SVG glyphs — no hero image to preload. -->
 
@@ -46,10 +49,16 @@
   }
   </script>
 
-  <!-- Google Fonts (variable) — fall back to system if blocked -->
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400..700;1,8..60,400..600&family=Schibsted+Grotesk:wght@400..700&family=JetBrains+Mono:wght@400;500;700&display=swap" />
+  <!-- [D90-I2c] Self-hosted variable webfonts. The old render-blocking fonts.googleapis.com
+       stylesheet put two third-party DNS+TLS handshakes on the critical path before any font
+       byte could be requested — the biggest single lever on LCP. Built by
+       scripts/build_fonts.py (OFL-1.1, licence at assets/fonts/OFL.txt); real subsets, which
+       also restores → and ↔, two glyphs Google's own `latin` subset omits.
+       Preload the two faces that paint above the fold: the display ITALIC (the hero's
+       headline-scale question) and Schibsted (the eyebrow + every UI label). -->
+  <link rel="preload" href="assets/fonts/source-serif-4-italic-var.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="assets/fonts/schibsted-grotesk-var.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="css/fonts.css" />
 
   <!-- Theme bootstrap: set theme BEFORE first paint to avoid flash -->
   <script>
@@ -136,9 +145,14 @@
           <p class="hero__question" id="hero-question">Inflation is back near 2%. So why does the total <em>never go back down?</em></p>
         </div>
         <figure class="hero__stage">
-          <div class="receipt" id="hero-receipt" role="img"
+          <!-- [D90-I1] role=figure, NOT role=img, and the paper is no longer aria-hidden: D64 wired the
+               six category names as InfoPop triggers (tabindex=0 + role=button), and role=img declares
+               PRESENTATIONAL CHILDREN — so those buttons were focusable inside a subtree hidden from AT
+               (axe aria-hidden-focus + nested-interactive, both on this one node). role=figure keeps the
+               authored alt text as the accessible name while legitimately exposing interactive content. -->
+          <div class="receipt" id="hero-receipt" role="figure"
                aria-label="A monthly household receipt: the same six spending lines cost €100.00 in January 2019 and €135.63 by December 2025 — priced by Eurostat category indices.">
-            <div class="receipt__paper" aria-hidden="true">
+            <div class="receipt__paper">
               <p class="receipt__head">Europe · One month of living</p>
               <p class="receipt__date" id="rc-date">JAN 2019</p>
               <p class="receipt__msg" id="rc-msg"></p>
@@ -187,6 +201,10 @@
     <!-- ========== INTRO PROSE ========== -->
     <section class="section-prose section-about" id="story">
       <div class="container container-prose">
+        <!-- [D90-I1] The essay's only section-level heading, sr-only: it bridges the h1 to the
+             chapter headings so the outline no longer jumps h1 -> h4, and gives screen-reader
+             users a real landmark for the skip-link target they just followed. -->
+        <h2 class="sr-only">Introduction</h2>
         <div class="about-credit">
           <p class="about-credit__by reveal-up">Mojtaba Alehosseini</p>
           <p class="about-credit__role reveal-up">Supervised by <a href="https://rubrica.unige.it/personale/UkNHU15t" target="_blank" rel="noopener" class="ac-plain-link">Annalisa Barla</a></p>
@@ -203,31 +221,31 @@
       <div class="scroller">
         <div class="scroller__text">
           <div class="scroller__flow">
-            <p class="chapter-subtitle">Inflation: the yearly change in consumer prices across the EU-27. Shaded bands mark what the world was doing to the price of things.</p>
+            <p class="chapter-subtitle">Inflation: the yearly change in consumer prices, EU-27. The bands mark what the world did to prices.</p>
             <div class="scroller__steps">
               <div class="scroller__step" data-step="0" data-focus="calm">
                 <div class="step-eyebrow">2019</div>
-                <h4>The quiet years</h4>
+                <h4 aria-level="3">The quiet years</h4>
                 <p>Inflation sat near 1%. Central banks worried it was too low. That was the problem, back then.</p>
               </div>
               <div class="scroller__step" data-step="1" data-focus="covid">
                 <div class="step-eyebrow">2020</div>
-                <h4>The freeze</h4>
+                <h4 aria-level="3">The freeze</h4>
                 <p>Lockdowns shut the shops and oil went begging. For a few months in late 2020, prices were falling.</p>
               </div>
               <div class="scroller__step" data-step="2" data-focus="climb">
                 <div class="step-eyebrow">2021</div>
-                <h4>The climb starts early</h4>
+                <h4 aria-level="3">The climb starts early</h4>
                 <p>A year before the war, the line is already moving. Reopening, shipping jams, energy creeping up.</p>
               </div>
               <div class="scroller__step" data-step="3" data-focus="peak">
                 <div class="step-eyebrow">OCT 2022</div>
-                <h4>The peak</h4>
+                <h4 aria-level="3">The peak</h4>
                 <p>11.5% — the fastest prices had ever risen in the euro's lifetime.</p>
               </div>
               <div class="scroller__step" data-step="4" data-focus="return">
                 <div class="step-eyebrow">2024</div>
-                <h4>Back to “normal”</h4>
+                <h4 aria-level="3">Back to “normal”</h4>
                 <p>The line comes home to 2% and the news moves on. The receipt from the first page says the story is not over.</p>
               </div>
             </div>
@@ -259,17 +277,17 @@
             <div class="scroller__steps">
               <div class="scroller__step" data-step="0" data-focus="freeze">
                 <div class="step-eyebrow">2020</div>
-                <h4>Nothing moves</h4>
+                <h4 aria-level="3">Nothing moves</h4>
                 <p>Spring 2020: economies frozen, energy dirt cheap, inflation flat on its back. Expensive was nobody's fear.</p>
               </div>
               <div class="scroller__step" data-step="1" data-focus="pressure">
                 <div class="step-eyebrow">2020–21</div>
-                <h4>The spring compresses</h4>
+                <h4 aria-level="3">The spring compresses</h4>
                 <p>Households saved what they could not spend. Factories stopped. Ships queued. The pressure had nowhere to go, yet.</p>
               </div>
               <div class="scroller__step" data-step="2" data-focus="spark">
                 <div class="step-eyebrow">MID-2021</div>
-                <h4>First sparks</h4>
+                <h4 aria-level="3">First sparks</h4>
                 <p>Energy and transport lift first, months before the tanks. Reopening lit the fuse; the war would pour fuel on it.</p>
               </div>
             </div>
@@ -289,37 +307,37 @@
       <div class="scroller">
         <div class="scroller__text">
           <div class="scroller__flow">
-            <p class="chapter-subtitle">Annual inflation by country. Darker means faster.</p>
+            <p class="chapter-subtitle">Annual inflation by country, from calm green to red hot.</p>
             <div class="scroller__steps">
               <div class="scroller__step" data-step="0" data-year="2019">
                 <div class="step-eyebrow">2019</div>
-                <h4>One Europe</h4>
+                <h4 aria-level="3">One Europe</h4>
                 <p>The whole map sits in the same gentle band. Tallinn and Paris live in the same price world.</p>
               </div>
               <div class="scroller__step" data-step="1" data-year="2021">
                 <div class="step-eyebrow">2021</div>
-                <h4>It starts in the east</h4>
+                <h4 aria-level="3">It starts in the east</h4>
                 <p>Watch the Baltics. Estonia is already at 4.5% while most of the map still sleeps — the corner of Europe closest to Russian gas warms first.</p>
               </div>
               <div class="scroller__step" data-step="2" data-year="2022">
                 <div class="step-eyebrow">2022</div>
-                <h4>Two Europes</h4>
-                <p>Then the whole map catches. The east burns first and worst — Estonia touches 25% in a single month; France never passes 7.3%. Distance from Russian gas became distance on this map.</p>
+                <h4 aria-level="3">Two Europes</h4>
+                <p>Then the whole map catches. The east burns first and worst — Estonia touches 25% in a single month; France's worst month never passes 7.3%. Distance from Russian gas became distance on this map.</p>
               </div>
               <div class="scroller__step" data-step="3" data-mode="rank">
                 <div class="step-eyebrow">2022</div>
-                <h4>The gap, in order</h4>
+                <h4 aria-level="3">The gap, in order</h4>
                 <p>Same numbers, lined up. The spread between the calmest and the hardest-hit countries is wider than anything the euro had seen.</p>
               </div>
               <div class="scroller__step" data-step="4" data-year="2024">
                 <div class="step-eyebrow">2024</div>
-                <h4>Cooling, unevenly</h4>
+                <h4 aria-level="3">Cooling, unevenly</h4>
                 <p>Two years later the map cools — but it never goes back to one colour.</p>
               </div>
               <!-- Compare finale (D54) — the drag-to-compare map takes over this panel. -->
               <div class="scroller__step" data-step="5" data-mode="compare">
                 <div class="step-eyebrow">2019 ↔ 2022</div>
-                <h4>Before and after</h4>
+                <h4 aria-level="3">Before and after</h4>
                 <p>Drag the line across the map. Pick any pair of years below — and click a country for its own before-and-after.</p>
                 <div class="chart-controls cmp-card-controls" id="chart-compareMap-controls"></div>
                 <div class="cmp-card-detail" id="ch3-compare-detail" aria-live="polite"></div>
@@ -343,21 +361,21 @@
       <div class="scroller">
         <div class="scroller__text">
           <div class="scroller__flow">
-            <p class="chapter-subtitle">Monthly inflation by category. Each column is a month; darker is faster.</p>
+            <p class="chapter-subtitle">Monthly inflation by category. Each column is a month, from calm green to red hot.</p>
             <div class="scroller__steps">
               <div class="scroller__step" data-step="0" data-frame="2022">
                 <div class="step-eyebrow">2022</div>
-                <h4>The wall</h4>
+                <h4 aria-level="3">The wall</h4>
                 <p>The energy row runs red-hot for a year straight. Everything else starts to warm around it.</p>
               </div>
               <div class="scroller__step" data-step="1" data-frame="2023H1">
                 <div class="step-eyebrow">SPRING 2023</div>
-                <h4>The handover</h4>
+                <h4 aria-level="3">The handover</h4>
                 <p>Energy cools fast — the crisis moves from the power socket to the supermarket shelf. Food is still climbing at double digits.</p>
               </div>
               <div class="scroller__step" data-step="2" data-frame="2024">
                 <div class="step-eyebrow">2024</div>
-                <h4>What lingers</h4>
+                <h4 aria-level="3">What lingers</h4>
                 <p>Services hold their heat longest. The last row to cool is the one made of rents, insurance and haircuts.</p>
               </div>
             </div>
@@ -380,17 +398,17 @@
             <div class="scroller__steps">
               <div class="scroller__step" data-step="0" data-view="rate">
                 <div class="step-eyebrow">THE STORY YOU KNOW</div>
-                <h4>The mountain</h4>
+                <h4 aria-level="3">The mountain</h4>
                 <p>This is the chart from the news: a terrible climb, a peak, relief. It ends where it began, near 2%.</p>
               </div>
               <div class="scroller__step" data-step="1" data-view="both">
                 <div class="step-eyebrow">THE SAME YEARS</div>
-                <h4>The altitude</h4>
+                <h4 aria-level="3">The altitude</h4>
                 <p>Same years, measured as height instead of speed. The climb slowed. The height stayed. Prices sit about 30% above 2019, and 2% a year means they keep inching up from there.</p>
               </div>
               <div class="scroller__step" data-step="2" data-view="cursor">
                 <div class="step-eyebrow">DEC 2025</div>
-                <h4>The plateau is the new ground</h4>
+                <h4 aria-level="3">The plateau is the new ground</h4>
                 <p>Nothing in this chart comes back down. “Back to normal” was about the slope, never the altitude. That is what the receipt was trying to tell you.</p>
               </div>
             </div>
@@ -413,17 +431,17 @@
             <div class="scroller__steps">
               <div class="scroller__step" data-step="0" data-geo="EU27_2020">
                 <div class="step-eyebrow">EU AVERAGE</div>
-                <h4>€100 → €77</h4>
+                <h4 aria-level="3">€100 → €77</h4>
                 <p>Feed €100 of 2019 through six years of price rises and its buying power lands at €77. The basket did not change. The money did.</p>
               </div>
-              <div class="scroller__step" data-step="1" data-geo="EU27_2020" data-mode="bars">
+              <div class="scroller__step" data-step="1" data-geo="EU27_2020" data-mode="bars" data-echo="rent,groceries">
                 <div class="step-eyebrow">LINE BY LINE</div>
-                <h4>Where it went</h4>
+                <h4 aria-level="3">Where it went</h4>
                 <p>Rent takes €40 where it took €30. Groceries take €31 where they took €22. Nothing here is luxury; this is the boring core of a month.</p>
               </div>
-              <div class="scroller__step" data-step="2" data-geo="HU">
+              <div class="scroller__step" data-step="2" data-geo="HU" data-echo="rent,groceries">
                 <div class="step-eyebrow">HUNGARY</div>
-                <h4>The deepest cut</h4>
+                <h4 aria-level="3">The deepest cut</h4>
                 <p>In Hungary the same €100 shrinks to €61 — the hardest fall in the union. Pick your country and see your own table.</p>
               </div>
             </div>
@@ -446,17 +464,17 @@
             <div class="scroller__steps">
               <div class="scroller__step" data-step="0" data-view="lines">
                 <div class="step-eyebrow">2015 – 2025</div>
-                <h4>Two lines part ways</h4>
+                <h4 aria-level="3">Two lines part ways</h4>
                 <p>Consumer prices climbed 33% over this window. House prices climbed 92%. One of these is in the inflation number you hear on the news. The other mostly is not.</p>
               </div>
               <div class="scroller__step" data-step="1" data-view="countries">
                 <div class="step-eyebrow">COUNTRY BY COUNTRY</div>
-                <h4>Where the ladder broke</h4>
+                <h4 aria-level="3">Where the ladder broke</h4>
                 <p>Hungary leads the rise; Finland barely moved. The map of expensive homes is not the map of fast inflation.</p>
               </div>
               <div class="scroller__step" data-step="2" data-view="gap">
                 <div class="step-eyebrow">THE BLIND SPOT</div>
-                <h4>What the index hides</h4>
+                <h4 aria-level="3">What the index hides</h4>
                 <p>The headline basket counts rents and repairs, not the price of buying the roof. For anyone saving for a home, the crisis started years before 2021 and has not ended.</p>
               </div>
             </div>
@@ -475,21 +493,21 @@
       <div class="scroller">
         <div class="scroller__text">
           <div class="scroller__flow">
-            <p class="chapter-subtitle">Minimum pay against consumer prices, both starting at 100 in 2019. Median of the 21 countries with a statutory minimum. Six countries bargain instead and sit this one out.</p>
+            <p class="chapter-subtitle">Minimum pay against prices, from 100 in 2019. Median of 21 wage-floor countries; six bargain instead.</p>
             <div class="scroller__steps">
               <div class="scroller__step" data-step="0" data-beat="sprint">
                 <div class="step-eyebrow">2021–22</div>
-                <h4>Prices sprint</h4>
+                <h4 aria-level="3">Prices sprint</h4>
                 <p>The price line breaks away. Anyone paid the minimum spends two years watching the gap grow with every shop.</p>
               </div>
               <div class="scroller__step" data-step="1" data-beat="chase">
                 <div class="step-eyebrow">2023–24</div>
-                <h4>Pay answers</h4>
+                <h4 aria-level="3">Pay answers</h4>
                 <p>Governments raise floors, one after another. The pay line accelerates and the gap starts to close — money arriving after the damage.</p>
               </div>
               <div class="scroller__step" data-step="2" data-beat="finish">
                 <div class="step-eyebrow">2025</div>
-                <h4>The finish line</h4>
+                <h4 aria-level="3">The finish line</h4>
                 <p>Pay finishes ahead — by 2025 the median floor sits about 11 points above prices. Averages end races; people carry what happened along the way.</p>
               </div>
             </div>
@@ -512,7 +530,7 @@
             <div class="scroller__steps">
               <div class="scroller__step" data-step="0">
                 <div class="step-eyebrow">THE LEDGER</div>
-                <h4>Who came out ahead</h4>
+                <h4 aria-level="3">Who came out ahead</h4>
                 <p>Fifteen countries raised the floor faster than prices rose. Six did not. Lithuania sits on the knife's edge at −0.02% — six years, net nothing.</p>
               </div>
             </div>
@@ -535,12 +553,12 @@
             <div class="scroller__steps">
               <div class="scroller__step" data-step="0" data-view="map">
                 <div class="step-eyebrow">2025</div>
-                <h4>The map answers the first page</h4>
+                <h4 aria-level="3">The map answers the first page</h4>
                 <p>Is the crisis over? Depends where you stand when you ask. For millions on the claret patches, "over" has not arrived.</p>
               </div>
               <div class="scroller__step" data-step="1" data-view="losers">
                 <div class="step-eyebrow">THE SIX</div>
-                <h4>Still underwater</h4>
+                <h4 aria-level="3">Still underwater</h4>
                 <p>Six countries never made workers whole. This is what "inflation is over" leaves out.</p>
               </div>
             </div>
@@ -563,7 +581,7 @@
             <div class="scroller__steps">
               <div class="scroller__step" data-step="0">
                 <div class="step-eyebrow">2019 → 2025</div>
-                <h4>Back together, higher up</h4>
+                <h4 aria-level="3">Back together, higher up</h4>
                 <p>The boxes tighten again by 2024 — Europe's countries agree once more about inflation. They agree at a price level a third above where they started.</p>
               </div>
             </div>
@@ -589,7 +607,10 @@
       <div class="container container-prose">
         <p class="coda-lede">The rate came home. The prices stayed.</p>
         <div class="coda-receipt">
-          <div class="receipt receipt--coda" role="img" aria-label="One month of European living: the 2019 total of one hundred euros, each line struck through and reprinted at its December 2025 price, summing to 135.63 euros.">
+          <!-- [D90-I1] role=figure for the same reason as the hero receipt: StaticInfoPops wires
+               `.receipt__line .rc-name` in BOTH receipts, so both carry focusable buttons and neither
+               can be role=img (presentational children). Census of that selector = these two nodes. -->
+          <div class="receipt receipt--coda" role="figure" aria-label="One month of European living: the 2019 total of one hundred euros, each line struck through and reprinted at its December 2025 price, summing to 135.63 euros.">
             <div class="receipt__paper">
               <p class="receipt__head">Europe · One month of living</p>
               <p class="receipt__date">DEC 2025</p>
