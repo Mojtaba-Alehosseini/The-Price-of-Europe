@@ -6,7 +6,7 @@ MSc in Artificial Intelligence, University of Genova. Data Visualization, 2025/2
 
 ![D3](https://img.shields.io/badge/D3.js-v7-f1f1e8) ![build](https://img.shields.io/badge/build_step-none-lightgrey) ![license](https://img.shields.io/badge/license-MIT-blue)
 
-Live site: _to be set after the GitHub Pages deploy._
+Live site: _[The Price of Europe](https://mojtaba-alehosseini.github.io/The-Price-of-Europe/)_
 
 ## What it is
 
