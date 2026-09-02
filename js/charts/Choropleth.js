@@ -6,10 +6,11 @@
 
 import { BaseChart } from "./BaseChart.js";
 import {
-  watchChapterProgress, progressBetween, smooth, lerp
+  watchChapterProgress, progressBetween, smooth
 } from "../modules/ChartMotion.js";
 import { CompareMap } from "./CompareMap.js";
 import { getInfoPop } from "../modules/InfoPop.js";
+import { getCSS } from "../modules/CraftFX.js";
 
 // [debug 2026-07-06] _cameraTo's own pan/zoom transition duration — the ONE place this number is
 // defined. Anything that positions a label/card AFTER the camera settles must wait AT LEAST this
@@ -78,11 +79,6 @@ const CAPITALS = {
 // back: 2019 wide → 2021 dive to the Baltics → 2022 pull back to the full red map → rank → 2024.
 const YEAR_FOCUS = { 2019: null, 2021: ["EE", "LT", "LV"], 2022: null, 2024: null, 2025: null };
 
-function getCSS(name) {
-  const m = name.match(/var\((--[^)]+)\)/); const n = m ? m[1] : name;
-  return getComputedStyle(document.documentElement).getPropertyValue(n).trim();
-}
-
 // [D82] Reads --dur-4 live rather than hardcoding 420 — keeps the enter/exit-compare fade-then-hide
 // setTimeout (charts.css's #chart-choropleth > svg transition) in sync with the token by construction.
 function CMP_FADE_MS() {
@@ -106,19 +102,6 @@ const CMP_DETAIL_SWAP_MS = 150;          // name/value crossfade half-duration (
 // every segment) so the "gap" phase is never reached, regardless of the intermediate shape.
 const CMP_DETAIL_DASH_SAFE = 700;
 
-function sparkPath(data, w, h) {
-  if (!data || !data.length) return { d: "", lastX: 0, lastY: h, zeroY: h - 2, length: 0 };
-  const x = d3.scaleLinear().domain([0, data.length - 1]).range([2, w - 2]);
-  const ext = d3.extent(data, d => d.value);
-  const y = d3.scaleLinear().domain([Math.min(0, ext[0]), Math.max(ext[1], 2)]).range([h - 2, 2]);
-  const line = d3.line().x((_, i) => x(i)).y(d => y(d.value)).curve(d3.curveMonotoneX);
-  const d = line(data);
-  const last = data[data.length - 1];
-  const tmp = document.createElementNS("http://www.w3.org/2000/svg", "path");
-  tmp.setAttribute("d", d);
-  const length = tmp.getTotalLength ? tmp.getTotalLength() : w;
-  return { d, lastX: x(data.length - 1), lastY: y(last.value), zeroY: y(0), length };
-}
 
 export class Choropleth extends BaseChart {
   constructor(sel, data, ctx) {
@@ -133,7 +116,6 @@ export class Choropleth extends BaseChart {
       const h = (ch > 0 && ch < aspectH) ? ch : aspectH;
       return { width: w, height: h };
     };
-    this.controlsEl = document.getElementById("chart-choropleth-controls");
     this.years = (data.yearsCP00 ? data.yearsCP00() : []).filter(y => y >= 2015 && y <= 2025);
     if (!this.years.length) this.years = [2015,2016,2017,2018,2019,2020,2021,2022,2023,2024];
     // [R2-elevate · entry coherence] First paint = 2019, the year of the opening narrative
@@ -143,10 +125,8 @@ export class Choropleth extends BaseChart {
     // Anchoring to 2019 (falling back to the first available year) makes the entry frame
     // self-consistent regardless of scrollama trigger timing.
     this.year = this.years.includes(2019) ? 2019 : this.years[0];
-    this.month = 11;   // December — matches the "year-end rate" framing + the scrubber default
     this.focusCode = null; this.lockedCode = null;
-    this.playing = false; this._playTimer = null;
-    this._stepCaption = null; this._stepPulse = false;
+    this._stepCaption = null;
     this._kickerSeq = 0; this._camSeq = 0;
     this._cmpEnterSeq = 0; this._cmpExitSeq = 0;   // [D83] guard stale async compare-transition continuations
     this._cmpDetailIso = null; this._cmpDetailSeq = 0;   // [D84] compare-detail panel: selected country + guard
@@ -226,7 +206,28 @@ export class Choropleth extends BaseChart {
   render() {
     super.render();
     this.container.innerHTML = "";
-    this._mapCardEl = null;  // stale reference — innerHTML wiped the previous card
+    // [P2.2] …and so is EVERY other node this chart cached, which is what made the compare step go
+    // permanently blank: the compare overlay is a child of this container, so the innerHTML wipe
+    // above detaches it while `_cmpWrap`/`_cmp` still point at it. `_enterCompare`'s own
+    // `if (!this._cmpWrap)` build guard then believed the overlay already existed, faded the (new,
+    // real) map out to reveal a node that is not in the document, and left the reader an empty
+    // panel with no console error. Destroy the CompareMap rather than just dropping the reference —
+    // it is a BaseChart, so it holds its own theme subscription that would otherwise keep
+    // re-rendering a detached container forever. `data-active-mode` is cleared too: it survives
+    // innerHTML (it lives on the container itself), and onStep's compare branch treats "already
+    // compare" as a spurious re-fire and returns, so a stale value blocks the genuine re-entry.
+    if (this._cmp) { this._cmp.destroy?.(); this._cmp = null; }
+    this._cmpWrap = null;
+    this._cmpDetailEls = null; this._cmpDetailEl = null; this._cmpDetailIso = null;
+    // [P3.3] …but remember which mode the reader was in, and re-assert it once the new DOM exists
+    // (below). Clearing alone — P2.2's fix — stopped the compare step going blank but left a
+    // dark-mode toggle on the rank or compare step rewinding the chapter to the plain map, which
+    // is audit 3d's family. `_morphP`/`_rankActive` are reset further down this method too, so the
+    // rank end state has to be re-asserted, not just the attribute.
+    const prevMode = this.container.getAttribute("data-active-mode");
+    this.container.removeAttribute("data-active-mode");
+    // A morph rAF surviving the wipe flies clones from origins measured on the old DOM (audit §3e).
+    if (this._morphRaf) { cancelAnimationFrame(this._morphRaf); this._morphRaf = null; }
     const { width, height } = this.ensureSvg();
     this.W = width; this.H = height;
 
@@ -451,8 +452,6 @@ export class Choropleth extends BaseChart {
     this.detailEl = document.getElementById("choropleth-detail");
 
     this.svg.on("click", () => this._click(null));
-
-    this._buildControls();
     this._initialPaint();
     if (this.focusCode || this.lockedCode) {
       this._applyFocus();
@@ -472,7 +471,7 @@ export class Choropleth extends BaseChart {
       // the scroll-synced version unreadable when it spans a single step ("we can not match the
       // transition speed with scrolling when its only 1 step"). This light subscription only keeps
       // _tickMorph's in-viewport gate + per-tick clone alignment fresh, and parks the compare
-      // overlay when the chapter leaves view. _continuousMorph is retired (kept below, unreferenced).
+      // overlay when the chapter leaves view. The scroll-synced _continuousMorph it replaced is gone.
       const chapter = this.container.closest(".chapter");
       this._chapterUnsub = watchChapterProgress(chapter, () => {
         this._tickMorph(this._morphP ?? 0.5);
@@ -483,9 +482,8 @@ export class Choropleth extends BaseChart {
       });
     }
 
-    // [CH1 layout fix] _buildControls() (the ~132px timeline scrubber) lays out AFTER size()
-    // was read at the top of render(), so on the FIRST mount the chart-body 1fr row is
-    // transiently taller (controls row still empty) and the SVG baked a too-tall viewBox →
+    // [CH1 layout fix] On the FIRST mount the chart-body 1fr row can settle to a different
+    // height than size() read at the top of render(), so the SVG baked a too-tall viewBox →
     // the map LETTERBOXED (rendered scaled-down, ~0.73×, floating with dead space). Once this
     // render settles, re-read the available height; if it changed, re-render ONCE at the
     // correct height so the viewBox matches the display and the map fills its panel. Charts
@@ -500,6 +498,52 @@ export class Choropleth extends BaseChart {
           try { this.render(); } finally { this._reflowGuard = false; }
         }
       });
+    }
+
+    this._restoreMode(prevMode);
+  }
+
+  /** [P3.4] This chart owns more out-of-band state than any other — a morph rAF, three timeouts,
+   *  two observers, an autoplay interval and a child CompareMap with its own theme subscription —
+   *  and none of it was released. BaseChart.destroy() cannot know about any of them.
+   *  HONEST CAVEAT: nothing in the app calls chart.destroy() today (the only .destroy() in js/ is
+   *  scrollama's own, ScrollController.js:111), so this is a correct implementation of a lifecycle
+   *  method that is not yet wired — the same fact audit §3e records about BaseChart's dead _unsub
+   *  net. It is here so that wiring it later is a one-line change rather than an audit. */
+  destroy() {
+    if (this._morphRaf) { cancelAnimationFrame(this._morphRaf); this._morphRaf = null; }
+    clearTimeout(this._zoomSafety);
+    if (this._cmpWrap) clearTimeout(this._cmpWrap._cmpFadeTimer);
+    if (this._chapterUnsub) { this._chapterUnsub(); this._chapterUnsub = null; }
+    if (this._chapterIO) { this._chapterIO.disconnect(); this._chapterIO = null; }
+    if (this._cmp) { this._cmp.destroy?.(); this._cmp = null; }
+    this._cmpWrap = null;
+    super.destroy();
+  }
+
+  /** [P3.3] Re-assert the reader's mode after a bare re-render (resize / theme toggle). SNAPS on
+   *  purpose: a theme toggle is not a scroll event, so replaying D54's 7.5s morph flight or D83's
+   *  compare sweep would be motion the reader did not ask for. This is the same end state each
+   *  branch's own reduced-motion path asserts. A year mode needs nothing — `this.year` lives on the
+   *  instance and the fresh render already painted it. */
+  _restoreMode(mode) {
+    if (!mode || !this.container) return;
+    if (mode === "rank") {
+      this._rankActive = true;
+      this.container.setAttribute("data-active-mode", "rank");
+      this._tickMorph(1); this._morphP = 1;
+      return;
+    }
+    if (mode === "compare") {
+      this.container.setAttribute("data-active-mode", "compare");
+      this._tickMorph(0.5); this._morphP = 0.5;
+      this._enterCompare();
+      if (this._cmp) {
+        this._cmp._applySplit(0.5);
+        this._cmp._labelA?.style("opacity", 1);
+        this._cmp._labelB?.style("opacity", 1);
+        if (this._cmp._handle) this._cmp._handle.style.pointerEvents = "";
+      }
     }
   }
 
@@ -537,253 +581,6 @@ export class Choropleth extends BaseChart {
     target.appendChild(div);
   }
 
-  _buildControls() {
-    if (!this.controlsEl) return;
-    if (this.controlsEl.dataset.wired === "1") {
-      // BUG-CH-4 — re-sync the play-button icon to `this.playing` on every render path,
-      // otherwise a theme change mid-play leaves the button visually paused.
-      if (this.playBtn) this.playBtn.classList.toggle("is-playing", !!this.playing);
-      this._buildTimeline();
-      return;
-    }
-    this.controlsEl.dataset.wired = "1";
-    this.controlsEl.innerHTML = `
-      <div class="map-timeline-wrap">
-        <svg class="map-timeline" viewBox="0 0 600 80" preserveAspectRatio="none" aria-hidden="true"></svg>
-        <div class="map-timeline-years" aria-hidden="true"></div>
-        <input type="range" id="chor-slider" class="vis-hidden" min="${this.years[0]}" max="${this.years.at(-1)}" step="1" value="${this.year}" aria-label="Year">
-      </div>
-      <div class="map-timeline-foot">
-        <button class="play-btn" id="chor-play" aria-label="Play timeline" title="Play / pause">
-          <span class="play-icon"><svg viewBox="0 0 12 12" width="11" height="11"><path d="M2.5 1.2 L10 6 L2.5 10.8 Z" fill="currentColor"/></svg></span>
-        </button>
-        <span class="map-zoom-group" role="group" aria-label="Map zoom">
-          <button class="zoom-btn" id="chor-zoom-out" aria-label="Zoom out" title="Zoom out (Alt+wheel −)">
-            <svg viewBox="0 0 14 14" width="12" height="12" aria-hidden="true"><path d="M3 7 H11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/></svg>
-          </button>
-          <button class="zoom-btn" id="chor-zoom-in" aria-label="Zoom in" title="Zoom in (Alt+wheel +)">
-            <svg viewBox="0 0 14 14" width="12" height="12" aria-hidden="true"><path d="M3 7 H11 M7 3 V11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/></svg>
-          </button>
-        </span>
-        <span class="ctrl-src">Source · Eurostat HICP (prc_hicp_manr) · annual rates</span>
-      </div>`;
-    this.sl = this.controlsEl.querySelector("#chor-slider");
-    this.playBtn = this.controlsEl.querySelector("#chor-play");
-    // Zoom in/out buttons — step the camera scale in 1.35× increments around the SVG center
-    const zoomBy = (factor) => {
-      const t = this._cam || { tx: 0, ty: 0, k: 1, side: null };
-      const newK = Math.max(0.9, Math.min(8, t.k * factor));
-      if (newK === t.k) return;
-      const cx = this.W / 2, cy = this.H / 2;
-      // Keep the point under the SVG center fixed while scaling
-      const wx = (cx - t.tx) / t.k, wy = (cy - t.ty) / t.k;
-      this._cam = { tx: cx - wx * newK, ty: cy - wy * newK, k: newK, side: t.side };
-      const targetTransform = `translate(${this._cam.tx}, ${this._cam.ty}) scale(${newK})`;
-      this.gMap.interrupt("camera")
-        .transition("camera-zoom").duration(220).ease(d3.easeCubicOut)
-        .attr("transform", targetTransform);
-      // [CH1-W6] rAF-stall safety net — if d3 transition fails to tick (iframe / background
-      // tab) force the final transform so the zoom button is never a visual no-op.
-      if (this._zoomSafety) clearTimeout(this._zoomSafety);
-      this._zoomSafety = setTimeout(() => {
-        const live = this.gMap?.node()?.getAttribute("transform");
-        if (live !== targetTransform) this.gMap.interrupt("camera").attr("transform", targetTransform);
-      }, 280);
-    };
-    this.controlsEl.querySelector("#chor-zoom-in")?.addEventListener("click", () => zoomBy(1.35));
-    this.controlsEl.querySelector("#chor-zoom-out")?.addEventListener("click", () => zoomBy(1 / 1.35));
-    this.sl.addEventListener("input", () => {
-      if (this.playing) this._togglePlay(false);
-      const prev = this.year; this.year = +this.sl.value;
-      this._animateYearChange(prev); this._updatePlayhead();
-    });
-    this.playBtn.addEventListener("click", () => this._togglePlay());
-    this._buildTimeline();
-  }
-  _buildTimeline() {
-    const svgEl = this.controlsEl && this.controlsEl.querySelector(".map-timeline");
-    if (!svgEl) return;
-    const svg = d3.select(svgEl);
-    svg.selectAll("*").remove();
-    const W = 600, H = 80, padT = 18, padB = 26;
-    const monthly = this._euMonthly;
-    const x = d3.scaleLinear().domain([this.years[0], this.years.at(-1)]).range([10, W - 10]);
-    const yMax = Math.max((d3.max(monthly, d => d.value || 0) || 12) * 1.08, 12);
-    const y = d3.scaleLinear().domain([0, yMax]).range([H - padB, padT]);
-    this._timeX = x;
-    this._timelineSvg = svg;
-    this._yTimeline = y;
-    svg.append("line").attr("class", "tl-target").attr("x1", 0).attr("x2", W).attr("y1", y(2)).attr("y2", y(2));
-    svg.append("line").attr("class", "tl-base").attr("x1", 0).attr("x2", W).attr("y1", y(0)).attr("y2", y(0));
-    const area = d3.area().x(d => x(d.timeNum)).y0(y(0)).y1(d => y(d.value || 0)).curve(d3.curveMonotoneX);
-    const line = d3.line().x(d => x(d.timeNum)).y(d => y(d.value || 0)).curve(d3.curveMonotoneX);
-    svg.append("path").attr("class", "tl-area").attr("d", area(monthly));
-    svg.append("path").attr("class", "tl-line").attr("d", line(monthly));
-    // [owner review D1] Year labels are HTML (positioned by %), NOT stretched SVG <text>: the
-    // timeline SVG uses preserveAspectRatio="none", which squished/distorted SVG text. HTML stays crisp.
-    const yearsDiv = this.controlsEl && this.controlsEl.querySelector(".map-timeline-years");
-    if (yearsDiv) {
-      yearsDiv.innerHTML = this.years.map(yr => {
-        const isMajor = yr % 2 === 0 || yr === this.years.at(-1) || yr === this.years[0];
-        const left = (x(yr) / W * 100).toFixed(2);
-        return `<span class="map-timeline-year${isMajor ? " map-timeline-year--major" : ""}" style="left:${left}%">${isMajor ? yr : "·"}</span>`;
-      }).join("");
-    }
-    const ph = svg.append("g").attr("class", "tl-playhead");
-    ph.append("line").attr("class", "tl-playhead-line").attr("y1", padT - 12).attr("y2", H - padB);
-    ph.append("circle").attr("class", "tl-playhead-dot").attr("r", 6).attr("cy", H - padB);
-    // playhead-num removed — year is already shown by the big kicker on the map
-    ph.append("text").attr("class", "tl-playhead-val").attr("y", padT - 4).attr("text-anchor", "middle");
-    this._playhead = ph;
-
-    // Scrub: month-level granularity. The fractional year position maps to a (year, month)
-    // pair — the map only redraws when the year changes (annual data), but the playhead
-    // label and position update smoothly each frame.
-    const onScrub = (e) => {
-      const [vbX] = d3.pointer(e, svgEl);
-      const yrFrac = Math.max(this.years[0], Math.min(this.years.at(-1) + 11/12, x.invert(vbX)));
-      const yrInt = Math.floor(yrFrac);
-      const moIdx = Math.max(0, Math.min(11, Math.round((yrFrac - yrInt) * 12)));
-      if (this.playing) this._togglePlay(false);
-      const monthChanged = (this.month !== moIdx);
-      const yearChanged = (yrInt !== this.year);
-      this.month = moIdx;
-      this._scrubFrac = yrInt + moIdx / 12;     // continuous position for the playhead
-      if (yearChanged) {
-        const prev = this.year; this.year = yrInt;
-        if (this.sl) this.sl.value = yrInt;
-        this._animateYearChange(prev);
-      }
-      if (yearChanged || monthChanged) this._updatePlayhead();
-    };
-
-    // Window-level drag so scrubbing works even when mouse leaves the SVG
-    let dragging = false;
-    if (this._tlWinMove) window.removeEventListener("mousemove", this._tlWinMove);
-    if (this._tlWinUp)   window.removeEventListener("mouseup",   this._tlWinUp);
-    this._tlWinMove = (e) => { if (dragging) onScrub(e); };
-    this._tlWinUp   = ()  => { dragging = false; };
-    window.addEventListener("mousemove", this._tlWinMove);
-    window.addEventListener("mouseup",   this._tlWinUp);
-
-    svg.on("mousedown", (e) => { dragging = true; onScrub(e); });
-    svg.on("click", onScrub);
-    svg.style("cursor", "pointer");
-
-    // Phase 6 (C1) — keyboard arrow scrub when the timeline is focused.
-    // Tab makes the SVG focusable; ←/→ step year, Home/End jump to first/last.
-    svg.attr("tabindex", "0").attr("role", "slider")
-      .attr("aria-label", "Year scrubber")
-      .attr("aria-valuemin", this.years[0])
-      .attr("aria-valuemax", this.years.at(-1))
-      .attr("aria-valuenow", this.year);
-    svg.on("keydown", (e) => {
-      const step =
-        e.key === "ArrowRight" || e.key === "ArrowUp"   ? +1
-      : e.key === "ArrowLeft"  || e.key === "ArrowDown" ? -1
-      : 0;
-      let target = null;
-      if (step) target = Math.max(this.years[0], Math.min(this.years.at(-1), this.year + step));
-      else if (e.key === "Home") target = this.years[0];
-      else if (e.key === "End")  target = this.years.at(-1);
-      if (target == null || target === this.year) return;
-      e.preventDefault();
-      if (this.playing) this._togglePlay(false);
-      const prev = this.year; this.year = target;
-      if (this.sl) this.sl.value = target;
-      svg.attr("aria-valuenow", target);
-      this._animateYearChange(prev);
-      this._updatePlayhead();
-    });
-
-    this._updatePlayhead();
-  }
-
-  _updatePlayhead() {
-    if (!this._playhead || !this._timeX) return;
-    const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-    const moIdx = (this.month != null) ? this.month : 11;       // default to Dec when not scrubbing
-    const frac = this._scrubFrac != null ? this._scrubFrac : (this.year + moIdx / 12);
-    const tx = this._timeX(frac);
-
-    // Pull the monthly EU value (smoother than annual jumps as the user scrubs)
-    const timeKey = `${this.year}-${String(moIdx + 1).padStart(2, "0")}`;
-    const monthly = this._euMonthly?.find(d => d.time === timeKey);
-    const vEU = monthly?.value;
-
-    this._playhead.transition("ph").duration(280).ease(d3.easeCubicOut).attr("transform", `translate(${tx}, 0)`);
-
-    // Combined label — eliminates the old EU/country overlap by stacking both in one block.
-    // Country line is shown via _renderCountryLine when a country is locked or focused.
-    const code = this.lockedCode || (Array.isArray(this.focusCode) ? null : this.focusCode);
-    const vCtr = code ? this.data.hicpAnnual[code]?.CP00?.[String(this.year)] : null;
-    let label = `${MONTHS[moIdx]} ${this.year}  ·  EU ${vEU != null ? vEU.toFixed(1) : "—"}%`;
-    if (code && vCtr != null) label += `  ·  ${this.data.countryName(code).toUpperCase()} ${vCtr.toFixed(1)}%`;
-    // Keep the long combined label inside the timeline bounds — flip anchor as the
-    // playhead approaches the right edge so the text doesn't run off-screen.
-    const anchor = frac > this.years.at(-1) - 1.2 ? "end" : (frac < this.years[0] + 1.2 ? "start" : "middle");
-    const valSel = this._playhead.select(".tl-playhead-val");
-
-    // [R3-motion · CH1 defect A — kicker/playhead phase-lock] The scrubber readout used to
-    // slam its text SYNCHRONOUSLY while the year-kicker cross-faded over ~360 ms (+800 ms
-    // fallback). At a scroll-step boundary a settled frame therefore caught the two readouts
-    // disagreeing — kicker "2024" beside playhead "DEC 2022 · EU 10.4%" (film up/004838.png),
-    // and on the down boundary the playhead jumped to DEC 2024 while the map still read 2022
-    // (down/005594.png). Fix: when the YEAR changes, cross-fade the readout on the SAME
-    // 180/280 ms rhythm as the kicker sub (see _swapKicker) so both flip together and never
-    // show a contradictory year+value pair. Intra-year scrubs and idempotent re-enters keep
-    // the instant update (no gratuitous re-fade → replay-safe on reverse scroll, taxonomy #4).
-    const yearChanged = (this._phYear != null && this._phYear !== this.year);
-    this._phYear = this.year;
-    if (yearChanged && !this.ctx?.motion?.reduced) {
-      this._phSeq = (this._phSeq || 0) + 1;
-      const seq = this._phSeq;
-      valSel.interrupt("phv-out").interrupt("phv-in");
-      valSel.transition("phv-out").duration(180).style("opacity", 0).on("end", () => {
-        valSel.attr("text-anchor", anchor).text(label)
-          .transition("phv-in").duration(280).style("opacity", 1);
-      });
-      // Hard floor — if the d3 transition stalls (offscreen/background tab) force the final
-      // text+opacity so the readout can never freeze on the previous year. Mirrors the
-      // kicker's 800 ms safety net so the two stay phase-locked even when rAF is starved.
-      clearTimeout(this._phValTimer);
-      this._phValTimer = setTimeout(() => {
-        if (seq !== this._phSeq) return;
-        valSel.interrupt("phv-out").interrupt("phv-in");
-        if (valSel.text() !== label) valSel.attr("text-anchor", anchor).text(label);
-        valSel.style("opacity", 1);
-      }, 700);
-    } else {
-      // Position-only update (intra-year scrub) or reduced-motion — set text instantly.
-      valSel.interrupt("phv-out").interrupt("phv-in");
-      valSel.attr("text-anchor", anchor).text(label).style("opacity", 1);
-    }
-
-    this._timelineSvg?.attr("aria-valuenow", this.year);
-    this._timelineSvg?.attr("aria-valuetext", `${MONTHS[moIdx]} ${this.year}`);
-  }
-
-  _togglePlay(forceOn) {
-    const want = forceOn != null ? forceOn : !this.playing;
-    if (this.playing && !want) { clearInterval(this._playTimer); this.playing = false; }
-    else if (!this.playing && want) {
-      this.playing = true;
-      this._playTimer = setInterval(() => {
-        const idx = this.years.indexOf(this.year);
-        const next = this.years[(idx + 1) % this.years.length];
-        const prev = this.year; this.year = next;
-        if (this.sl) this.sl.value = next;
-        this._animateYearChange(prev); this._updatePlayhead();
-      }, 1300);
-    }
-    if (!this.playBtn) return;
-    this.playBtn.classList.toggle("is-playing", this.playing);
-    const ic = this.playBtn.querySelector(".play-icon");
-    ic.innerHTML = this.playing
-      ? '<svg viewBox="0 0 12 12" width="11" height="11"><rect x="2.5" y="1.5" width="2.5" height="9" fill="currentColor"/><rect x="7" y="1.5" width="2.5" height="9" fill="currentColor"/></svg>'
-      : '<svg viewBox="0 0 12 12" width="11" height="11"><path d="M2.5 1.2 L10 6 L2.5 10.8 Z" fill="currentColor"/></svg>';
-  }
-
   _yearValues() {
     const m = new Map();
     this.data.countriesByCode.forEach((meta, code) => {
@@ -804,7 +601,6 @@ export class Choropleth extends BaseChart {
     });
     const sizeFor = code => { const v = m.get(code); return v == null ? 0 : Math.max(1.6, Math.sqrt(Math.abs(v)) * 1.6); };
     this.capSel.attr("r", d => sizeFor(d[0]));
-    this._renderTopLabels(m);
   }
 
   _animateYearChange(prevYear) {
@@ -817,18 +613,13 @@ export class Choropleth extends BaseChart {
     const sizeFor = code => { const v = m.get(code); return v == null ? 0 : Math.max(1.6, Math.sqrt(Math.abs(v)) * 1.6); };
     this.capSel.attr("r", d => sizeFor(d[0]));
     this._swapKicker(prevYear, this.year);
-    this._renderTopLabels(m);
-    // [Fable D54] left-side country detail panel dropped (owner: "drop this feature").
-    this._updateCountryLabel();
-    const labelCode = this.lockedCode || this.focusCode;
-    if (Array.isArray(labelCode)) {
-      this._renderMultiLabels(labelCode);
-    } else if (labelCode && this._mapCardEl) {
-      this._updateMapLabelValue(labelCode);
-    }
   }
 
   _swapKicker(prev, next) {
+    // [P3.2] Nothing to swap when the year has not changed — the text, the EU-avg sub and the two
+    // extremes are all functions of `next` and were set when `next` was first shown. Without this,
+    // any caller that re-asserts the current year replays a 200ms out + 280ms in cross-fade.
+    if (prev === next) return;
     const goingUp = next > prev;
     const t = this.kickerYear;
     this._kickerSeq++;
@@ -839,7 +630,7 @@ export class Choropleth extends BaseChart {
     // prefers-reduced-motion a scroll-step year change still animated — and the film caught the
     // kicker mid-fade showing a STALE year beside an already-updated map/scrubber
     // (reduced down/005594.png: ghost "2022" over the Spain-2024 card). Reduced-motion must jump
-    // straight to the end state (CLAUDE.md §4 / taxonomy #11). Bumping _kickerSeq above already
+    // straight to the end state (design system §4 / taxonomy #11). Bumping _kickerSeq above already
     // voids any in-flight transition's late callbacks/timeouts; here we hard-set the end state.
     if (this.ctx?.motion?.reduced) {
       t.interrupt("kicker-out").interrupt("kicker-in")
@@ -987,7 +778,6 @@ export class Choropleth extends BaseChart {
         if (this.svg) this.svg.classed("is-camming", false);
         if (seq !== this._camSeq) return;
         this._cam = target;
-        if (this._stepPulse && code) this._emitPulse(code);
       })
       .on("interrupt", () => { if (this.svg) this.svg.classed("is-camming", false); });
     // [CH1-W2] rAF-stall safety net — in iframes / background tabs d3 transitions can
@@ -1006,83 +796,6 @@ export class Choropleth extends BaseChart {
     // [Fable D54] left-side country detail panel dropped (owner: "drop this feature").
   }
 
-  _emitPulse(code) {
-    // Pulse rings disabled — they competed with the country fill and obscured the shapes at peak years.
-    // The peak country is already emphasized through camera zoom + focus stroke + map label.
-    return;
-  }
-
-  _renderDetail() {
-    const el = this.detailEl || (this.detailEl = document.getElementById("choropleth-detail"));
-    if (!el) return;
-    // Detail panel shows ONE country. For multi-country narrative steps (focus is an
-    // array), suppress the detail panel — the map's multi-labels carry the message.
-    const codeRaw = this.lockedCode || this.focusCode;
-    const code = (codeRaw && !Array.isArray(codeRaw)) ? codeRaw : null;
-    if (!code) {
-      el.setAttribute("data-active", "false");
-      return;
-    }
-    const v = this.data.hicpAnnual[code]?.CP00?.[String(this.year)];
-    // [CH1-W1] Step caption is editorial annotation for the AUTO-focused country only.
-    // When the user manually locks a different country, the caption no longer applies.
-    const focusSingle = (this.focusCode && !Array.isArray(this.focusCode)) ? this.focusCode : null;
-    const captionApplies = this._stepCaption && (this.lockedCode == null
-      || (focusSingle && this.lockedCode === focusSingle));
-    const sentence = captionApplies ? this._stepCaption : `Annual HICP inflation in ${this.year}.`;
-    const arr = Object.entries(this.data.hicpMonthly[code]?.CP00 || {})
-      .map(([time, value]) => ({ time, value }))
-      .filter(d => Number.isFinite(d.value))
-      .sort((a, b) => a.time.localeCompare(b.time))
-      .slice(-84);
-    let sparkSvg = "";
-    if (arr.length > 12) {
-      const sw = 260, sh = 44, axisH = 14;
-      const totalH = sh + axisH;
-      const sp = sparkPath(arr, sw, sh);
-      const xScale = d3.scaleLinear().domain([0, arr.length - 1]).range([2, sw - 2]);
-      const yearTicks = [];
-      let lastYr = null;
-      arr.forEach((d, i) => {
-        const yr = d.time.slice(0, 4);
-        if (yr !== lastYr) { yearTicks.push({ yr, x: xScale(i) }); lastYr = yr; }
-      });
-      const tickEls = yearTicks.map(t =>
-        `<text class="ms-tick" x="${t.x.toFixed(1)}" y="${sh + 11}">${t.yr}</text>`
-      ).join("");
-      sparkSvg = `
-        <svg class="map-detail__spark" viewBox="0 0 ${sw} ${totalH}" preserveAspectRatio="none">
-          <path class="ms-zero" d="M 0 ${sp.zeroY} L ${sw} ${sp.zeroY}" />
-          <path class="ms-line" d="${sp.d}" pathLength="1" />
-          <circle class="ms-dot" cx="${sp.lastX}" cy="${sp.lastY}" r="0" />
-          ${tickEls}
-        </svg>`;
-    }
-    el.innerHTML = `
-      <button class="map-detail__close" type="button" aria-label="Close detail">×</button>
-      <div class="map-detail__eyebrow">${code} · ${this.data.countryName(code).toUpperCase()}</div>
-      <div class="map-detail__num is-flip" key="${code}-${this.year}">${v == null ? "—" : v.toFixed(1) + "%"}</div>
-      <p class="map-detail__sentence">${sentence}</p>
-      <div class="map-detail__sub">Monthly trend · last 7 years</div>
-      ${sparkSvg}`;
-    el.setAttribute("data-active", "true");
-    el.querySelector(".map-detail__close")?.addEventListener("click", (e) => {
-      e.stopPropagation();
-      this.lockedCode = null;
-      this.focusCode = null;
-      this._stepCaption = null;
-      this._applyFocus();
-      this._cameraTo(null);
-    });
-  }
-
-  _renderTopLabels(m) {
-    // Disabled — the auto-rendered "top-3 worst countries" percentages on the map
-    // were distracting during timeline scrubbing. Country values are now revealed
-    // on hover (light tooltip) and click (full card).
-    if (this.labelG) this.labelG.selectAll("*").remove();
-  }
-
   _click(d) {
     if (this._transitioning) return;   // [scroll-fix §4b] ignore clicks mid-morph
     if (!d) {
@@ -1098,222 +811,8 @@ export class Choropleth extends BaseChart {
     }
     this._applyFocus();
     this._cameraTo(this.lockedCode || this.focusCode);
-    this._renderCountryLine(this.lockedCode);
 
     // Label: remove immediately, show after camera settles
-    this._removeMapLabel();
-    clearTimeout(this._labelTimeout);
-    if (this.lockedCode) {
-      const code = this.lockedCode;
-      const delay = !this.ctx.motion.reduced ? CAM_DUR + 50 : 0;
-      // [Fable D54] locked-country map label dropped with the rest of the on-map name labels.
-    }
-  }
-
-  _removeMapLabel() {
-    if (this._mapCardEl) {
-      this._mapCardEl.remove();
-      this._mapCardEl = null;
-    }
-    // Also clear any legacy SVG-based label
-    this.svg?.selectAll(".map-country-label-g").remove();
-  }
-
-  _renderMapLabel(code) {
-    this._removeMapLabel();
-    if (!code || !this.featCol || !this.container) return;
-    const featId = this._codeToFeatId(code);
-    const feat = this.featCol.features.find(f => f.id === featId || this.data.topoToIso(f.id) === code);
-    if (!feat) return;
-
-    const v = this.data.hicpAnnual[code]?.CP00?.[String(this.year)];
-    const name = this.data.countryName(code).toUpperCase();
-    const valText = v != null ? v.toFixed(1) + " %" : "—";
-    const swatchColor = v != null ? this.color(v) : this._noDataColor;
-
-    // Compute the country centroid in CSS pixels relative to chart-body.
-    // The SVG scales its viewBox; we convert SVG units → screen pixels via getBoundingClientRect.
-    const [gx, gy] = this.proj(d3.geoCentroid(feat));
-    const cam = this._cam || { tx: 0, ty: 0, k: 1 };
-    const svgX = gx * cam.k + cam.tx;
-    const svgY = gy * cam.k + cam.ty;
-
-    const svgEl = this.svg.node();
-    const svgRect = svgEl.getBoundingClientRect();
-    const cbRect = this.container.getBoundingClientRect();
-    const scaleX = svgRect.width / this.W;
-    const scaleY = svgRect.height / this.H;
-    const pxX = (svgRect.left - cbRect.left) + svgX * scaleX;
-    const pxY = (svgRect.top - cbRect.top) + svgY * scaleY;
-
-    // Phase 6 (A3) — country rank within the EU for the current year
-    const rankText = this._rankLabel(code, this.year);
-
-    const card = document.createElement("div");
-    card.className = "map-country-card";
-    card.innerHTML = `
-      <div class="map-country-card__head">
-        <span class="map-country-card__dot" style="background:${swatchColor}"></span>
-        <span class="map-country-card__name">${name}</span>
-      </div>
-      <div class="map-country-card__val">${valText}</div>
-      <div class="map-country-card__rank">${rankText}</div>
-      <svg class="map-country-card__spark" width="92" height="26" viewBox="0 0 92 26" aria-hidden="true"></svg>
-    `;
-    this.container.appendChild(card);
-    this._mapCardEl = card;
-    this._drawCardSparkline(code);
-
-    // Position above the centroid; clamp to chart-body inner area so the card never clips out.
-    const cardW = card.offsetWidth;
-    const cardH = card.offsetHeight;
-    const cbW = cbRect.width, cbH = cbRect.height;
-    const padX = 14;
-    const padY = 14;
-    const left = Math.max(padX, Math.min(cbW - cardW - padX, pxX - cardW / 2));
-    const top  = Math.max(padY, Math.min(cbH - cardH - padY, pxY - cardH - 22));
-
-    card.style.left = `${left}px`;
-    card.style.top  = `${top}px`;
-
-    requestAnimationFrame(() => card.classList.add("is-in"));
-  }
-
-  _updateMapLabelValue(code) {
-    if (!this._mapCardEl) return;
-    const v = this.data.hicpAnnual[code]?.CP00?.[String(this.year)];
-    const swatchColor = v != null ? this.color(v) : this._noDataColor;
-    const valEl = this._mapCardEl.querySelector(".map-country-card__val");
-    const dotEl = this._mapCardEl.querySelector(".map-country-card__dot");
-    const rankEl = this._mapCardEl.querySelector(".map-country-card__rank");
-    if (!valEl) return;
-    valEl.classList.add("is-flipping");
-    clearTimeout(this._valFlipTimer);
-    this._valFlipTimer = setTimeout(() => {
-      valEl.textContent = v != null ? v.toFixed(1) + " %" : "—";
-      if (dotEl) dotEl.style.background = swatchColor;
-      if (rankEl) rankEl.textContent = this._rankLabel(code, this.year);
-      valEl.classList.remove("is-flipping");
-      // Move the current-year highlight on the inline sparkline
-      this._updateCardSparklineDot(code);
-    }, 180);
-  }
-
-  // Phase 6 (A3) — country's EU rank for a given year, formatted as "Nth of 27"
-  _rankLabel(code, year) {
-    const entries = [];
-    this.data.countriesByCode.forEach((_, c) => {
-      const v = this.data.hicpAnnual[c]?.CP00?.[String(year)];
-      if (Number.isFinite(v)) entries.push({ code: c, value: v });
-    });
-    if (!entries.length) return "";
-    entries.sort((a, b) => b.value - a.value);    // highest first
-    const idx = entries.findIndex(e => e.code === code);
-    if (idx < 0) return "";
-    const rank = idx + 1, total = entries.length;
-    const suffix = (n => {
-      const m = n % 100;
-      if (m >= 11 && m <= 13) return "th";
-      switch (n % 10) { case 1: return "st"; case 2: return "nd"; case 3: return "rd"; default: return "th"; }
-    })(rank);
-    return `${rank}${suffix} of ${total} in the EU`;
-  }
-
-  // Phase 5 improvement (Option C) — tiny 92×26 annual-trajectory sparkline in the card.
-  // 2015→2025 annual values, baseline at 0, accent-color dot at the current year.
-  _drawCardSparkline(code) {
-    if (!this._mapCardEl) return;
-    const svgEl = this._mapCardEl.querySelector(".map-country-card__spark");
-    if (!svgEl) return;
-    const W = 92, H = 26, padX = 4, padY = 4;
-    const annual = this.data.hicpAnnual[code]?.CP00 || {};
-    const series = this.years.map(y => ({ year: y, value: Number.isFinite(annual[String(y)]) ? annual[String(y)] : null }));
-    const valid = series.filter(d => d.value != null);
-    if (valid.length < 2) return;
-
-    const vMin = Math.min(0, d3.min(valid, d => d.value));
-    const vMax = Math.max(2, d3.max(valid, d => d.value));
-    const x = d3.scaleLinear().domain([this.years[0], this.years.at(-1)]).range([padX, W - padX]);
-    const y = d3.scaleLinear().domain([vMin, vMax]).range([H - padY, padY]);
-
-    const svg = d3.select(svgEl);
-    svg.selectAll("*").remove();
-    // Faint baseline at zero (only if 0 is inside the domain)
-    if (vMin <= 0 && vMax >= 0) {
-      svg.append("line").attr("class", "map-country-card__spark-base")
-        .attr("x1", padX).attr("x2", W - padX).attr("y1", y(0)).attr("y2", y(0));
-    }
-    const line = d3.line()
-      .defined(d => d.value != null)
-      .x(d => x(d.year))
-      .y(d => y(d.value))
-      .curve(d3.curveMonotoneX);
-    svg.append("path").attr("class", "map-country-card__spark-line").attr("d", line(series));
-    // Current-year highlight dot
-    svg.append("circle").attr("class", "map-country-card__spark-dot")
-      .attr("r", 2.5).attr("cx", x(this.year)).attr("cy", y(annual[String(this.year)] ?? 0));
-    // Stash the scales so the dot can be repositioned without redrawing the whole spark
-    this._sparkScales = { x, y, code };
-  }
-
-  _updateCardSparklineDot(code) {
-    const svgEl = this._mapCardEl?.querySelector(".map-country-card__spark");
-    if (!svgEl || !this._sparkScales || this._sparkScales.code !== code) {
-      this._drawCardSparkline(code);
-      return;
-    }
-    const { x, y } = this._sparkScales;
-    const v = this.data.hicpAnnual[code]?.CP00?.[String(this.year)];
-    const dot = d3.select(svgEl).select(".map-country-card__spark-dot");
-    // CSS transition on cx/cy handles the smooth glide (more reliable than d3.transition in headless)
-    dot.attr("cx", x(this.year)).attr("cy", y(v ?? 0));
-  }
-
-  _renderCountryLine(code) {
-    if (!this._timelineSvg) return;
-    const existing = this._timelineSvg.selectAll(".ctr-line-g");
-    if (!code) {
-      this._ctrCode = null;
-      existing.transition("ctr-exit").duration(350).style("opacity", 0)
-        .on("end", function () { d3.select(this).remove(); });
-      return;
-    }
-    existing.remove();
-    this._ctrCode = code;
-
-    const data = this.years.map(yr => ({
-      year: yr,
-      value: this.data.hicpAnnual[code]?.CP00?.[String(yr)] ?? null
-    }));
-    if (!data.some(d => d.value != null)) return;
-
-    const x = this._timeX, y = this._yTimeline;
-    if (!x || !y) return;
-
-    const lineGen = d3.line()
-      .x(d => x(d.year)).y(d => y(d.value))
-      .defined(d => d.value != null)
-      .curve(d3.curveMonotoneX);
-
-    const g = this._timelineSvg.append("g").attr("class", "ctr-line-g");
-    const path = g.append("path").attr("class", "ctr-line")
-      .attr("d", lineGen(data)).attr("fill", "none");
-
-    const L = path.node()?.getTotalLength() || 0;
-    path.attr("stroke-dasharray", `${L} ${L}`).attr("stroke-dashoffset", L)
-      .transition("ctr-draw").duration(900).ease(d3.easeCubicOut)
-      .attr("stroke-dashoffset", 0);
-
-    this._updateCountryLabel();
-  }
-
-  _updateCountryLabel() {
-    // The standalone country-on-timeline text label has been merged into the playhead val
-    // (see _updatePlayhead) so the EU figure and the country figure never overlap. The
-    // purple country line itself still draws via _renderCountryLine — only its inline
-    // text annotation is removed.
-    if (!this._timelineSvg) return;
-    this._timelineSvg.selectAll(".ctr-label").remove();
   }
 
   _hover(event, d) {
@@ -1358,9 +857,6 @@ export class Choropleth extends BaseChart {
       if (this.ctx.motion.reduced) {
         this._rankActive = false;
         if (this.container) this.container.setAttribute("data-active-mode", "compare");
-        if (this.playing) this._togglePlay(false);
-        this._removeMapLabel();
-        clearTimeout(this._labelTimeout);
         this._tickMorph(0.5); this._morphP = 0.5;   // snap bars away — the overlay covers the switch
         if (this._morphRaf) { cancelAnimationFrame(this._morphRaf); this._morphRaf = null; }
         this._enterCompare();
@@ -1381,13 +877,15 @@ export class Choropleth extends BaseChart {
 
     // ── RANK step (data-mode="rank"): morph the map → ranking, TIMED (D54) ──
     if (mode === "rank") {
+      // [P3.2] Same idempotency guard the compare branch above already carries, and needed for the
+      // same reason: a re-fire of the step we are already on restarted _animateMorphTo, which
+      // re-runs the whole 7.5s envelope (100ms hold, then the remaining Δp crawled over 7.3s) from
+      // wherever the morph had got to. Measured: two _animateMorphTo calls for one step entry.
+      if (this.container?.getAttribute("data-active-mode") === "rank") return;
+      this._cmpEnterSeq++;   // [P3.4] same reason as in _compareExitAnimated — rank is a leave, too
       this._rankActive = true;
       if (this.container) this.container.setAttribute("data-active-mode", "rank");
-      if (this.playing) this._togglePlay(false);
       this._exitCompare();
-      this._removeMapLabel();
-      this.svg?.selectAll(".multi-label-text").remove();
-      clearTimeout(this._labelTimeout);
       this._cameraTo(null, false);   // rank needs the default full-map framing before the flight
       if (this.ctx.motion.reduced) this._tickMorph(1); else this._animateMorphTo(1);
       return;
@@ -1406,32 +904,34 @@ export class Choropleth extends BaseChart {
     // to — is still correctly recognized as "leaving compare" and routed through the animated
     // exit's own _interruptCompareAnim() rather than silently leaving a stale transition running.
     const cmpWasActive = this.container?.getAttribute("data-active-mode") === "compare";
+    const yr = el?.dataset?.year ? +el.dataset.year : this.year;
+    // [P3.2] A re-fire of the year we are ALREADY showing must do nothing. It used to run the whole
+    // branch again: `this.lockedCode = null` threw away the country the reader had clicked, and
+    // _animateYearChange replayed the kicker's out/in cross-fade for a year that had not changed
+    // (measured: lockedCode "DE" -> null, _kickerSeq 2 -> 3, on one re-fire). Only skipped when
+    // there is genuinely nothing else to do — leaving rank or compare still has to run.
+    if (!wasRanked && !cmpWasActive && this.container?.getAttribute("data-active-mode") === String(yr)) return;
     const animatedCmpExit = cmpWasActive && !this.ctx.motion.reduced && !!this._cmp;
     if (!animatedCmpExit) this._exitCompare();
     if (this.container) this.container.setAttribute("data-active-mode", el?.dataset?.year || "");
     if (wasRanked) { if (this.ctx.motion.reduced) this._tickMorph(0.5); else this._animateMorphTo(0.5); }
 
-    if (this.playing) this._togglePlay(false);
-    const yr = el?.dataset?.year ? +el.dataset.year : this.year;
     const prev = this.year;
     this.year = yr;
-    if (this.sl) this.sl.value = yr;
     this.focusCode = YEAR_FOCUS[yr] ?? null;
     this._stepCaption = null;
-    this._stepPulse = false;
     this.lockedCode = null;
     this._animateYearChange(prev);   // recolors the MAIN map to `yr` now — invisible while compare's
                                       // own SVG is still the one on top, ready for a matched handback
-    this._updatePlayhead();
     this._applyFocus();
     this._cameraTo(this.focusCode);
 
-    // [Fable D54] On-map name labels DROPPED (owner: after a click-zoom they sat at stale
-    // positions; "drop countries name when showing them on the map"). The hover tooltip and the
-    // kicker extremes carry the who-is-what; _renderMapLabel/_renderMultiLabels stay unreferenced.
-    this._removeMapLabel();
-    this.svg?.selectAll(".multi-label-text").remove();
-    clearTimeout(this._labelTimeout);
+    // [Fable D54 / P6.2] On-map name labels are DROPPED (owner: after a click-zoom they sat at
+    // stale positions; "drop countries name when showing them on the map"). The hover tooltip and
+    // the kicker extremes carry the who-is-what. Until now the drop was enforced HERE, by deleting
+    // `.multi-label-text` nodes that _animateYearChange had appended moments earlier in the same
+    // tick -- so the 2021 step built three labels and this line erased them before a frame could
+    // show them. The builder is gone, so there is nothing left to erase and no line here.
 
     if (animatedCmpExit) this._compareExitAnimated(yr);
   }
@@ -1614,11 +1114,11 @@ export class Choropleth extends BaseChart {
     this._interruptCompareAnim();
     this._rankActive = false;
     if (this.container) this.container.setAttribute("data-active-mode", "compare");
-    if (this.playing) this._togglePlay(false);
-    this._removeMapLabel();
-    clearTimeout(this._labelTimeout);
-    this._tickMorph(0.5); this._morphP = 0.5;
+    // [P3.4] Cancel the morph rAF BEFORE snapping, not after. The other order let the still-live
+    // loop run one more tick on top of the snap, and that tick re-set `_transitioning` — which then
+    // stayed latched until the next scroll tick happened to clear it.
     if (this._morphRaf) { cancelAnimationFrame(this._morphRaf); this._morphRaf = null; }
+    this._tickMorph(0.5); this._morphP = 0.5;
     this._cmpExitSeq++;   // any in-flight EXIT sequence is now stale — we're going back IN
 
     if (!this._cmpWrap) {
@@ -1679,6 +1179,11 @@ export class Choropleth extends BaseChart {
     this._interruptCompareAnim();
     const cmp = this._cmp;
     if (!cmp || !this._cmpWrap) { this._exitCompare(); return; }
+    // [P3.4] Any in-flight ENTER sequence is stale the moment an exit starts. _compareEnterAnimated
+    // hands its own `enterSeq` to four .then() continuations and each re-checks it before acting —
+    // but only an entry ever bumped the counter, so a reversal inside the pivot window let a
+    // surviving continuation re-enter compare on top of the year view we are leaving to.
+    this._cmpEnterSeq++;
     const exitSeq = ++this._cmpExitSeq;
     if (cmp._handle) { cmp._handle.style.pointerEvents = "none"; cmp._handle.classList.remove("is-pulsing"); }
     cmp._labelA?.interrupt("cmpLabel").style("opacity", 0);
@@ -1883,56 +1388,6 @@ export class Choropleth extends BaseChart {
     }, CMP_DETAIL_SWAP_MS);
   }
 
-  // [debug 2026-07-06 — owner report: "still fast and buggy... synced by scrolling with reasonable
-  // speed"] The map<->rank morph used to run on ITS OWN CLOCK — onStep fired a fixed-duration eased
-  // tween toward a target (first 420ms, then slowed to 640ms in the previous fix) — so once
-  // triggered, it kept animating regardless of whether the reader kept scrolling. That's exactly the
-  // "fast and buggy" feel even after the camera-glitch and speed fixes: motion the scroll TRIGGERED,
-  // not motion the scroll IS. Replaced with a continuous, scrollY-driven interpolation — the same
-  // pattern used for SmallMultiplesLine's line-draw fix in this same session — computing each step's
-  // own trigger-crossing scroll position and interpolating _morphP between adjacent steps' own
-  // targets (year steps: 0.5, pure map; the rank step: 1, full bars) directly off the CURRENT scroll
-  // position. The morph now visibly flies WHILE the reader scrolls from "Two Europes" into "The gap,
-  // in order," completing exactly as that step's own text becomes current — never early (the bug
-  // that motivated the ORIGINAL fixed-duration approach), never a separate clock racing the reader.
-  _stepTriggerYs() {
-    const chapter = this.container?.closest(".chapter");
-    const steps = chapter ? [...chapter.querySelectorAll(".scroller__step")] : [];
-    return steps.map(el => el.getBoundingClientRect().top + scrollY - innerHeight * 0.55);
-  }
-  _stepMorphTargets() {
-    const chapter = this.container?.closest(".chapter");
-    const steps = chapter ? [...chapter.querySelectorAll(".scroller__step")] : [];
-    return steps.map(el => (el.dataset.mode === "rank" ? 1 : 0.5));
-  }
-  _continuousMorph() {
-    if (this.ctx.motion.reduced) return;
-    const ys = this._stepTriggerYs();
-    if (!ys.length) { this._tickMorph(this._morphP ?? 0.5); return; }
-    const targets = this._stepMorphTargets();
-    const y = scrollY;
-    let p, headingToRank;
-    if (y <= ys[0]) { p = targets[0]; headingToRank = targets[0] === 1; }
-    else if (y >= ys[ys.length - 1]) { p = targets[targets.length - 1]; headingToRank = targets[targets.length - 1] === 1; }
-    else {
-      let i = 0;
-      while (i < ys.length - 1 && y > ys[i + 1]) i++;
-      const segP = smooth((y - ys[i]) / (ys[i + 1] - ys[i]));
-      p = targets[i] + (targets[i + 1] - targets[i]) * segP;
-      headingToRank = targets[i + 1] === 1;
-    }
-    // [debug 2026-07-06] Camera reset moves HERE from onStep's rank branch: with the morph now
-    // continuously scroll-driven, it starts progressing as soon as scrollY enters the segment
-    // leading INTO the rank step — well before onStep(rank) itself fires (that now happens at the
-    // segment's END, once morphP has already reached 1). Reset once, the instant we first start
-    // heading toward the rank target (map still fully opaque at this point — mapFade only starts at
-    // p=0.64, comfortably later), not when onStep eventually fires on an already-far-along morph.
-    if (headingToRank && !this._morphCamReset) { this._cameraTo(null, false); this._morphCamReset = true; }
-    else if (!headingToRank) { this._morphCamReset = false; }
-    this._morphP = p;
-    this._tickMorph(p);
-  }
-
   // ============================================================
   // Steps 5–6 morph — map of Europe → diverging bar of cumulative
   // HICP since Jan 2019, ranked around the EU27 mean.
@@ -2115,7 +1570,6 @@ export class Choropleth extends BaseChart {
 
     // Compute each country's START position in this bar-layer's SVG coords.
     // Captured at build time; valid as long as the choropleth's layout doesn't change.
-    const startPositions = this._computeStartPositions(barRows, wrap, m.left, m.top);
 
     // Group per row — positioned at FINAL bar y. Migration happens inside via translate.
     const rowG = root.selectAll("g.bar-row").data(barRows, d => d.code).join("g")
@@ -2183,7 +1637,7 @@ export class Choropleth extends BaseChart {
         .attr("y", flagY + 4)
         .attr("text-anchor", dev >= 0 ? "start" : "end")
         .attr("x", dev >= 0 ? xDev + 6 : xDev - 6)
-        .attr("fill", "var(--ink-soft)")   /* readable neutral — bar colour carries sign/heat; --seq-1 negatives were near-invisible */
+        /* [D93] fill moved to `.choro-bars-svg .bar-value` in CSS — see the note there */
         .style("opacity", 0)
         .text(`${dev >= 0 ? "+" : ""}${dev.toFixed(1)}%`)
         .node();
@@ -2195,7 +1649,11 @@ export class Choropleth extends BaseChart {
       // (the country's 2019→now index vs the EU-27 average) in the shared tooltip. Appended last.
       g.append("rect").attr("class", "bar-hit")
         .attr("x", -m.left + 4).attr("y", 0)
-        .attr("width", Math.max(0, m.left + iw + m.right - 8)).attr("height", rowH)
+        // [P3.4] height clamped — the sibling of the D23 fix. A degenerate layout (a very short
+        // panel, or the transient pre-reflow height this render() already guards against) can make
+        // rowH negative, and a negative <rect> height is an SVG error that drops the whole row's
+        // hit target, killing hover for that country.
+        .attr("width", Math.max(0, m.left + iw + m.right - 8)).attr("height", Math.max(0, rowH))
         .attr("fill", "transparent").style("cursor", "pointer")
         .on("mouseenter", (e) => this._barRowHover(e, d))
         .on("mousemove", (e) => this.ctx.tooltip.move(e.clientX, e.clientY))
@@ -2205,32 +1663,6 @@ export class Choropleth extends BaseChart {
     });
 
     // Markers — separate group at root level (no row transform).
-    // Each marker is a small colored disc that flies from the country's map centroid
-    // to its bar's flag position. Then it fades out as the proper flag/name appear.
-    const markersG = root.append("g").attr("class", "bar-markers");
-    barRows.forEach(d => {
-      const dev = d.cumPct - euVal;
-      const xDev = xLin(dev);
-      const barX = dev >= 0 ? xLin(0) : xDev;
-      const fill = barColor(dev);
-      const startP = startPositions.get(d.code) || [iw / 2, ih / 2];
-      // Marker target (in root coords) = flag center
-      const flagX = -m.left + 22 + 7;
-      const targetX = flagX + 0;                          // (in root coords; row transform doesn't apply)
-      const targetY = yBand(d.code) + rowH / 2;
-      markersG.append("circle")
-        .attr("class", "bar-marker")
-        .attr("data-code", d.code)
-        .attr("data-sx", startP[0]).attr("data-sy", startP[1])
-        .attr("data-tx", targetX).attr("data-ty", targetY)
-        .attr("data-bar-x", barX)
-        .attr("data-bar-target-width", Math.max(0.5, Math.abs(xDev - xLin(0))))
-        .attr("cx", startP[0]).attr("cy", startP[1])
-        .attr("r", 6)
-        .attr("fill", fill)
-        .attr("stroke", "var(--bg-elev)").attr("stroke-width", 1.2)
-        .style("opacity", 0);
-    });
 
     // [debug 2026-07-06 — owner report] Sparkline event ticks (Ukraine/ECB markers on the top-5
     // rows' trend lines) REMOVED along with the sparklines themselves — see the legend comment above.
@@ -2239,16 +1671,12 @@ export class Choropleth extends BaseChart {
     const clonesData = this._buildCountryClones(barRows, root, m, yBand, xLin, rowH, stage, W, H, euVal);
 
     this._bars = {
-      wrap, svg, root, markersG, barRows, yBand, xLin, euVal, iw, ih, rowH,
       W, H, margin: m,
+      wrap, svg, root, barRows, yBand, xLin, euVal, iw, ih, rowH,
       euSeries, barColor,                       // [owner review D1 4b] hover mini-chart needs these
       clones: clonesData ? clonesData.clones : [],
       rowEls, euZeroEl, euTagEl,                 // [debug 2026-07-08 — perf] cached node refs, see _tickMorph
     };
-    // [debug 2026-07-08 — perf] markersG's circles are permanently hidden (the flubber-clone system
-    // replaced them; "Hide the old circle markers (v1 leftover)" used to re-force opacity:0 on them
-    // EVERY tick). Force it once, here, instead.
-    markersG?.selectAll("circle.bar-marker").style("opacity", 0);
 
     // [S1-5] IntersectionObserver fallback — hides the morph wrap when the
     // chapter scrolls completely out of viewport, even without a scroll event
@@ -2395,33 +1823,6 @@ export class Choropleth extends BaseChart {
     return { clonesG, clones };
   }
 
-  // Compute each country's start position (centroid) in the bar-layer's root coords.
-  // The root <g> has transform translate(margin.left, margin.top); so to feed start
-  // coords directly to circle cx/cy of markers placed inside that <g>, we subtract
-  // those margins from the wrap-local pixel coords.
-  _computeStartPositions(barRows, wrap, marginLeft, marginTop) {
-    const out = new Map();
-    if (!this.svg || !wrap) return out;
-    const choroSvg = this.svg.node();
-    const choroRect = choroSvg.getBoundingClientRect();
-    const wrapRect = wrap.getBoundingClientRect();
-    const sX = choroRect.width / this.W;
-    const sY = choroRect.height / this.H;
-    const cam = this._cam || { tx: 0, ty: 0, k: 1 };
-    barRows.forEach(d => {
-      const [cx, cy] = d.centroid;
-      const inSvgX = cx * cam.k + cam.tx;
-      const inSvgY = cy * cam.k + cam.ty;
-      const pxX = choroRect.left + inSvgX * sX;
-      const pxY = choroRect.top  + inSvgY * sY;
-      out.set(d.code, [
-        pxX - wrapRect.left - marginLeft,
-        pxY - wrapRect.top  - marginTop
-      ]);
-    });
-    return out;
-  }
-
   // [owner review D1 4b] Hover a bar row → dim the others + show an enlarged 2-line mini-chart
   // (the country's 2019→now index vs the EU-27 average) in the shared singleton tooltip.
   _barRowHover(event, d) {
@@ -2486,7 +1887,6 @@ export class Choropleth extends BaseChart {
   //   Bars  (0.88–1.00) — bars grow, names/values/sparklines reveal
   _tickMorph(p) {
     if (!this._bars) return;
-    this._morphState = p;
 
     // Chapter-in-viewport gate (unchanged from v1)
     const chapter = this.container?.closest(".chapter");
@@ -2518,7 +1918,6 @@ export class Choropleth extends BaseChart {
       if (this.gMap)    this.gMap.style("opacity", onScreen ? 0 : 1);
       if (this.kickerG) this.kickerG.style("opacity", onScreen ? 0 : 1);
       if (this.labelG)  this.labelG.style("opacity", onScreen ? 0 : 1);
-      if (this._mapCardEl) this._mapCardEl.style.opacity = onScreen ? 0 : 1;
       clones.forEach(c => {
         c.pathEl.setAttribute("opacity", "0");
         c.pathEl.setAttribute("d", c.toD);
@@ -2608,7 +2007,6 @@ export class Choropleth extends BaseChart {
     if (this.gMap)       this.gMap.style("pointer-events", mapOpacity < 0.99 ? "none" : "auto");
     if (this.kickerG)    this.kickerG.style("opacity", mapOpacity);
     if (this.labelG)     this.labelG.style("opacity", mapOpacity * (this.focusCode ? 0 : 1));
-    if (this._mapCardEl) this._mapCardEl.style.opacity = mapOpacity;
 
     // ===== clones: fly (staggered) + rise/trail-as-fade (staggered only in reverse) =====
     // [Morph-v2 fix, unchanged] flubber.interpolate(fromD, toD) returns a path that morphs through
@@ -2684,29 +2082,4 @@ export class Choropleth extends BaseChart {
   }
   // ============================================================
 
-  // Light text labels for multi-country narrative steps (no card, no sparkline — keeps the
-  // map readable when several countries are emphasized at once).
-  _renderMultiLabels(codes) {
-    if (!this.svg || !this.featCol) return;
-    this.svg.selectAll(".multi-label-text").remove();
-    if (!codes || !codes.length) return;
-    const cam = this._cam || { tx: 0, ty: 0, k: 1 };
-    codes.forEach((code, i) => {
-      const featId = this._codeToFeatId(code);
-      const feat = this.featCol.features.find(f => f.id === featId || this.data.topoToIso(f.id) === code);
-      if (!feat) return;
-      const [gx, gy] = this.proj(d3.geoCentroid(feat));
-      const sx = gx * cam.k + cam.tx;
-      const sy = gy * cam.k + cam.ty - 8;
-      const v = this.data.hicpAnnual[code]?.CP00?.[String(this.year)];
-      const txt = `${this.data.countryName(code).toUpperCase()}${v != null ? "  " + v.toFixed(1) + "%" : ""}`;
-      this.svg.append("text")
-        .attr("class", "multi-label-text")
-        .attr("x", sx).attr("y", sy)
-        .attr("text-anchor", "middle")
-        .text(txt)
-        .style("opacity", 0)
-        .transition().delay(80 * i).duration(260).style("opacity", 1);
-    });
-  }
 }

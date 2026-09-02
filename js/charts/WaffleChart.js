@@ -68,6 +68,7 @@ export class WaffleChart extends BaseChart {
     this._erosionTimers = [];
     this._erosionPlayed = false;
     this._echoCats = [];
+    this._echoSeq = 0;   // [P3.6] a superseded rescale drops its own echo instead of racing the new one
   }
 
   size() {
@@ -516,6 +517,7 @@ export class WaffleChart extends BaseChart {
   // _animateErosion (called alongside this, not from within it) so the two stay independently
   // testable and _rescaleSplit only ever touches the bars.
   _rescaleSplit(reduced) {
+    let lastBar = null;   // [P3.6] the transition the echo waits on
     BASKET.forEach(b => {
       const g = this._barG.get(b.cat);
       const lv = this._lineVals.find(x => x.cat === b.cat);
@@ -535,10 +537,20 @@ export class WaffleChart extends BaseChart {
       bar2025.transition("gb").duration(WF_MOVE_MS).ease(d3.easeCubicInOut).attr("width", w2025);
       v2019.transition("gb").duration(WF_MOVE_MS).ease(d3.easeCubicInOut).attr("x", this._bars.labelGutter + w2019 + 6).style("opacity", 1);
       v2025.transition("gb").duration(WF_MOVE_MS).ease(d3.easeCubicInOut).attr("x", this._bars.labelGutter + w2025 + 6).style("opacity", 1);
+      lastBar = bar2025;
     });
     clearTimeout(this._echoRescaleT);
     if (!reduced && this._echoCats.length) {
-      this._echoRescaleT = setTimeout(() => { this._echoCats.forEach(cat => this._pulseBarPair(cat)); }, WF_MOVE_MS);
+      // [P3.6] Hang the echo off the last bar transition's own completion rather than a parallel
+      // setTimeout(WF_MOVE_MS). This file's header promises completion-tied echoes and _enterSplit
+      // already does it that way; a duplicate timer drifts from the transition it is meant to
+      // follow the moment the clock stalls (background tab) or a rapid re-trigger interrupts it,
+      // firing the pulse over bars that are still moving. The seq guard makes a superseded call
+      // drop its own echo instead of racing the new one.
+      const echoSeq = ++this._echoSeq;
+      const fire = () => { if (echoSeq === this._echoSeq) this._echoCats.forEach(cat => this._pulseBarPair(cat)); };
+      if (lastBar) lastBar.transition("gb").end().then(fire).catch(() => {});
+      else this._echoRescaleT = setTimeout(fire, WF_MOVE_MS);
     }
   }
 
@@ -559,20 +571,24 @@ export class WaffleChart extends BaseChart {
 
     const reduced = this.ctx.motion.reduced;
 
-    // 1. Erosion: step 0's own one-time "start full, die down to fillN" sequence; a rail-jump
-    // that lands directly on step 1/2 before step 0 ever fired snaps instantly instead (there was
-    // no time to watch the 1.2s sequence anyway); once already played, a geo change animates the
-    // delta.
+    // 1. Erosion: step 0's own one-time "start full, die down to fillN" sequence; once that has
+    // played, a geo change re-erodes the DELTA (D87's step-2 EU->HU, with its claret flash); a
+    // rail-jump that lands directly on step 1/2 before step 0 ever fired snaps instead (there was
+    // no time to watch the 1.2s sequence anyway).
+    // [P2.5] The geoChanged branch used to sit LAST and was therefore unreachable from the scroll
+    // path: a geo change always also makes _shownN !== _fillN (EU 77 -> HU 61), so the snap branch
+    // in front of it swallowed every one. Ordering it before the snap is the whole fix; the snap
+    // keeps the rail-jump case by requiring that no erosion has played yet.
     if (index === 0 && !this._erosionPlayed) {
       this._erosionPlayed = true;
+      this._animateErosion(this._fillN, reduced);
+    } else if (wantSplit && geoChanged && this._erosionPlayed) {
       this._animateErosion(this._fillN, reduced);
     } else if (wantSplit && this._shownN !== this._fillN) {
       this._erosionPlayed = true;
       this._shownN = this._fillN;
       this._snapCells(this._fillN);
       this._kickNum.interrupt("kick").text(this._fillN == null ? "—" : `€${this._fillN}`);
-    } else if (wantSplit && geoChanged) {
-      this._animateErosion(this._fillN, reduced);
     }
 
     // 2. Split-mode transitions (D86, unchanged).

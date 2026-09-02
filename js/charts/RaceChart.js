@@ -3,11 +3,16 @@
    Two cumulative index lines, Jan 2019 = 100, on one clock:
      PRICES = HICP CP00 EU-27 (monthly, ends ~129.7)
      PAY    = median statutory minimum-wage index across the 21 countries
-              with a 2019 floor (semiannual, ends ~140.4)
+              with a 2019 floor (semiannual, ends ~150.1)
    The gap between them is shaded: claret while pay < prices (workers behind),
-   jade once pay ≥ prices (workers ahead). The median floor overtakes prices in
-   2020, slips behind at the 2022 energy spike, then pulls ~11 points ahead by 2025.
-   Six countries bargain instead of legislating a floor and sit this one out.
+   jade once pay ≥ prices (workers ahead).
+   [D91] On corrected national-currency wages the median floor pulls ahead in late 2019
+   and NEVER falls behind again — its lead only narrows (≈+7.3 pts end-2021 to ≈+5.0 by
+   mid-2022) before widening to ≈+20.5 by 2025. The pre-D91 file shipped PPS wages, which
+   manufactured a 2022 deficit and the "pay chased prices" reading. The damage is real but
+   it is per-country, not in the median: 17 of these 21 countries were below their own 2019
+   level at their worst month of 2022 (see scripts/validate_wages_hpi.mjs §6b) — which is
+   what CH8 step 2 now says. Six countries have no 2019 statutory floor and sit this one out.
    ============================================================ */
 
 import { BaseChart } from "./BaseChart.js";
@@ -15,6 +20,7 @@ import { watchChapterProgress, smooth } from "../modules/ChartMotion.js";
 import { ensureGlow } from "../modules/CraftFX.js";
 
 const BEATS = { sprint: "2022-06", chase: "2024-01", finish: "2025-12" };
+const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const BEAT_ORDER = ["sprint", "chase", "finish"];
 
 export class RaceChart extends BaseChart {
@@ -26,6 +32,7 @@ export class RaceChart extends BaseChart {
     this._selectedCodes = [];     // [§C.3] compared countries (max 2) — persists
     this._lastStepIdx = -1;       // [§C.3] story-reset only on real step change
     this._pairCache = new Map();  // [§2.3] code -> _countryPair(code), built once per add (not per mousemove)
+    this._stripOn = false;        // [P8.3] under-water count strip — OFF by default, story-reset on step
   }
 
   size() {
@@ -40,10 +47,17 @@ export class RaceChart extends BaseChart {
     this.container.innerHTML = "";
     const isPhone = this.size().width < 560;
     this._isPhone = isPhone;
-    this.opts.margin = isPhone ? { top: 48, right: 46, bottom: 30, left: 40 } : { top: 54, right: 86, bottom: 34, left: 50 };
+    // [P8.3] The strip lives UNDER the x-axis, and there is no spare room down there: the bottom
+    // margin is sized to the axis labels alone. So the chart makes room only when the strip is on,
+    // which is also what keeps the OFF state pixel-identical to before it existed.
+    const stripH = this._stripOn ? (isPhone ? 44 : 52) : 0;
+    this._stripH = stripH;
+    this.opts.margin = isPhone
+      ? { top: 48, right: 46, bottom: 30 + stripH, left: 40 }
+      : { top: 54, right: 86, bottom: 34 + stripH, left: 50 };
     const { width, height } = this.ensureSvg();
     this.W = width; this.H = height;
-    this.svg.attr("aria-label", "Minimum pay against consumer prices, both starting at 100 in 2019: the median wage floor ends about 11 points above prices by 2025, after slipping behind during the 2022 energy spike.");
+    // aria-label is set after the lines are computed, from the real end gap (D91).
     const M = this.opts.margin;
     const iw = width - M.left - M.right, ih = height - M.top - M.bottom;
     this._iw = iw; this._ih = ih;
@@ -76,12 +90,14 @@ export class RaceChart extends BaseChart {
       return payPts.at(-1).v;
     };
     if (payPts.length < 2 || !months.length) {   // deferred data (minWages/hicpIndex) not indexed yet — retry
-      if ((this._retries = (this._retries || 0) + 1) <= 12) setTimeout(() => { if (this.rendered && this.container?.isConnected) this.render(); }, 200);
+      // [P3.5] The retry timer gets a handle so destroy() can cancel it — up to 12 of these can be
+      // pending across a slow data load, each holding a render() of a chart that may be gone.
+      if ((this._retries = (this._retries || 0) + 1) <= 12) this._retryT = setTimeout(() => { if (this.rendered && this.container?.isConnected) this.render(); }, 200);
       return;
     }
     const rows = months.map(m => ({ t: parse(m), m, price: price(m), pay: payAt(m) })).filter(d => d.price != null);
     if (!rows.length) {
-      if ((this._retries = (this._retries || 0) + 1) <= 12) setTimeout(() => { if (this.rendered && this.container?.isConnected) this.render(); }, 200);
+      if ((this._retries = (this._retries || 0) + 1) <= 12) this._retryT = setTimeout(() => { if (this.rendered && this.container?.isConnected) this.render(); }, 200);
       return;
     }
     this._rows = rows;
@@ -89,6 +105,10 @@ export class RaceChart extends BaseChart {
     this._priceAt = price; this._payAtMonth = payAt;
     const endGap = rows.at(-1).pay - rows.at(-1).price;
     this._endGap = endGap;
+    // [D91] Derived from the drawn series, never a literal — the old label asserted "about 11
+    // points" and "slipping behind during the 2022 energy spike", both artifacts of PPS wages.
+    const behind = rows.filter(d => d.pay < d.price);
+    this.svg.attr("aria-label", `Minimum pay against consumer prices, both starting at 100 in 2019: the median wage floor ends about ${Math.round(Math.abs(endGap))} points ${endGap >= 0 ? "above" : "below"} prices by ${rows.at(-1).m.slice(0, 4)}${behind.length ? `, after trailing them for ${behind.length} months` : ", having pulled ahead in 2019 and stayed ahead"}.`);
 
     const x = d3.scaleTime().domain([parse("2019-01"), parse("2025-12")]).range([0, iw]);
     const y = d3.scaleLinear().domain([96, Math.ceil((d3.max(rows, d => Math.max(d.pay, d.price)) + 4) / 5) * 5]).range([ih, 0]);
@@ -122,7 +142,7 @@ export class RaceChart extends BaseChart {
     const end = rows.at(-1);
     [["price", end.price, "var(--accent)", "Prices"], ["pay", end.pay, "var(--cat-wages)", "Pay"]].forEach(([k, v, col, name]) => {
       g.append("circle").attr("class", `rc-end-dot rc-end-${k}`).attr("cx", x(end.t)).attr("cy", y(v)).attr("r", 4).attr("fill", col);
-      g.append("text").attr("class", `rc-end-name rc-end-name--${k}`).attr("x", x(end.t) + 8).attr("y", y(v) + 4).attr("fill", col).text(`${name} ${Math.round(v)}`);
+      g.append("text").attr("class", `rc-end-name rc-end-name--${k}`).attr("x", x(end.t) + 8).attr("y", y(v) + 4).text(`${name} ${Math.round(v)}`);   /* [D93] colour via the class — a fill attr on a <text> is inert */
     });
 
     // beat marker (moves per step)
@@ -132,13 +152,23 @@ export class RaceChart extends BaseChart {
     // kicker = the live gap (pay − price) in points at the reveal front; jade when pay leads, claret when it trails.
     this._kickNum = this.svg.append("text").attr("class", "kick-num").attr("x", M.left).attr("y", isPhone ? 38 : 46).style("font-size", isPhone ? "28px" : "40px").text("0");
 
+    if (this._stripOn) this._drawUnderWater();
+
     // hover
     this._wireHover();
 
     // motion
-    this._drawn = 0; this._pulsed = false;
-    if (this.ctx.motion.reduced) { this._revealTo(1); this._setKicker(1); this._applyBeat("finish"); this._pulseEnd(); }
-    else { this._applyBeat("sprint"); this._wireScroll(); }
+    // [P3.3] Same fix as Housing: the beat was hard-reset to "sprint" on every render, so a
+    // dark-mode toggle on beat 2 or 3 threw the marker back to the start of the story. `_beat` is
+    // seeded in the constructor and now survives a re-render; only a true first mount opens on
+    // "sprint". `_pulsed` is also set in the reduced branch, which calls _pulseEnd() directly —
+    // leaving it false let a later _neutralView/_onProgress fire the end pulse a second time.
+    this._drawn = 0;
+    const firstMount = this._renderedOnce !== true;
+    this._renderedOnce = true;
+    if (firstMount) this._pulsed = false;
+    if (this.ctx.motion.reduced) { this._revealTo(1); this._setKicker(1); this._applyBeat("finish"); this._pulsed = true; this._pulseEnd(); }
+    else { this._applyBeat(firstMount ? "sprint" : this._beat); this._wireScroll(); }
 
     // [§C.3] controls (country pay/price overlay + zoom) + restore explore state on re-render
     this._buildControls();
@@ -217,7 +247,8 @@ export class RaceChart extends BaseChart {
     // gap at the reveal front
     const i = Math.max(0, Math.min(this._rows.length - 1, Math.round(frac * (this._rows.length - 1))));
     const r = this._rows[i]; const gap = r.pay - r.price;
-    this._kickNum.text(`${gap >= 0 ? "+" : "−"}${Math.abs(gap).toFixed(0)}`).attr("fill", gap >= 0 ? "var(--cat-wages)" : "var(--accent)");
+    this._kickNum.text(`${gap >= 0 ? "+" : "−"}${Math.abs(gap).toFixed(0)}`)
+      .classed("rc-kick--ahead", gap >= 0).classed("rc-kick--behind", gap < 0);   /* [D93] jade ahead / claret behind, in CSS */
     if (frac >= 0.999 && !this._pulsed) { this._pulsed = true; this._pulseEnd(); }
   }
 
@@ -228,6 +259,10 @@ export class RaceChart extends BaseChart {
     if (stepChanged && ((this._selectedCodes && this._selectedCodes.length) || this._zoom !== "full")) {
       this._resetCountries(); this._applyZoom("full", true);
     }
+    // [P8.3] STORY RULE — the same one the compare chips obey: an explore state the reader opened
+    // does not survive into the next step, because the step's own sentence assumes the plain chart.
+    // Re-render rather than hide, since the strip owns part of the bottom margin.
+    if (stepChanged && this._stripOn) { this._stripOn = false; this.render(); this._syncUnderWaterBtn(); }
     this._applyBeat(beat);
   }
 
@@ -249,11 +284,106 @@ export class RaceChart extends BaseChart {
       `<button type="button" class="ac-reset" hidden>Reset</button>` +
       `<span class="ac-zoom" role="group" aria-label="Zoom the timeline">` +
       `<button type="button" class="ac-zoom-btn is-on" data-zoom="full">2019 – 2025</button>` +
-      `<button type="button" class="ac-zoom-btn" data-zoom="crisis">2021 – 2023</button></span>`;
+      `<button type="button" class="ac-zoom-btn" data-zoom="crisis">2021 – 2023</button></span>` +
+      `<button type="button" class="ac-zoom-btn rc-uw-btn" data-uw="1" aria-pressed="false">Who fell behind</button>`;
     host.querySelector(".ac-select").addEventListener("change", (e) => { const code = e.target.value; e.target.value = ""; if (code) this._addCountry(code); });
     host.querySelector(".ac-reset").addEventListener("click", () => this._resetCountries());
-    host.querySelectorAll(".ac-zoom-btn").forEach(b => b.addEventListener("click", () => this._applyZoom(b.dataset.zoom, true)));
+    host.querySelectorAll(".ac-zoom-btn[data-zoom]").forEach(b => b.addEventListener("click", () => this._applyZoom(b.dataset.zoom, true)));
+    host.querySelector(".rc-uw-btn").addEventListener("click", () => this._toggleUnderWater());
     this._renderChips();
+    this._syncUnderWaterBtn();
+  }
+
+  /** [P8.3] Toggle the under-water strip. A re-render, not a show/hide: the strip owns part of the
+   *  bottom margin, so the main plot has to give the room back when it closes. This is the same
+   *  path a theme toggle takes, which is why beat, zoom and compared countries survive it. */
+  _toggleUnderWater() {
+    this._stripOn = !this._stripOn;
+    this.render();
+    this._syncUnderWaterBtn();
+  }
+
+  _syncUnderWaterBtn() {
+    const b = this._controlsHost()?.querySelector(".rc-uw-btn");
+    if (!b) return;
+    b.classList.toggle("is-on", this._stripOn);
+    b.setAttribute("aria-pressed", String(this._stripOn));
+  }
+
+  /** [P8.3] The count the median hides. For every month, how many of the 21 floors bought less
+   *  than at the start of 2019 — the same in-force semester step the ledger's troughs use, so the
+   *  two charts cannot disagree about the same countries.
+   *
+   *  What the peak label says is derived, not asserted. The plan for this strip expected a peak of
+   *  17; 17 is the count of countries below their 2019 level at their OWN worst month of 2022,
+   *  which is a different statistic and is what the DUMBBELL draws. The most that were under water
+   *  in any SINGLE month of the crisis is 15 (Nov–Dec 2022), so that is what is labelled, with its
+   *  month, and the label is computed from the series rather than written down.
+   *
+   *  The 2019 block is real and agrees with the line above it: floors are set in January and prices
+   *  drift, so by mid-2019 almost every floor bought fractionally less than in January — which is
+   *  exactly why the race already draws a claret gap across 2019 (median pay 100.0 vs prices 102.5).
+   *  The strip counts what that gap is made of. */
+  _drawUnderWater() {
+    const x = this._x, M = this.opts.margin, iw = this._iw, ih = this._ih, H = this._stripH;
+    // The series starts at 2020, and that is a judgement the pixels forced. Drawn from 2019-01 the
+    // strip peaks at 21 in mid-2019 and the crisis reads as a bump: within the base year almost
+    // every floor buys fractionally less than it did in January, because floors are set annually
+    // and prices drift — true, the same in every year, and the reason the race already shades 2019
+    // claret. But a COUNT cannot see depth: those countries are under by about a point, where in
+    // Nov 2022 they are under by up to fourteen. Counting them together made the base year look
+    // like the crisis. From 2020 the first full cycle has passed and the count means what the
+    // button promises.
+    const series = this.data.underWaterCounts()
+      .filter(d => d.t >= "2020-01")
+      .map(d => ({ t: this._parse(d.t), n: d.n, key: d.t }));
+    if (!series.length) return;
+    this._uwSeries = series;
+    this._uwTotal = this.data.realWageRows().length;   // the same 21 the ledger counts
+    const axisGap = this._isPhone ? 22 : 24;               // clear the year labels
+    const h = H - axisGap - (this._isPhone ? 6 : 8);       // the strip's own drawing height
+    const g = this.svg.append("g").attr("class", "rc-uw")
+      .attr("transform", `translate(${M.left},${M.top + ih + axisGap})`);
+    const nMax = d3.max(series, d => d.n);
+    const y = d3.scaleLinear().domain([0, nMax]).range([h, 0]);
+    g.append("path").datum(series).attr("class", "rc-uw-area")
+      .attr("d", d3.area().x(d => x(d.t)).y0(h).y1(d => y(d.n)).curve(d3.curveMonotoneX));
+    g.append("path").datum(series).attr("class", "rc-uw-line")
+      .attr("d", d3.line().x(d => x(d.t)).y(d => y(d.n)).curve(d3.curveMonotoneX));
+    g.append("line").attr("class", "rc-uw-base").attr("x1", 0).attr("x2", iw).attr("y1", h).attr("y2", h);
+
+    // Peak of the CRISIS, named with its month — see the note above on why not "17".
+    const crisis = series.filter(d => d.key >= "2021-01" && d.key <= "2023-12");
+    const peak = crisis.reduce((a, b) => (b.n > a.n ? b : a), crisis[0]);
+    if (peak) {
+      g.append("circle").attr("class", "rc-uw-peak-dot").attr("cx", x(peak.t)).attr("cy", y(peak.n)).attr("r", 3);
+      g.append("text").attr("class", "rc-uw-peak").attr("x", x(peak.t) + 6).attr("y", y(peak.n) + 4)
+        .text(`${peak.n} · ${MONTH_ABBR[+peak.key.slice(5) - 1]} ${peak.key.slice(0, 4)}`);
+    }
+    if (!this._isPhone) {
+      g.append("text").attr("class", "rc-uw-note").attr("x", 0).attr("y", h + 13)
+        .text("countries whose floor bought less than in January 2019 · from 2020");
+    }
+    // Its own hover target — the main plot's rect stops at the axis, and a strip you cannot
+    // interrogate is a shape rather than a reading. Shares the singleton tooltip.
+    const bisect = d3.bisector(d => d.t).left;
+    g.append("rect").attr("class", "rc-uw-hit").attr("x", 0).attr("y", -4)
+      .attr("width", iw).attr("height", h + 8).attr("fill", "transparent")
+      .on("mousemove", (e) => {
+        const [mx] = d3.pointer(e, g.node());
+        const t = x.invert(mx);
+        const i = Math.max(0, Math.min(series.length - 1, bisect(series, t)));
+        const a = series[Math.max(0, i - 1)], b = series[i];
+        const d = (!a || Math.abs(b.t - t) < Math.abs(a.t - t)) ? b : a;
+        this.ctx.tooltip.show(
+          `<h5>${MONTH_ABBR[+d.key.slice(5) - 1]} ${d.key.slice(0, 4)}</h5>` +
+          `<div class="row"><span class="key">Floors below their 2019 level</span>` +
+          `<span class="val">${d.n} of ${this._uwTotal}</span></div>`,
+          e.clientX, e.clientY);
+      })
+      .on("mouseleave", () => this.ctx.tooltip.hide());
+
+    this._uwG = g; this._uwY = y; this._uwH = h;
   }
 
   _renderChips() {
@@ -301,8 +431,8 @@ export class RaceChart extends BaseChart {
         this._extraG.append("path").datum(ser).attr("class", "race-extra-line").attr("fill", "none")
           .attr("stroke", col).attr("stroke-width", 1.5).attr("stroke-dasharray", "3 3").attr("stroke-opacity", 0.7).attr("stroke-linejoin", "round").attr("d", line);
         const vis = ser.filter(d => d.t <= domHi); const end = vis.at(-1) || ser.at(-1);
-        this._extraG.append("text").attr("class", "race-extra-label").attr("x", x(end.t) + 4).attr("y", y(end.v) + 3)
-          .attr("paint-order", "stroke").attr("stroke", "var(--bg)").attr("stroke-width", 3).attr("fill", col).text(code);
+        this._extraG.append("text").attr("class", `race-extra-label race-extra-label--${k}`).attr("x", x(end.t) + 4).attr("y", y(end.v) + 3)
+          .attr("paint-order", "stroke").attr("stroke", "var(--bg)").attr("stroke-width", 3).text(code);   /* [D93] colour via the class; 11px text takes the text-safe jade/claret */
       });
     });
   }
@@ -326,18 +456,28 @@ export class RaceChart extends BaseChart {
     this._g.select(".rc-gap-jade").transition(t).attr("d", area.y0(d => y(d.price)).y1(d => y(d.pay)).defined(d => d.pay >= d.price)(rows));
     this._g.select(".rc-gap-claret").transition(t).attr("d", area.y0(d => y(d.price)).y1(d => y(d.pay)).defined(d => d.pay < d.price)(rows));
     this._g.selectAll(".rc-end-dot,.rc-end-name").style("opacity", crisis ? 0 : 1);
-    const bm = BEATS[this._beat]; if (bm && this._beatLine) this._beatLine.transition(t).attr("x1", x(p(bm))).attr("x2", x(p(bm)));
+    const bm = BEATS[this._beat]; if (bm && this._beatLine) this._beatLine.interrupt("beat").transition(t).attr("x1", x(p(bm))).attr("x2", x(p(bm)));
     this._setKicker(1);
-    this._drawExtras();
+    // [P3.6] The compare overlays are rebuilt from scratch, so they cannot be tweened in place —
+    // they used to snap to the new scale while the base lines eased for 600ms. Deferred to the end
+    // of that same transition so they appear already correct instead of visibly wrong first.
+    if (t && t.duration && t.duration() > 0) t.end().then(() => this._drawExtras()).catch(() => {});
+    else this._drawExtras();
     this._syncZoomButtons();
   }
 
   _applyBeat(beat) {
+    const first = this._beat === beat || !this._beatG;   // [P3.6] a re-assert, or the very first paint
     this._beat = beat;
     const m = BEATS[beat]; if (!m || !this._beatG) return;
     const bx = this._x(this._parse(m));
     const dur = this.ctx.motion.reduced ? 0 : 500;
-    this._beatLine.attr("x1", bx).attr("x2", bx);
+    // [P3.6] The marker used to TELEPORT between beats while _applyZoom transitions the very same
+    // line over 600ms — two different motion rules for one element. It now slides on the same
+    // 500ms the group's fade already uses. A first paint (or a re-assert after a re-render) still
+    // snaps: there is no previous position to slide from.
+    if (first || dur === 0) this._beatLine.interrupt("beat").attr("x1", bx).attr("x2", bx);
+    else this._beatLine.interrupt("beat").transition("beat").duration(dur).ease(d3.easeCubicInOut).attr("x1", bx).attr("x2", bx);
     this._beatG.interrupt().transition().duration(dur).style("opacity", 1);
   }
 
@@ -351,6 +491,6 @@ export class RaceChart extends BaseChart {
       .transition().delay(k * 220).duration(850).ease(d3.easeCubicOut).attr("r", 22).style("opacity", 0).remove();
   }
 
-  destroy() { if (this._unwatch) this._unwatch(); super.destroy(); }
+  destroy() { if (this._unwatch) this._unwatch(); clearTimeout(this._retryT); super.destroy(); }
   onThemeChange() { this.render(); }
 }

@@ -37,7 +37,23 @@
   --accent-rose     : #EB5E8D;   /* FT rose — strokes >=3px or fills ONLY, never text (2.91:1) */
   --accent-soft     : #D9A4B0;   /* soft claret wash — thin dashed leaders */
   --accent-veil     : color-mix(in srgb, var(--accent) 8%, transparent); /* CSS-only, never fed to d3 */
-  --link            : #0D7680;   /* FT teal, 4.84:1 — links / controls / focus rings */
+  /* [P6.4] Every color-mix() in the project now lives in this file. The values are the literals
+     they replace, character for character — this pass moves colour OUT of the rule files, it does
+     not retune anything. Keeping them here is what makes the D15 rule enforceable: a chart rule
+     can no longer grow a color-mix() that someone later hands to a d3 scale, where it renders
+     black. Each mixes a theme-aware token, so one definition serves light and dark. */
+  --veil-non-eu-map   : color-mix(in srgb, var(--ink-faint) 14%, transparent);  /* choropleth */
+  --veil-non-eu-score : color-mix(in srgb, var(--ink-faint) 12%, transparent);  /* scoreMap */
+  --ring-thumb        : color-mix(in srgb, var(--accent) 18%, transparent);     /* range thumb */
+  --ring-thumb-hover  : color-mix(in srgb, var(--accent) 14%, transparent);
+  /* [P8.2] The ledger's 2022 trough dot. It has to read as a MEMORY next to the solid endpoint
+     dot, but it carries half the chart's information, so it is a graphic under WCAG 1.4.11 and
+     owes 3:1 — which claret at the 0.34 fill-opacity it started at does not give (1.91:1 light,
+     1.35:1 dark). Flat hex per theme instead of an opacity: light is claret at 60% over paper,
+     dark is FT rose over slate, because dark claret tops out at 3.24:1 even at full strength. */
+  --db-trough         : #C26980;
+  --link              : #0D7680;   /* FT teal, 4.84:1 — links / controls / focus rings */
+  --link-underline    : color-mix(in srgb, var(--link) 30%, transparent);
   --link-hover      : #08474D;
 
   /* Sequential severity ramp — GREEN -> AMBER -> RED (owner override, 2026-06-15).
@@ -78,7 +94,14 @@
   --cat-food      : #9DBF57;
   --cat-housing   : #208FCE;
   --cat-services  : #593380;   /* velvet */
-  --cat-wages     : #00994D;   /* jade */
+  --cat-wages     : #00994D;   /* jade, 3.35:1 — a line/fill/large-number colour, NOT small text */
+  /* [D93] jade AS TEXT. Exactly the --accent-text / --seq-lo-text pattern: a darker, same-hue
+     (150deg, fully saturated) variant for when the wages series must render as a small LABEL
+     rather than as a stroke. Needed because P2.1 makes the race chart's 12px "Pay 150" end name
+     actually take its series colour for the first time, and --cat-wages measures 3.35:1 on paper
+     — under the 4.5:1 small-text bar. The big kickers (44px/40px) keep pure --cat-wages: at
+     large-text size 3:1 is the bar and 3.35 clears it. */
+  --cat-wages-text: #007A3D;   /* darker jade, 4.92:1 */
   --cat-transport : #70DCE6;
   /* [D90-I3] Café & restaurants (CP11) gets its OWN hue at last. It had been coloured three
      different ways — housing blue in CH2, --cat-other grey in the CH6 bars, services violet in
@@ -191,10 +214,21 @@
   --w-wide     : 78rem;
   --w-full     : 96rem;
 
-  /* Z-index */
+  /* Z-index — every fixed layer on the page, in stacking order, so a new one can be placed by
+     reading this list instead of by grepping for the highest number in use. */
+  --z-dock     : 40;    /* phone step dock */
   --z-header   : 50;
+  --z-popover  : 60;    /* InfoPop */
   --z-tooltip  : 90;
   --z-modal    : 100;
+
+  /* Shadows for the three fixed surfaces. NOT folded into --shadow-1..3: those are warm
+     (rgba(51,48,46,...)) and these are neutral black, so reusing them would retune three
+     surfaces during a hygiene pass. The mismatch is real and logged as a candidate; the values
+     here are the literals, unchanged. */
+  --shadow-pop  : 0 8px 30px rgba(0, 0, 0, 0.18);   /* InfoPop */
+  --shadow-dock : 0 -2px 28px rgba(0, 0, 0, .14);   /* phone dock — throws UPWARD */
+  --shadow-rail : 0 1px 6px rgba(0, 0, 0, 0.08);    /* step rail */
 }
 
 /* ============================================================
@@ -260,6 +294,7 @@
   --cat-housing   : #4FA9DD;
   --cat-services  : #8A6DB8;
   --cat-wages     : #1FB36A;
+  --cat-wages-text: #1FB36A;   /* [D93] dark jade already clears 4.5:1 as text (5.28) — same value, like --seq-lo-text */
   --cat-transport : #8FE6EE;
   --cat-restaurants: #C98A4E;   /* [D90-I3] tobacco, lifted for slate: 4.95:1 on --bg */
   --cat-other     : #C2B7AF;
@@ -276,6 +311,7 @@
   --anno-spread-fill : rgba(255,241,229,.07);
   --anno-spread-edge : rgba(255,241,229,.22);
 
+  --db-trough : #BC597B;   /* [P8.2] rose over slate — claret cannot reach 3:1 on this ground */
   --shadow-1 : 0 1px 0 rgba(0,0,0,.3),  0 0 1px rgba(0,0,0,.4);
   --shadow-2 : 0 4px 16px rgba(0,0,0,.5), 0 1px 2px rgba(0,0,0,.4);
   --shadow-3 : 0 20px 48px rgba(0,0,0,.6), 0 6px 14px rgba(0,0,0,.4);

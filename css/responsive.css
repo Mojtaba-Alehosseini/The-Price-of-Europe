@@ -43,8 +43,8 @@
   .chapter--a2 .panel-foot .ac-zoom { margin-inline-start: 0; }
 
   /* Heatmap → bar morph: on small screens, sparklines + event ticks would crowd. */
-  .chart-svg .spark, .chart-svg .spark-event-tick { display: none; }
-  .chart-svg .flag-glyph { width: 11px; height: 7px; }
+  .chart-svg .spark { display: none; }
+  
   .chart-svg .country-name { font-size: 11px; }
 
   .site-footer .footer-grid { grid-template-columns: 1fr; gap: var(--space-5); }
@@ -78,18 +78,12 @@
      61px danger zone with an ~11px buffer at every phone width. */
   .chapter--a2 .panel-head .chart-title { padding-inline-end: 72px; }
 
-  /* Trim the always-on choropleth hint on phone — touch users don't have
-     "alt+scroll", so the hint is misleading anyway. */
-  .choro-header__hint { display: none !important; }
+
 
   /* Choropleth kicker year stays large but extremes get more compact */
   .chart-svg .year-kicker { font-size: 44px; }
   .chart-svg .year-kicker-extreme { font-size: 10px; }
-  /* SmallMultiples kicker overrides — written AFTER .year-kicker so this wins
-     CSS-specificity ties (both single-class selectors). Even 38px overflows on
-     a 375px phone for the longest category name. */
-  .chart-svg .sml-kicker-text { font-size: 26px; }
-  .chart-svg .sml-kicker-sub  { font-size: 11px; }
+
   /* [Comp-eval R2] Mobile typography pass for the remaining charts.
      Pattern matches the chart 1 + 2 mobile passes: kicker smaller, sub smaller,
      axis labels tighter, legend caps muted. */
@@ -101,31 +95,18 @@
 
   /* Chart 5 — RateLevel: the ECB-2% label can't clear the rate line on the narrow phone top panel
      (text-vs-marks). Drop it — the dashed 2% line + step copy carry it; desktop keeps it (§C.1, clear).
-     The 129.7 end label runs off the narrow phone right margin — drop it too; the kicker shows 129.7. */
-  #chart-rateLevel svg .rl-ref-label,
-  #chart-rateLevel svg .rl-end-label { display: none; }
+     [P4.5] The end label is NO LONGER dropped here. It was, for a real reason ("runs off the narrow
+     phone right margin" — measured: it started at x=344 in a 357px svg), but that cost phone readers
+     the tie between the chapter's thesis number and the point on the curve it names. RateLevel.js now
+     places it INSIDE the plot on phone, right-aligned under the end dot, so the reason is gone. It
+     scales to 17px there: 22px is tuned to a 612px-wide desktop plot and reads oversized in 291px. */
+  #chart-rateLevel svg .rl-ref-label { display: none; }
+  #chart-rateLevel svg .rl-end-label { font-size: 17px; }
 
   /* Chart 3 — AnnotatedLine */
   #chart-annotatedLine + * .year-kicker,
   #chart-annotatedLine svg .year-kicker { font-size: 32px; }
   #chart-annotatedLine svg .year-kicker-sub { font-size: 10.5px; }
-  /* [R2 elevate] Peak callout shrinks but stays the headline number on phone. */
-  #chart-annotatedLine svg .anno-peak-num { font-size: 28px; }
-  #chart-annotatedLine svg .anno-peak-date { font-size: 9px; }
-  #chart-annotatedLine svg .anno-peak-eyebrow { font-size: 8px; }
-  /* Calm bracket + inline event label get crowded on 390px — drop them; the kicker
-     copy carries the same framing and the line itself is the message. */
-  #chart-annotatedLine svg .anno-calm-g { display: none; }
-  #chart-annotatedLine svg .anno-evt-text { font-size: 11px; }
-  /* [AUDIT 03] On phone the top-right legend duplicated the subtitle and rendered
-     as a sub-8px smear colliding with the peak/band labels. Drop it; the subtitle
-     above the chart already states the unit + aggregate. Mute the band labels too
-     (the bands themselves still carry the colour coding via the kicker copy). */
-  #chart-annotatedLine svg .anno-legend { display: none; }
-  #chart-annotatedLine svg .event-band-label { display: none; }
-  /* [R5·dual] Phone: drop the rotated right-axis caption (the €100/€90/€80 ticks + the "Your €100 · €77"
-     end label already mark the value axis); keeps the narrow 390px right edge from crowding. */
-  #chart-annotatedLine svg .anno-yr-cap { display: none; }
   /* [§B/§D.2 phone] The 390px plot can't hold these annotations off the line (text-vs-marks). Hide the
      secondary ones — the step dock carries the words and the peak number stays as the single callout;
      desktop keeps them all, collision-free per §B. */
@@ -154,14 +135,7 @@
      clamped header so the flex body fills ~70 % of the panel (≈ 480 px → ISO
      rows ~15 px). The SVG size() now matches the box exactly, so no shrink. */
   .scroller__chart[data-chart-mount="heatmap"] { block-size: 88dvh; }
-  .scroller__chart[data-chart-mount="heatmap"] .chart-subtitle {
-    font-size: 11px;
-    line-height: 1.32;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
+  
   .scroller__chart[data-chart-mount="heatmap"] .chart-source { font-size: 9.5px; }
 
   /* [D87] waffle stacks its OWN header+kicker+legend above a still-full 6-row bars block on
@@ -183,14 +157,7 @@
      line and tighten the header/source. That lifts the flex body ≈ +80px so each
      panel gets ~45px — enough to read each curve's shape. Mirrors the heatmap
      pattern above (chart-scoped, no shared-layout change). */
-  .scroller__chart[data-chart-mount="smallMultiples"] .chart-subtitle {
-    font-size: 11px;
-    line-height: 1.3;
-    display: -webkit-box;
-    -webkit-line-clamp: 1;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
+  
   .scroller__chart[data-chart-mount="smallMultiples"] h3 { font-size: var(--fs-300); }
   .scroller__chart[data-chart-mount="smallMultiples"] .chart-source { font-size: 9px; }
 
@@ -212,15 +179,12 @@
   /* [Morph-v2 · Task 9] Mobile overrides for the bar morph layer */
   .bars-textbox--top { max-inline-size: 90vw; }
   .bars-textbox__title { font-size: 18px; }
-  .bars-textbox__eyebrow { font-size: 9px; letter-spacing: 0.18em; }
+  
   /* Note + legend are hidden ≤1100px (see the morph de-crowd block below); on phone the
      title + the centred EU-27 tag under the zero line carry the deviation framing. Drop the
      verbose directional cues too — the tag alone is the reference on the narrowest screens. */
   .choro-bars-svg .bars-axis-dir { display: none; }
-  .choro-bars-svg .bar-spark,
-  .choro-bars-svg .bar-spark-line,
-  .choro-bars-svg .bar-spark-dot,
-  .choro-bars-svg .bar-spark-event { display: none; }
+  .choro-bars-svg .bar-spark { display: none; }
 
   .theme-toggle { padding: 2px; }
   .theme-toggle button { inline-size: 24px; block-size: 24px; }
@@ -290,13 +254,13 @@
     position: fixed;
     left: var(--space-4); right: var(--space-4);
     inset-block-end: var(--space-4);
-    z-index: 40;
+    z-index: var(--z-dock);
     max-block-size: 44dvh; overflow-y: auto;
     padding: var(--space-4) var(--space-5);
     background: var(--bg-elev);
     border: 1px solid var(--rule);
     border-radius: var(--radius-2);
-    box-shadow: 0 -2px 28px rgba(0, 0, 0, .14);
+    box-shadow: var(--shadow-dock);
     opacity: 0; transform: translateY(14px); pointer-events: none;
     transition: opacity var(--dur-3, 280ms) var(--ease-out), transform var(--dur-3, 280ms) var(--ease-out);
   }
@@ -339,7 +303,7 @@
 }
 @media (max-width: 480px) {
   .chapter--v2 .scroller__steps { padding-block-start: 58dvh; gap: 65dvh; }
-  .chapter--v2 > .chapter-title { font-size: var(--fs-400); }
+  
 }
 
 /* ============================================================
@@ -354,7 +318,7 @@
    ============================================================ */
 @media (max-width: 1100px) {
   .bars-textbox__note { display: none; }
-  .bars-legend { display: none; }
+  
   /* The closing prose restates what the bars + title + axis tag already show; bottom-anchored
      over 27 dense bars it overlapped the lowest rows at these widths (tablet-06). Drop it ≤1100. */
   .bars-textbox--bottom { display: none; }

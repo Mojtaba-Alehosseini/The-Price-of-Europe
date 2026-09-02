@@ -1,8 +1,8 @@
 /* ============================================================
    Housing — CH7 "The biggest bill" (brief §6 CH7).
-   The house price index (prc_hpi, rebased 2015 = 100, EU country-mean) against
+   The house price index (prc_hpi_q, total purchases, rebased 2015 = 100) against
    consumer prices (HICP CP00, same base). The gap is the story: over 2015–2025
-   house prices climbed ~92% while consumer prices climbed ~33% — and only the
+   house prices climbed ~62% while consumer prices climbed ~33% — and only the
    second is in the inflation number on the news.
      step 0 (lines)     — both lines trace on
      step 1 (countries) — a dot-range of the top-5 / bottom-5 countries by HPI change,
@@ -10,8 +10,11 @@
                            consumer-price rise over the identical window (D88 R3 — the
                            chart now proves the claim per-country, not just at EU level)
      step 2 (gap)       — the gap area between the two lines is tinted
-   No official EU HPI aggregate exists in the data → the EU line is the equal-weighted
-   country mean (26 countries; logged in LOG/methodology).
+   [D92] The EU line is Eurostat's own EU27_2020 aggregate. It was an equal-weighted
+   country mean until round 6, on the belief that no official aggregate existed — it did,
+   the old pipeline just filtered aggregates out before writing the file. The dot-range
+   below is per-country and unaffected. Greece is absent from every view because Eurostat
+   publishes no house price index for EL at all, so the country set is 26, not 27.
    [D88] Colour discipline: house prices (the protagonist) are --accent everywhere,
    including every dot in the step-1 range regardless of top/bottom group — the row's
    OWN position already carries the ranking, colour must not double-encode it. Consumer
@@ -89,15 +92,23 @@ export class Housing extends BaseChart {
     this.opts.margin = isPhone ? { top: 18, right: 46, bottom: 30, left: 40 } : { top: 22, right: 86, bottom: 34, left: 52 };
     const { width, height } = this.ensureSvg();
     this.W = width; this.H = height;
-    this.svg.attr("aria-label", "House prices versus consumer prices in the EU, rebased to 100 in 2015: by 2025 house prices climbed about 92% while consumer prices climbed about 33%.");
     const M = this.opts.margin;
     const iw = width - M.left - M.right, ih = height - M.top - M.bottom;
     this._iw = iw; this._ih = ih;
 
-    // countries with 2015 HPI (for the mean + the dot-range)
+    // countries with 2015 HPI (for the dot-range; the EU line no longer averages them)
     const countries = Object.keys(this.data.hpi).filter(g => /^[A-Z]{2}$/.test(g) && this.data.hpi[g]?.[Y0] != null);
     this._countries = countries;
+    // [D92] The EU line is Eurostat's OWN EU27_2020 aggregate, not an equal-weighted country
+    // mean. The mean was a workaround for an aggregate the old pipeline filtered out before
+    // writing the file, and it over-weighted small fast markets — Hungary's +267% counted the
+    // same as Germany's +53%, inflating "the EU" to +93% against the official +62%. Falls back
+    // to the mean if the aggregate is ever missing, so the chart cannot go blank on a data swap.
+    const AGG = "EU27_2020";
+    const hasAgg = this.data.hpi[AGG]?.[Y0] != null;
+    this._euBasis = hasAgg ? AGG : "mean";
     const hpiEU = y => {
+      if (hasAgg) { const b = this.data.hpi[AGG]?.[Y0], v = this.data.hpi[AGG]?.[y]; return (b && v) ? v / b * 100 : null; }
       const r = countries.map(g => { const b = this.data.hpi[g]?.[Y0], v = this.data.hpi[g]?.[y]; return (b && v) ? v / b * 100 : null; }).filter(x => x != null);
       return r.length ? d3.mean(r) : null;
     };
@@ -109,6 +120,8 @@ export class Housing extends BaseChart {
     this._hpiLine = hpiLine; this._hicpLine = hicpLine;
     this._hpiEU = hpiEU; this._hicpEU = hicpEU; this._years = years;   // [§C.3] reused by _applyZoom
     const hpiEnd = hpiLine.at(-1).v, hicpEnd = hicpLine.at(-1).v;
+    // [D92] derived, never a literal — the numbers in the alt text are the numbers drawn.
+    this.svg.attr("aria-label", `House prices versus consumer prices in the EU, rebased to 100 in ${Y0}: by ${Y1} house prices climbed about ${Math.round(hpiEnd - 100)}% while consumer prices climbed about ${Math.round(hicpEnd - 100)}%.`);
 
     const x = d3.scaleLinear().domain([Y0, Y1]).range([0, iw]);
     const y = d3.scaleLinear().domain([95, Math.ceil((hpiEnd + 8) / 10) * 10]).range([ih, 0]);
@@ -164,10 +177,19 @@ export class Housing extends BaseChart {
     this._wireHover();
 
     // motion
+    // [P3.3] `_view` used to be hard-reset to "lines" on EVERY render, so a dark-mode toggle taken
+    // on step 1 or 2 visibly rewound the chapter — the dot-range vanished and the reader was back
+    // at the opening view. render() is called bare by BaseChart.resize()/onThemeChange with no step
+    // re-entry guaranteed to follow, so it must repaint what is already current. Waffle's own
+    // firstMount pattern (WaffleChart.js ~236) is the model. `_drawn` genuinely does start at 0
+    // here: watchChapterProgress computes once on subscribe, so the latch refills immediately from
+    // the real scroll position.
     this._drawn = 0;
-    this._view = "lines";
-    if (this.ctx.motion.reduced) { this._revealTo(1); this._snapView("gap"); this._view = "gap"; }   // final state = lines + gap tint
-    else { this._wireScroll(); }
+    this._viewSeq++;   // [P3.5] a re-render supersedes any in-flight gap-phase sequence
+    const firstMount = this._view == null;
+    if (firstMount) this._view = this.ctx.motion.reduced ? "gap" : "lines";   // reduced mounts at the settled end state
+    if (this.ctx.motion.reduced) { this._revealTo(1); this._snapView(this._view); }
+    else { this._wireScroll(); if (!firstMount) this._snapView(this._view); }
 
     // [§C.3] zoom presets (no country chips — the dot-range already lists countries) + restore on re-render
     this._buildControls();
@@ -333,9 +355,19 @@ export class Housing extends BaseChart {
   // that skips a view entirely (lines<->gap direct) snaps instead of racing a multi-phase
   // animation the reader never watched start, matching this project's established
   // rail-jump-safety precedent (D86/D87).
+  /* [P2.3] The 10 full-plot-width row hit-rects live in _dotG, which is appended ABOVE the line
+     group — and opacity 0 hides a rect without stopping it hit-testing. Outside the countries
+     view they therefore swallowed every mousemove: the year crosshair never appeared anywhere on
+     the plot, and hovering the line chart popped a country ROW's tooltip. They are live only
+     where the rows actually are. Called from both view entry points — _setView covers every
+     animated transition, _snapView covers the reduced-motion mount and the unpin reset, which
+     assign `_view` directly. */
+  _setHitLive(view) { this._dotG?.classed("is-hit-live", view === "countries"); }
+
   _setView(view) {
     const prev = this._view;
     this._view = view;
+    this._setHitLive(view);
     if (!this.rendered) return;
     if (this.ctx.motion.reduced) { this._snapView(view); return; }
     if (prev === view) return;
@@ -349,6 +381,7 @@ export class Housing extends BaseChart {
   }
 
   _snapView(view) {
+    this._setHitLive(view);
     const M = this.opts.margin;
     this._g.interrupt("view").style("opacity", view === "lines" || view === "gap" ? 1 : 0).attr("transform", `translate(${M.left},${M.top})`);
     this._dotHeaderG.interrupt("header").style("opacity", view === "countries" ? 1 : 0);
@@ -419,7 +452,10 @@ export class Housing extends BaseChart {
     const seq = ++this._viewSeq;
     this._exitRows(); this._enterLines();
     const dataRowCount = this._rowSel.filter(r => r.datum()).length;
-    await new Promise(r => setTimeout(r, Math.max(LINES_MS, (dataRowCount - 1) * ROW_STAGGER_MS + ROW_SLIDE_MS)));
+    // [P3.5] The phase gap is a real timer and needs a handle — destroy() (and a re-render) must be
+    // able to cancel it. The _viewSeq check after it already stops a superseded sequence from
+    // acting, but the timeout itself kept the callback alive until it fired.
+    await new Promise(r => { this._gapPhaseT = setTimeout(r, Math.max(LINES_MS, (dataRowCount - 1) * ROW_STAGGER_MS + ROW_SLIDE_MS)); });
     if (seq !== this._viewSeq) return;
     await this._fadeGapTint(1);
     if (seq !== this._viewSeq) return;
@@ -434,6 +470,6 @@ export class Housing extends BaseChart {
     this._exitLines(); this._enterRows();
   }
 
-  destroy() { if (this._unwatch) this._unwatch(); super.destroy(); }
+  destroy() { if (this._unwatch) this._unwatch(); clearTimeout(this._gapPhaseT); super.destroy(); }
   onThemeChange() { this.render(); }
 }

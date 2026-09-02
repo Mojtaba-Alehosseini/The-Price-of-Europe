@@ -15,22 +15,16 @@ p, h1, h2, h3, h4, h5, h6 { overflow-wrap: break-word; }
 :focus-visible { outline: 2px solid var(--link); outline-offset: 3px; border-radius: 4px; }
 
 /* Webfonts (Source Serif 4 display, Schibsted Grotesk UI, JetBrains Mono numerals) are served by
-   the Google Fonts @font-face in <head>. Body is Georgia — a system serif: zero load, zero CLS.
-   Keep local()-only registrations so a locally-installed copy is used when present. */
-@font-face {
-  font-family: "Source Serif 4";
-  src: local("Source Serif 4"), local("SourceSerif4-Regular");
-  font-weight: 200 900;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: "Schibsted Grotesk";
-  src: local("Schibsted Grotesk"), local("SchibstedGrotesk-Regular");
-  font-weight: 400 900;
-  font-style: normal;
-  font-display: swap;
-}
+   css/fonts.css — self-hosted variable subsets, loaded BEFORE this file. Body is Georgia, a system
+   serif: zero load, zero CLS.
+   [P6.1] Two local()-only @font-face registrations used to sit here, meant as a courtesy to readers
+   with the fonts installed. They were a liability, not a courtesy. Being declared after fonts.css,
+   they won the match for their families on any machine that had them — serving a local copy in
+   place of the vendored subset. That subset is not a mirror: it carries U+2192 and U+2194, which
+   Google's own latin subset omits and this essay sets mid-sentence. So the fallback they invited
+   was exactly the arrow fallback fonts.css was built to end. They also declared wider weight ranges
+   (200 900 / 400 900) than the real faces (400 700 / 400 600), which is what made a
+   `font-weight: 380` look reasonable when nothing could render it. */
 
 html {
   font-family: var(--font-body);
@@ -102,12 +96,16 @@ p strong { color: var(--ink); font-weight: 600; }
 p em { color: var(--ink); font-style: italic; }
 
 /* Tabular numerals on every data-number run — figures (charts + their controls), the
-   singleton tooltip, and the .tnum/.num/.tabular/output utilities. */
-.tnum, .num, .tabular, figure, output, .tooltip { font-variant-numeric: tabular-nums; }
+   singleton tooltip, and the .num/output utilities. (.tnum and .tabular were listed here
+   too and are gone: nothing in index.html or js/ ever carried either class.) */
+.num,
+figure,
+output,
+.tooltip { font-variant-numeric: tabular-nums; }
 
 a {
   color: var(--link);
-  text-decoration-color: color-mix(in srgb, var(--link) 30%, transparent);
+  text-decoration-color: var(--link-underline);
   text-decoration-thickness: 1.5px;
   text-underline-offset: 3px;
   transition: color var(--dur-2) var(--ease-out);
@@ -147,6 +145,12 @@ code, kbd, samp {
     animation-duration: 0ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0ms !important;
+    /* [P4.4] Zeroing the DURATIONS alone leaves a delayed transition still waiting: the change
+       lands instantly, but only after the delay elapses, which for a reduced-motion reader is the
+       same "why is nothing happening" the block exists to remove. No uncovered victim in today's
+       CSS -- this closes the gap rather than fixing a symptom. */
+    transition-delay: 0ms !important;
+    animation-delay: 0ms !important;
     scroll-behavior: auto !important;
   }
 }

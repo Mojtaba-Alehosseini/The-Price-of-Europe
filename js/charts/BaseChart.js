@@ -99,7 +99,12 @@ export class BaseChart {
 
   destroy() {
     this._themeUnsub && this._themeUnsub();
-    this._unsub && this._unsub();   // BUG-2/BUG-8 — cancel ChartMotion.watchChapterProgress scroll/resize listeners
+    // [P3.5] `_unsub` is a dead net and the old comment claimed otherwise: NO chart sets it. Every
+    // chart that subscribes to watchChapterProgress stores the unsubscribe as `_unwatch` and
+    // releases it in its own destroy() override (Housing, RaceChart, RateLevel, Heatmap, ScoreMap,
+    // SmallMultiplesLine, Choropleth). Kept as a no-op hook rather than deleted so a future chart
+    // can opt in, but it catches nothing today — do not rely on it.
+    this._unsub && this._unsub();
     this._unpinIO && this._unpinIO.disconnect();
     if (this.container) this.container.innerHTML = "";
     this.svg = null;

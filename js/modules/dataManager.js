@@ -7,9 +7,10 @@
    ============================================================ */
 
 // [R2 perf] Split loading. Only CRITICAL (~0.6 MB) is fetched before first paint;
-// the heavy datasets (≈19 MB) are DEFERRED — prefetched on idle after paint and
+// the heavy datasets (≈19 MB) are DEFERRED — prefetched on first interaction and
 // awaited per-chart on mount (ensureFor) — so they never compete with the hero LCP
-// image. house_price_index.json was loaded but read by no chart → dropped entirely.
+// image. (house_price_index.json was dropped in R2 when no chart read it; the respin's
+// CH7 brought it back — see DEFERRED_PATHS below.)
 const CRITICAL_PATHS = {
   hicpAnnual   : "data/processed/hicp_annual.json",
   events       : "data/processed/events_timeline.json",
@@ -32,7 +33,7 @@ const CHART_NEEDS = {
   heatmap: ["hicpMonthly"],   // respin CH4: category×month cut of the EU-27 monthly YoY
   divergingBar: ["minWages", "hicpIndex"],
   waffle: ["hicpIndex"],
-  boxplot: [],
+  boxplot: ["hicpIndex"],   // [P5.2] the coin bookend derives EUR 100 -> its buying power from the same series the waffle reads
   rateLevel: ["hicpMonthly", "hicpIndex"],   // respin CH5: top = monthly YoY, bottom = rebased index level
   housing: ["hpi", "hicpIndex"],   // respin CH7: house price index vs HICP, rebased
   race: ["minWages", "hicpIndex"],   // respin CH8: median min-wage index vs prices
@@ -233,20 +234,31 @@ export class DataManager {
     return ((b - a) / a) * 100;
   }
 
-  /** Real minimum-wage change 2019 → 2024 per country, sorted desc by `real`.
+  /** Real minimum-wage change 2019 → 2025 per country, sorted desc by `real`.
    *  real = (1 + nominal wage Δ) / (1 + HICP Δ) − 1, ×100. The SINGLE source of this
    *  computation — DivergingBar (the ledger) and ScoreMap (the map) both call this so
-   *  their 15-gained / 6-lost split can never diverge (respin CH9, brief "do not fork").
-   *  2024 window (not 2025) because that is the window the essay's verbatim "Fifteen
-   *  gained. Six lost." + "Lithuania −0.02%" copy describes; 2019→2025 gives 16/5. */
+   *  their gained/lost split can never diverge (respin CH9, brief "do not fork").
+   *  [D91] `nominal` means NATIONAL-CURRENCY wage growth (minimum_wages.json now carries
+   *  a `currency` column proving the basis), deflated by that country's own HICP. Until
+   *  round 6 the file silently shipped PPS — already purchasing-power-adjusted — so this
+   *  formula deflated it twice and produced the old "15 gained / 6 lost" split.
+   *  [P8.1] Window: **2019-S1 wage → latest 2025 semester**, against HICP **2019-01 → 2025-12**.
+   *  It used to end at 2024-S1, kept only because the ledger's subtitle said so — and that made
+   *  the essay run on three clocks at once: this ledger at 2024, the race at 2025-12, and the
+   *  scoreMap's own eyebrow reading "2025". One clock now. The split is unchanged at 20 gained /
+   *  1 lost, but two per-country numbers move enough to matter: France deepens −0.71 → −1.43
+   *  (still the only floor under water) and Czechia leaves the knife's edge, +0.43 → +7.01.
+   *  Fallbacks descend one period at a time so a country that has not published the newest
+   *  semester still resolves rather than dropping out of the ledger entirely.
+   *  Offline cross-check (prints BOTH windows side by side): scripts/validate_wages_hpi.mjs. */
   realWageRows() {
     const rows = [];
     this.countriesByCode.forEach((meta, code) => {
       if (!meta.minWage) return;
       const w0 = this.minWages[code]?.["2019-S1"] ?? this.minWages[code]?.["2019-S2"];
-      const w1 = this.minWages[code]?.["2024-S1"] ?? this.minWages[code]?.["2024-S2"] ?? this.minWages[code]?.["2023-S2"];
+      const w1 = this.minWages[code]?.["2025-S2"] ?? this.minWages[code]?.["2025-S1"] ?? this.minWages[code]?.["2024-S2"];
       const p0 = this.hicpIndex[code]?.CP00?.["2019-01"];
-      const p1 = this.hicpIndex[code]?.CP00?.["2024-01"] ?? this.hicpIndex[code]?.CP00?.["2023-12"];
+      const p1 = this.hicpIndex[code]?.CP00?.["2025-12"] ?? this.hicpIndex[code]?.CP00?.["2025-11"];
       if ([w0, w1, p0, p1].some(v => v == null)) return;
       const nom = ((w1 - w0) / w0);
       const hicp = ((p1 - p0) / p0);
@@ -255,6 +267,71 @@ export class DataManager {
     });
     rows.sort((a, b) => b.real - a.real);
     return rows;
+  }
+
+  /** [P8.2] Each country's WORST real position during 2022 — the trough the ledger's dumbbell
+   *  draws, and the evidence behind CH8's "seventeen of these twenty-one" sentence.
+   *
+   *  Construction, and why each choice matters:
+   *   - "In force" wage, not interpolated. A statutory floor STEPS: the S1 figure is what is
+   *     actually paid January–June, S2 July–December. RaceChart interpolates between semesters
+   *     because it draws one smooth median line; using that here would credit countries with
+   *     raises they had not yet received and undercount the damage (17 becomes 12).
+   *   - Each country against its OWN HICP, both indexed to its own start (2019-S1 wage,
+   *     2019-01 prices), so the number is comparable with `realWageRows()`'s endpoint.
+   *   - The minimum over the twelve months of 2022 — the year the essay is about.
+   *  Returns Map(code -> { real, month }). Offline cross-check: scripts/validate_wages_hpi.mjs §6b. */
+  realWageTrough2022() {
+    const out = new Map();
+    this.countriesByCode.forEach((meta, code) => {
+      if (!meta.minWage) return;
+      const w0 = this.minWages[code]?.["2019-S1"] ?? this.minWages[code]?.["2019-S2"];
+      const p0 = this.hicpIndex[code]?.CP00?.["2019-01"];
+      if (w0 == null || p0 == null) return;
+      let best = null;
+      for (let m = 1; m <= 12; m++) {
+        const mm = String(m).padStart(2, "0");
+        const p = this.hicpIndex[code]?.CP00?.[`2022-${mm}`];
+        const w = this.minWages[code]?.[`2022-${m <= 6 ? "S1" : "S2"}`];
+        if (p == null || w == null) continue;
+        const real = ((w / w0) / (p / p0) - 1) * 100;
+        if (!best || real < best.real) best = { real, month: `2022-${mm}` };
+      }
+      if (best) out.set(code, best);
+    });
+    return out;
+  }
+
+  /** [P8.3] For every month 2019-01 → 2025-12, how many minimum-wage countries' floors bought LESS
+   *  than they did in 2019. The race draws one median line, which never goes under; this is the
+   *  count the median hides, and the number CH8 step 2 already states in words.
+   *
+   *  Same in-force semester step as `realWageTrough2022()` and for the same reason: the race's own
+   *  pay line interpolates between semesters because it is a single smooth median, and reusing it
+   *  here would credit countries with raises they had not yet received — the 2022 peak reads 17
+   *  in force and 12 interpolated. The strip must agree with the ledger beside it, so it shares
+   *  the ledger's construction, not the line it sits under. */
+  underWaterCounts() {
+    const geos = [...this.countriesByCode.keys()].filter(c => this.countriesByCode.get(c).minWage);
+    const months = this.monthsCP00().filter(t => t >= "2019-01" && t <= "2025-12").sort();
+    const base = new Map();
+    for (const g of geos) {
+      const w0 = this.minWages[g]?.["2019-S1"] ?? this.minWages[g]?.["2019-S2"];
+      const p0 = this.hicpIndex[g]?.CP00?.["2019-01"];
+      if (w0 != null && p0 != null) base.set(g, { w0, p0 });
+    }
+    return months.map(t => {
+      const [y, mm] = t.split("-");
+      const sem = `${y}-${+mm <= 6 ? "S1" : "S2"}`;
+      let n = 0;
+      for (const [g, b] of base) {
+        const w = this.minWages[g]?.[sem];
+        const p = this.hicpIndex[g]?.CP00?.[t];
+        if (w == null || p == null) continue;
+        if ((w / b.w0) / (p / b.p0) - 1 < 0) n++;
+      }
+      return { t, n };
+    });
   }
 }
 

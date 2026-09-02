@@ -291,7 +291,12 @@ export class AnnotatedLine extends BaseChart {
         ).join("");
         this.ctx.tooltip.show(html, event.clientX, event.clientY);
       })
-      .on("mouseleave", () => { this._ch.style("opacity", 0); this.ctx.tooltip.hide(); });
+      .on("mouseleave", () => { this._ch.style("opacity", 0); this.ctx.tooltip.hide(); })
+      // [P4.3] Touch parity, the house pattern (Heatmap.js / WaffleChart.js): a tap has no
+      // hover, so re-run this rect's OWN mousemove listener on a non-mouse pointerdown.
+      // `.on("mousemove")` with one argument is d3's getter -- it returns the listener just
+      // registered above, so there is exactly one handler body and no risk of the two drifting.
+      .on("pointerdown", function (e) { if (e.pointerType !== "mouse") d3.select(this).on("mousemove").call(this, e); });
 
     // [AMENDMENT-3 §5.1 real-click fix] SVG paints/hit-tests in document order — a later
     // sibling always wins over an earlier subtree, however deep it's nested. `_hitRect` is a
@@ -336,9 +341,12 @@ export class AnnotatedLine extends BaseChart {
     this._bands.forEach(b => {
       const bx = Math.max(0, x(this._parse(b.from))), bxr = Math.min(iw, x(this._parse(b.to))), bw = Math.max(0, bxr - bx);
       sel(b._g.select(".anno-band-rect")).attr("x", bx).attr("width", bw);
-      b._clipRect.attr("x", bx).attr("y", 0).attr("width", bw).attr("height", ih);
+      // [P3.6] the clip rect eases WITH its band. It used to jump to the new window immediately,
+      // so mid-zoom the label was clipped against a rect that no longer matched the rect the
+      // reader could see — the label popped outside its own band for the length of the transition.
+      sel(b._clipRect).attr("x", bx).attr("y", 0).attr("width", bw).attr("height", ih);
       // §B.5/§G.8 squish the label to fit inside its band width so its bbox stays inside the band rect.
-      b._lbl.attr("x", bx + bw / 2).attr("textLength", null).attr("lengthAdjust", null);
+      sel(b._lbl.attr("textLength", null).attr("lengthAdjust", null)).attr("x", bx + bw / 2);
       // The label used to inherit its band group's opacity (nested opacity multiplies down),
       // so "too narrow to show" (bw<=70) always won even when the group itself was visible.
       // Since §5.1 raised the label out of the group (for real-click hit-testing), that
@@ -360,11 +368,18 @@ export class AnnotatedLine extends BaseChart {
     // peak dot + stamp + leader (stamp fixed upper-left)
     const sx = this._isPhone ? 4 : x(this._parse("2019-02")), sy = this._isPhone ? y(9.4) : this._ih * 0.13;
     sel(this._peakDot).attr("cx", x(this._peak.t)).attr("cy", y(this._peak.v));
-    this._peakEyebrow.attr("x", sx).attr("y", sy);
-    this._peakNum.attr("x", sx).attr("y", sy + 40);
+    // [P3.6] the whole stamp moves with the x window, so it eases with everything else. The
+    // sentence is re-wrapped (tspans are rebuilt, they cannot be tweened in place), so it is
+    // rebuilt at the PREVIOUS x and its tspans then transition across — otherwise the eyebrow and
+    // number would ease while the sentence under them jumped straight to the destination.
+    const sxPrev = this._stampX == null ? sx : this._stampX;
+    this._stampX = sx;
+    sel(this._peakEyebrow).attr("x", sx).attr("y", sy);
+    sel(this._peakNum).attr("x", sx).attr("y", sy + 40);
     this._peakSentence.selectAll("*").remove();
-    this._wrapText(this._peakSentence, "the fastest prices had ever risen in the euro's lifetime.", sx, sy + 66, 19, "start", "stamp-sentence");
-    this._peakLeader.attr("x1", sx + 92).attr("y1", sy + 34).attr("x2", x(this._peak.t) - 7).attr("y2", y(this._peak.v) + 3)
+    this._wrapText(this._peakSentence, "the fastest prices had ever risen in the euro's lifetime.", t ? sxPrev : sx, sy + 66, 19, "start", "stamp-sentence");
+    if (t) sel(this._peakSentence.selectAll("tspan")).attr("x", sx);
+    sel(this._peakLeader).attr("x1", sx + 92).attr("y1", sy + 34).attr("x2", x(this._peak.t) - 7).attr("y2", y(this._peak.v) + 3)
       .style("display", this._isPhone ? "none" : null);
     this._drawExtras();
   }
@@ -372,6 +387,12 @@ export class AnnotatedLine extends BaseChart {
   // §B.7 rescale y over all visible series, transition axis + grid + every path.
   _rescaleY(animate) {
     const ys = this._yScale();
+    // [P3.6] Keep the OUTGOING y. _drawExtras rebuilds its paths from scratch (they are joined by
+    // slot index, and a slot can appear/disappear mid-rescale), so it cannot transition them in
+    // place — but it CAN draw them where they already were and ease to the new domain, which is
+    // what the axis, grid and EU line do. Without this the compare lines snapped to the new scale
+    // while everything behind them eased for 600ms.
+    const yPrev = this._y.copy();
     this._y.domain([ys.bottom, ys.top]); this._yTicks = ys.ticks;
     const dur = animate && !this.ctx.motion.reduced ? 600 : 0;
     const t = d3.transition().duration(dur).ease(d3.easeCubicInOut);
@@ -390,7 +411,7 @@ export class AnnotatedLine extends BaseChart {
     this._tailLeader.transition(t).attr("y1", tly - 3).attr("y2", ly + 3);
     this._tailLabel.transition(t).attr("y", ly);
     this._peakLeader.transition(t).attr("y2", this._y(this._peak.v) + 3);
-    this._drawExtras(t);
+    this._drawExtras(t, dur ? yPrev : null);
   }
 
   // [debug 2026-07-06] One shared, ordered "slot" list — individual countries then groups — so
@@ -398,45 +419,54 @@ export class AnnotatedLine extends BaseChart {
   // palette, matching the shared 10-slot cap. A group with showMembers draws each member as a thin,
   // pale line in the group's own colour (a cohesive cluster, not competing with individual-country
   // colours) plus its average as a bold line labelled with the GROUP's name, not each member's.
-  _drawExtras(t) {
+  _drawExtras(t, yFrom) {
     if (!this._extraG) return;
     this._extraG.selectAll("*").remove();
     if (this._extraLabels) this._extraLabels.selectAll("*").remove();
     const line = this._line(), x = this._x, y = this._y, domHi = x.domain()[1];
+    // [P3.6] When a from-scale is supplied, every rebuilt path is drawn at the OLD y and eased to
+    // the new one on the caller's own transition, so the compare lines land with the axis instead
+    // of ahead of it. `lineFrom` is the same generator bound to the outgoing scale.
+    const lineFrom = yFrom ? d3.line().x(d => x(d.t)).y(d => yFrom(d.v)).curve(d3.curveMonotoneX) : null;
+    const setD = (sel, data) => {
+      if (lineFrom && t) sel.attr("d", lineFrom(data)).transition(t).attr("d", line(data));
+      else sel.attr("d", line(data));
+      return sel;
+    };
     const labels = [];
     const slots = [
       ...this._selectedCodes.map(code => ({ kind: "code", code })),
       ...this._selectedGroups.map(key => ({ kind: "group", key })),
     ];
     slots.forEach((slot, i) => {
-      const col = CMP[i % CMP.length];
+      const col = CMP[i % CMP.length], ci = i % CMP.length;   /* [D93] ci = the slot's palette index, for the label's CSS class */
       if (slot.kind === "code") {
         const ser = this._series(slot.code); if (!ser.length) return;
-        this._extraG.append("path").datum(ser).attr("class", "anno-extra-line").attr("fill", "none")
-          .attr("stroke", col).attr("stroke-width", 1.5).attr("stroke-opacity", 0.9).attr("stroke-linejoin", "round").attr("d", line);
+        setD(this._extraG.append("path").datum(ser).attr("class", "anno-extra-line").attr("fill", "none")
+          .attr("stroke", col).attr("stroke-width", 1.5).attr("stroke-opacity", 0.9).attr("stroke-linejoin", "round"), ser);
         const vis = ser.filter(d => d.t <= domHi), end = vis.at(-1) || ser.at(-1);
-        labels.push({ text: slot.code, col, x: x(end.t), y: y(end.v) });
+        labels.push({ text: slot.code, ci, x: x(end.t), y: y(end.v), yFrom: yFrom ? yFrom(end.v) : y(end.v) });
         return;
       }
       const g = GROUPS[slot.key]; if (!g) return;
       if (g.showMembers) g.members.forEach(code => {
         const ser = this._series(code); if (!ser.length) return;
-        this._extraG.append("path").datum(ser).attr("class", "anno-extra-line anno-extra-line--member").attr("fill", "none")
-          .attr("stroke", col).attr("stroke-width", 1).attr("stroke-opacity", 0.35).attr("stroke-linejoin", "round").attr("d", line);
+        setD(this._extraG.append("path").datum(ser).attr("class", "anno-extra-line anno-extra-line--member").attr("fill", "none")
+          .attr("stroke", col).attr("stroke-width", 1).attr("stroke-opacity", 0.35).attr("stroke-linejoin", "round"), ser);
       });
       const avg = this._groupAverage(g.members); if (!avg.length) return;
-      this._extraG.append("path").datum(avg).attr("class", "anno-extra-line anno-extra-line--avg").attr("fill", "none")
-        .attr("stroke", col).attr("stroke-width", 2.2).attr("stroke-opacity", 0.95).attr("stroke-linejoin", "round").attr("d", line);
+      setD(this._extraG.append("path").datum(avg).attr("class", "anno-extra-line anno-extra-line--avg").attr("fill", "none")
+        .attr("stroke", col).attr("stroke-width", 2.2).attr("stroke-opacity", 0.95).attr("stroke-linejoin", "round"), avg);
       const vis = avg.filter(d => d.t <= domHi), end = vis.at(-1) || avg.at(-1);
-      labels.push({ text: g.label, col, x: x(end.t), y: y(end.v) });
+      labels.push({ text: g.label, ci, x: x(end.t), y: y(end.v), yFrom: yFrom ? yFrom(end.v) : y(end.v) });
     });
     // §B.8 end-label collision nudge — stacked codes must never touch.
     labels.sort((a, b) => a.y - b.y);
     for (let i = 1; i < labels.length; i++) if (labels[i].y - labels[i - 1].y < 13) labels[i].y = labels[i - 1].y + 13;
     const host = this._extraLabels || this._extraG;
-    labels.forEach(l => host.append("text").attr("class", "anno-extra-label")
-      .attr("x", Math.min(l.x + 4, this._iw + 2)).attr("y", l.y + 3).attr("text-anchor", "start")
-      .attr("paint-order", "stroke").attr("stroke", "var(--bg)").attr("stroke-width", 3).attr("fill", l.col).text(l.text));
+    labels.forEach(l => host.append("text").attr("class", `anno-extra-label anno-extra-label--c${l.ci}`)   /* [D93] slot colour via the class — the fill attr was inert */
+      .attr("x", Math.min(l.x + 4, this._iw + 2)).attr("y", (yFrom && t ? l.yFrom : l.y) + 3).attr("text-anchor", "start")
+      .attr("paint-order", "stroke").attr("stroke", "var(--bg)").attr("stroke-width", 3).text(l.text));
   }
 
   // ---- brush overview (§B.10) ----

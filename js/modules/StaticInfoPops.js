@@ -34,8 +34,8 @@ const SOURCE_CARDS = {
   "prc_hicp_manr": `Eurostat's harmonised consumer-price index, monthly year-on-year rate — the EU's official inflation measure. <a href="https://ec.europa.eu/eurostat/databrowser/product/view/prc_hicp_manr" target="_blank" rel="noopener">View the dataset</a>`,
   "prc_hicp_aind": `Eurostat's harmonised consumer-price index, annual average rate per country. <a href="https://ec.europa.eu/eurostat/databrowser/product/view/prc_hicp_aind" target="_blank" rel="noopener">View the dataset</a>`,
   "prc_hicp_midx": `Eurostat's harmonised consumer-price index as an index level (2015=100), rebased here to 2019. Levels show how high prices sit, not how fast they climb. <a href="https://ec.europa.eu/eurostat/databrowser/product/view/prc_hicp_midx" target="_blank" rel="noopener">View the dataset</a>`,
-  "prc_hpi_a": `Eurostat's house price index: the price of buying homes, which the consumer basket mostly excludes. <a href="https://ec.europa.eu/eurostat/databrowser/product/view/prc_hpi_a" target="_blank" rel="noopener">View the dataset</a>`,
-  "earn_mw_cur": `Eurostat's statutory minimum wages, twice-yearly. Six EU countries set pay by collective bargaining and have no statutory minimum. <a href="https://ec.europa.eu/eurostat/databrowser/product/view/earn_mw_cur" target="_blank" rel="noopener">View the dataset</a>`,
+  "prc_hpi_q": `Eurostat's house price index, quarterly, total purchases, 2015 = 100: the price of buying homes, which the consumer basket mostly excludes. Greece publishes no house price index, so the EU aggregate covers 26 countries. <a href="https://ec.europa.eu/eurostat/databrowser/product/view/prc_hpi_q" target="_blank" rel="noopener">View the dataset</a>`,
+  "earn_mw_cur": `Eurostat's statutory minimum wages, twice-yearly, read in national currency. Five EU countries set pay by collective bargaining and have no statutory minimum; Cyprus introduced one in 2023, too late for a 2019 baseline. <a href="https://ec.europa.eu/eurostat/databrowser/product/view/earn_mw_cur" target="_blank" rel="noopener">View the dataset</a>`,
 };
 
 function wireReceipts(ip) {

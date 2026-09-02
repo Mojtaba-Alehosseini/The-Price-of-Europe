@@ -18,15 +18,34 @@
   <!-- Open Graph + Twitter Card meta — for shared links on social / Slack / Sigma submission cards -->
   <meta property="og:type" content="article" />
   <meta property="og:title" content="The Price of Europe — how life got expensive (2019–2025)" />
-  <meta property="og:description" content="A 7-chart scrollytelling data essay tracing five years of European inflation: from the calm of 2019, through the COVID shock, the energy squeeze, and the wage-vs-price aftermath." />
+  <meta property="og:description" content="A 9-chapter scrollytelling data essay tracing six years of European inflation: from the calm of 2019, through the COVID shock, the energy squeeze, and the wage-vs-price aftermath." />
   <meta property="og:locale" content="en_GB" />
   <meta property="og:site_name" content="The Price of Europe" />
+  <!-- [P5.1 · owner gate G6] twitter:card has declared summary_large_image since launch with no
+       image behind it, so every shared link rendered a bare card. This is a REAL screenshot of
+       the page's own hero at its resolved end state, produced by tools/shoot-og.mjs from the
+       live page — it cannot drift from what a visitor sees. Rendered at 2x (2400x1260 for a
+       1200x630 card); the declared width/height are the true pixel dimensions. The path is
+       root-relative because there is no deploy URL yet: MOST crawlers resolve that against the
+       page URL, but some require an absolute one — make it absolute in the same edit that
+       restores <link rel="canonical">. The file is fetched by crawlers only and never by the
+       page, so its weight does not touch the D90 asset diet. -->
+  <meta property="og:image" content="/assets/og/og-card.png" />
+  <meta property="og:image:type" content="image/png" />
+  <meta property="og:image:width" content="2400" />
+  <meta property="og:image:height" content="1260" />
+  <meta property="og:image:alt" content="A printed receipt for one month of European living, dated December 2025: six spending lines each reprinted above a struck-through January 2019 price, totalling 135.63 euros where they once totalled 100." />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="The Price of Europe — how life got expensive (2019–2025)" />
-  <meta name="twitter:description" content="A 7-chart scrollytelling data essay tracing five years of European inflation. University of Genova · Data Visualization 2025–26." />
+  <meta name="twitter:image" content="/assets/og/og-card.png" />
+  <meta name="twitter:image:alt" content="A December 2025 receipt for one month of European living: the same six lines that cost 100 euros in January 2019 now total 135.63." />
+  <meta name="twitter:description" content="A 9-chapter scrollytelling data essay tracing six years of European inflation. University of Genova · Data Visualization 2025–26." />
   <meta name="author" content="Moji · University of Genova" />
   <meta name="robots" content="index, follow" />
-  <link rel="canonical" href="https://github.com/mojtaba-alehoseini/price-of-europe" />
+  <!-- [P5.1] No <link rel="canonical"> until there is a deploy URL. It used to point at the
+       GitHub REPO, which tells a crawler the canonical version of this page lives there —
+       suppressing the essay itself in favour of a source listing. Owner-approved removal;
+       re-add a real self-referential canonical when the site is deployed. -->
   <!-- JSON-LD structured data for richer SEO + better appearance in shared previews -->
   <script type="application/ld+json">
   {
@@ -189,7 +208,8 @@
               </svg>
             </button>
             <span class="rc-tl-year">2019</span>
-            <div class="rc-tl-line" id="rc-tl-line">
+            <div class="rc-tl-line" id="rc-tl-line" role="slider" tabindex="0"
+                 aria-label="Receipt timeline: seek between January 2019 and December 2025">
               <span class="rc-tl-head" id="rc-tl-head"></span>
             </div>
             <span class="rc-tl-year">2025</span>
@@ -231,7 +251,7 @@
               <div class="scroller__step" data-step="1" data-focus="covid">
                 <div class="step-eyebrow">2020</div>
                 <h4 aria-level="3">The freeze</h4>
-                <p>Lockdowns shut the shops and oil went begging. For a few months in late 2020, prices were falling.</p>
+                <p>Lockdowns shut the shops and oil went begging. By late 2020 the euro area was flirting with outright deflation.</p>
               </div>
               <div class="scroller__step" data-step="2" data-focus="climb">
                 <div class="step-eyebrow">2021</div>
@@ -427,7 +447,7 @@
       <div class="scroller">
         <div class="scroller__text">
           <div class="scroller__flow">
-            <p class="chapter-subtitle">The hero's €100 basket, priced for one country at a time. Pick yours.</p>
+            <p class="chapter-subtitle">The same €100, priced country by country. Pick yours.</p>
             <div class="scroller__steps">
               <div class="scroller__step" data-step="0" data-geo="EU27_2020">
                 <div class="step-eyebrow">EU AVERAGE</div>
@@ -465,12 +485,12 @@
               <div class="scroller__step" data-step="0" data-view="lines">
                 <div class="step-eyebrow">2015 – 2025</div>
                 <h4 aria-level="3">Two lines part ways</h4>
-                <p>Consumer prices climbed 33% over this window. House prices climbed 92%. One of these is in the inflation number you hear on the news. The other mostly is not.</p>
+                <p>Consumer prices climbed 33% over this window. House prices climbed 62%. One of these is in the inflation number you hear on the news. The other mostly is not.</p>
               </div>
               <div class="scroller__step" data-step="1" data-view="countries">
                 <div class="step-eyebrow">COUNTRY BY COUNTRY</div>
                 <h4 aria-level="3">Where the ladder broke</h4>
-                <p>Hungary leads the rise; Finland barely moved. The map of expensive homes is not the map of fast inflation.</p>
+                <p>Hungary leads the rise; in Finland, houses actually got cheaper. The map of expensive homes is not the map of fast inflation.</p>
               </div>
               <div class="scroller__step" data-step="2" data-view="gap">
                 <div class="step-eyebrow">THE BLIND SPOT</div>
@@ -483,7 +503,7 @@
         <figure class="scroller__chart" data-chart-mount="housing" aria-labelledby="chart-housing-title">
           <div class="panel-head"><h3 class="chart-title" id="chart-housing-title">Buying a home outran the basket.</h3></div>
           <div class="chart-body" id="chart-housing"></div>
-          <div class="panel-foot"><p class="chart-source">Source · Eurostat house price index (prc_hpi_a) + HICP index, rebased</p><div class="chart-controls" id="chart-housing-controls"></div></div>
+          <div class="panel-foot"><p class="chart-source">Source · Eurostat house price index (prc_hpi_q, total purchases, 2015 = 100) + HICP index, rebased · EU-27 aggregate</p><div class="chart-controls" id="chart-housing-controls"></div></div>
         </figure>
       </div>
     </article>
@@ -493,30 +513,30 @@
       <div class="scroller">
         <div class="scroller__text">
           <div class="scroller__flow">
-            <p class="chapter-subtitle">Minimum pay against prices, from 100 in 2019. Median of 21 wage-floor countries; six bargain instead.</p>
+            <p class="chapter-subtitle">Minimum pay against prices, from 100 in 2019. Median of 21 wage-floor countries; six countries sit this one out (see methodology).</p>
             <div class="scroller__steps">
               <div class="scroller__step" data-step="0" data-beat="sprint">
                 <div class="step-eyebrow">2021–22</div>
-                <h4 aria-level="3">Prices sprint</h4>
-                <p>The price line breaks away. Anyone paid the minimum spends two years watching the gap grow with every shop.</p>
+                <h4 aria-level="3">The lead narrows</h4>
+                <p>Prices accelerate through the energy shock and the median floor's lead shrinks by about a third. It never disappears — which is exactly the problem with medians.</p>
               </div>
               <div class="scroller__step" data-step="1" data-beat="chase">
                 <div class="step-eyebrow">2023–24</div>
                 <h4 aria-level="3">Pay answers</h4>
-                <p>Governments raise floors, one after another. The pay line accelerates and the gap starts to close — money arriving after the damage.</p>
+                <p>Governments raise floors, one after another, and the lead widens again — money arriving after the damage was done.</p>
               </div>
               <div class="scroller__step" data-step="2" data-beat="finish">
                 <div class="step-eyebrow">2025</div>
                 <h4 aria-level="3">The finish line</h4>
-                <p>Pay finishes ahead — by 2025 the median floor sits about 11 points above prices. Averages end races; people carry what happened along the way.</p>
+                <p>The median floor ends about 20 points above prices. But at the worst of 2022, seventeen of these twenty-one countries sat below where they started. Averages end races; people carry what happened along the way.</p>
               </div>
             </div>
           </div>
         </div>
         <figure class="scroller__chart" data-chart-mount="race" aria-labelledby="chart-race-title">
-          <div class="panel-head"><h3 class="chart-title" id="chart-race-title">Pay chased prices for four years.</h3></div>
+          <div class="panel-head"><h3 class="chart-title" id="chart-race-title">The median kept up. Most countries didn't.</h3></div>
           <div class="chart-body" id="chart-race"></div>
-          <div class="panel-foot"><p class="chart-source">Source · Eurostat minimum wages (earn_mw_cur) + HICP · six bargaining countries excluded (see methodology)</p><div class="chart-controls" id="chart-race-controls"></div></div>
+          <div class="panel-foot"><p class="chart-source">Source · Eurostat minimum wages (earn_mw_cur, national currency) + HICP · six countries without a 2019 wage floor excluded (see methodology)</p><div class="chart-controls" id="chart-race-controls"></div></div>
         </figure>
       </div>
     </article>
@@ -526,20 +546,20 @@
       <div class="scroller">
         <div class="scroller__text">
           <div class="scroller__flow">
-            <p class="chapter-subtitle">Change in what the minimum wage buys, 2019–2024, country by country.</p>
+            <p class="chapter-subtitle">What the minimum wage buys: the worst of 2022, and where it stands in 2025.</p>
             <div class="scroller__steps">
               <div class="scroller__step" data-step="0">
                 <div class="step-eyebrow">THE LEDGER</div>
-                <h4 aria-level="3">Who came out ahead</h4>
-                <p>Fifteen countries raised the floor faster than prices rose. Six did not. Lithuania sits on the knife's edge at −0.02% — six years, net nothing.</p>
+                <h4 aria-level="3">The fall, and the climb back</h4>
+                <p>At the worst of 2022, seventeen of these twenty-one floors bought less than in 2019. Twenty have since climbed back above the line. France climbed 3.3 points and is still 1.4 short.</p>
               </div>
             </div>
           </div>
         </div>
         <figure class="scroller__chart" data-chart-mount="divergingBar" aria-labelledby="chart-8-title">
-          <div class="panel-head"><h3 class="chart-title" id="chart-8-title">Fifteen gained. Six lost.</h3></div>
+          <div class="panel-head"><h3 class="chart-title" id="chart-8-title">Twenty gained. One lost.</h3></div>
           <div class="chart-body" id="chart-divergingBar"></div>
-          <div class="panel-foot"><p class="chart-source">Source · Eurostat minimum wages (earn_mw_cur) + HICP · six bargaining countries excluded (see methodology)</p></div>
+          <div class="panel-foot"><p class="chart-source">Source · Eurostat minimum wages (earn_mw_cur, national currency) + HICP · six countries without a 2019 wage floor excluded (see methodology)</p></div>
         </figure>
       </div>
     </article>
@@ -554,18 +574,18 @@
               <div class="scroller__step" data-step="0" data-view="map">
                 <div class="step-eyebrow">2025</div>
                 <h4 aria-level="3">The map answers the first page</h4>
-                <p>Is the crisis over? Depends where you stand when you ask. For millions on the claret patches, "over" has not arrived.</p>
+                <p>Is the crisis over? Depends where you stand when you ask. On the claret patch, "over" has not arrived.</p>
               </div>
               <div class="scroller__step" data-step="1" data-view="losers">
-                <div class="step-eyebrow">THE SIX</div>
+                <div class="step-eyebrow">THE ONE</div>
                 <h4 aria-level="3">Still underwater</h4>
-                <p>Six countries never made workers whole. This is what "inflation is over" leaves out.</p>
+                <p>France is the one country whose minimum wage still buys less than in 2019 — and it had one of the mildest inflations in the union. Just above the line sit Belgium at +2.2%, Malta at +2.8% and Luxembourg at +4.0%. This is what "inflation is over" leaves out.</p>
               </div>
             </div>
           </div>
         </div>
         <figure class="scroller__chart" data-chart-mount="scoreMap" aria-labelledby="chart-scoreMap-title">
-          <div class="panel-head"><h3 class="chart-title" id="chart-scoreMap-title">For fifteen countries it's over. For six it isn't.</h3></div>
+          <div class="panel-head"><h3 class="chart-title" id="chart-scoreMap-title">For twenty countries it's over. For France it isn't.</h3></div>
           <div class="chart-body" id="chart-scoreMap"></div>
           <div class="panel-foot"><p class="chart-source">Source · Eurostat HICP + minimum wages, computed real change vs 2019</p></div>
         </figure>
@@ -582,7 +602,7 @@
               <div class="scroller__step" data-step="0">
                 <div class="step-eyebrow">2019 → 2025</div>
                 <h4 aria-level="3">Back together, higher up</h4>
-                <p>The boxes tighten again by 2024 — Europe's countries agree once more about inflation. They agree at a price level a third above where they started.</p>
+                <p>The boxes tighten again by 2024 and hold there — Europe's countries agree once more about inflation. They agree at a price level nearly a third above where they started.</p>
               </div>
             </div>
           </div>
@@ -590,7 +610,7 @@
         <figure class="scroller__chart" data-chart-mount="boxplot" aria-labelledby="chart-12-title">
           <div class="panel-head"><h3 class="chart-title" id="chart-12-title">The gap closed. The prices stayed.</h3></div>
           <div class="chart-body" id="chart-boxplot"></div>
-          <div class="panel-foot"><p class="chart-source">Source · Eurostat HICP + minimum wages, computed real change vs 2019</p></div>
+          <div class="panel-foot"><p class="chart-source">Source · Eurostat HICP annual rates (prc_hicp_aind) · 27 country values per year, 2015 – 2025 · €77 = what €100 of 2019 buys today across all items, EU-27; the receipt’s €135.63 prices one renter’s basket.</p></div>
         </figure>
       </div>
     </article>
@@ -639,20 +659,21 @@
     <section class="section-prose" id="methodology">
       <div class="container container-prose">
         <h2>How this was made</h2>
-        <p>All data are pulled directly from the Eurostat JSON API by the Python scripts in <code>preprocessing/</code>. Six tables: harmonised consumer prices (monthly, annual, indexed), household electricity prices, minimum wages, and the house price index. A topojson of EU borders comes from the <code>leakymirror</code> fork of <em>world-atlas</em>. No proprietary sources.</p>
+        <p>All data are pulled directly from the Eurostat JSON API by the Python scripts in <code>preprocessing/</code>. Five tables: harmonised consumer prices (monthly, annual, indexed), minimum wages, and the house price index. A topojson of EU borders comes from the <code>leakymirror</code> fork of <em>world-atlas</em>. No proprietary sources.</p>
         <p>The site is hand-written HTML, CSS custom properties, and ES modules. The only run-time dependencies are D3 v7, Scrollama, topojson-client, and flubber (used in the Choropleth → Bar morph for path interpolation) — all loaded as globals from a CDN. Animations use the project's own lightweight <code>MotionManager</code> module plus D3 transitions and CSS keyframes, with a static fallback wherever <code>prefers-reduced-motion</code> is set.</p>
         <h3 class="methodology-subhead">Methodological choices worth knowing</h3>
         <ul>
           <li><strong>EU-27 aggregate</strong> — Choropleth uses Eurostat's official EU27_2020 annual HICP figures (1.4 % for 2019, 9.2 % for 2022, 2.6 % for 2024) rather than a naïve country-mean.</li>
-          <li><strong>Small-multiples peaks</strong> — each per-category peak label marks the <em>global</em> month-with-maximum-YoY rate across the visible 2010 – 2025 window, not a windowed local maximum.</li>
-          <li><strong>Heatmap aggregation</strong> — cells show the <em>mean of the 12 monthly YoY rates</em> for each (country, category) in the selected year, not Eurostat's pre-published annual rate. The two differ by a fraction of a percent in most cases.</li>
-          <li><strong>Real-wage formula</strong> — the diverging bar computes real change as (1 + nominal wage Δ) / (1 + cumulative HICP Δ) − 1. Six EU countries are excluded from it: Austria, Cyprus, Denmark, Finland, Italy, Sweden — they set wages through collective bargaining, not a statutory minimum.</li>
-          <li><strong>Box-plot outliers</strong> — Tukey's 1.5 × IQR rule, applied per year across the 27 country values. Outliers shown as larger red dots; the faint dot strip beneath each box is every country's actual value with deterministic horizontal jitter.</li>
+          <li><strong>Small multiples, one scale</strong> — the six category panels share a single y-axis across Jan 2019 – Dec 2021, so the height of each line is directly comparable: energy and transport tower over the rest because they genuinely did, not because each panel was scaled to fit. Each panel's tag is its value at the end of that window; the peak month appears in the enlarged view.</li>
+          <li><strong>Heatmap cells</strong> — one cell per category and per month, with no averaging: colour is that month's own year-on-year rate for the EU-27, 2021 – 2024, on the same green-to-red scale the map uses. Reading across a row shows how long a category stayed hot.</li>
+          <li><strong>Real-wage formula</strong> — the diverging bar computes real change as (1 + nominal wage Δ) / (1 + cumulative HICP Δ) − 1, where nominal pay is the statutory minimum wage in <em>national currency</em> (Eurostat <code>earn_mw_cur</code>, currency = NAC) deflated by that country's own HICP. Six EU countries are excluded, for two different reasons: Austria, Denmark, Finland, Italy and Sweden set wages through collective bargaining rather than a statutory minimum; Cyprus introduced a statutory minimum on 1 January 2023, too late to measure against a 2019 baseline.</li>
+          <li><strong>Why the minimum wage</strong> — it is the one wage every EU country publishes on the same basis and at the same dates, as a policy number rather than a survey estimate: a statutory floor, set by law, comparable across borders without adjusting for hours, sector or seniority. Average earnings would answer a different question — what people actually earn — and would arrive later, less comparably, with composition effects mixed into the change.</li>
+          <li><strong>Box-plot outliers</strong> — Tukey's 1.5 × IQR rule, applied per year across the 27 country values. Outliers shown as larger orange dots; the faint dot strip beneath each box is every country's actual value with deterministic horizontal jitter.</li>
           <li><strong>The receipt &amp; the basket</strong> — the hero and kitchen-table basket use illustrative renter-household weights (30/22/15/14/10/9 over housing, groceries, services, transport, energy, eating out), anchored to the EU Household Budget Survey's structure but excluding imputed rents, which never appear on a cash receipt. Each line grows by its Eurostat HICP category index; lines are rounded to the cent, then summed.</li>
           <li><strong>Rate vs level</strong> — "inflation returned to 2%" and "prices returned to normal" are different claims. Chapter 5 shows both: the monthly rate (speed) and the 2019-based index (height). The essay's argument lives in the difference.</li>
           <li><strong>House prices</strong> — the house price index tracks buying, not renting; HICP's housing component covers rents, utilities and maintenance. Chapter 7 keeps the two claims separate on purpose.</li>
         </ul>
-        <p>The full rationale for every chart — what question it answers, what alternatives were rejected, what depth criteria it passes — is in <code>docs/chart_rationale/</code>. Source code is at <code>github.com/mojtaba-alehoseini/price-of-europe</code>.</p>
+        <p>The design decisions behind every chart — what each answers, what was rejected, and why — are in <code>docs/design_decisions.md</code>. Source code is at <code>github.com/mojtaba-alehoseini/price-of-europe</code>.</p>
       </div>
     </section>
   </main>
@@ -670,7 +691,6 @@
           <ul>
             <li><a href="https://ec.europa.eu/eurostat/data/database">Eurostat database</a></li>
             <li><a href="https://ec.europa.eu/eurostat/web/hicp">HICP overview</a></li>
-            <li><a href="https://ec.europa.eu/eurostat/web/energy/data/database">Energy prices</a></li>
           </ul>
         </div>
         <div>

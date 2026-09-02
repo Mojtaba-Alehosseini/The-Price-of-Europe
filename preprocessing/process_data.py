@@ -1,7 +1,17 @@
 """
 Eurostat Data Processing Pipeline
-Downloads (or generates fallback) and processes all datasets into D3-ready JSON.
-Uses real Eurostat JSON API data when available, falls back to synthetic data.
+Downloads and processes all datasets into D3-ready JSON.
+
+[D91/D92] Two hard rules this pipeline learned the hard way:
+  1. NEVER drop a dimension you did not filter. A Eurostat cube keyed on
+     (geo, time) alone silently stacks every currency / unit / purchase variant
+     into the same key; the JSON then carries N rows per key and whatever reads
+     it last-write-wins (or averages) an incoherent mixture. Filter the extra
+     dimensions IN THE REQUEST, keep the surviving code as a column, and assert
+     one row per key before writing. Three datasets have now been bitten by this
+     (nrg_pc_204, earn_mw_cur, prc_hpi_q).
+  2. NEVER silently substitute fabricated data. A fetch failure raises. An essay
+     that publishes numbers cannot have a code path that invents them.
 """
 import pandas as pd
 import json
@@ -17,16 +27,33 @@ EU27 = ['AT','BE','BG','CY','CZ','DE','DK','EE','EL','ES','FI','FR',
 
 COICOP_KEEP = ['CP00', 'CP01', 'CP04', 'CP045', 'CP07', 'CP11', 'NRG', 'FOOD', 'SERV']
 
-def fetch_eurostat_json(code):
-    """Fetch Eurostat JSON API data."""
+def fetch_eurostat_json(code, params=None):
+    """Fetch Eurostat JSON API data. `params` adds dimension filters to the request
+    (e.g. currency='NAC') — filtering at source is what keeps a cube one-row-per-key."""
     url = f"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/{code}"
     try:
-        resp = requests.get(url, params={"format": "JSON", "lang": "en"}, timeout=120)
+        q = {"format": "JSON", "lang": "en"}
+        q.update(params or {})
+        resp = requests.get(url, params=q, timeout=120)
         resp.raise_for_status()
         return resp.json()
     except Exception as e:
         print(f"  Failed to fetch {code}: {e}")
         return None
+
+def require_unique(df, keys, dataset):
+    """Assert exactly one row per key. Raises with a worked example if not — this is the
+    guard that would have caught the earn_mw_cur / prc_hpi_q collapses at write time."""
+    dup = df.groupby(keys).size()
+    bad = dup[dup > 1]
+    if len(bad):
+        k = bad.index[0]
+        sample = df.set_index(keys).loc[[k]]
+        raise RuntimeError(
+            f"{dataset}: {len(bad)} of {len(dup)} keys carry >1 row — an unfiltered dimension "
+            f"is still collapsing into {keys}. Example {k} carries {bad.iloc[0]} rows:\n{sample}"
+        )
+    return df
 
 def eurostat_json_to_records(data):
     """Convert Eurostat JSON API response to list of records."""
@@ -55,172 +82,113 @@ def eurostat_json_to_records(data):
         records.append(record)
     return records
 
-# Synthetic data generators as fallback
-import random
+def fetch_or_die(code, params=None, needs=('time',)):
+    """Fetch → DataFrame, or raise. There is deliberately no synthetic fallback: the
+    seeded generators this pipeline used to fall back on wrote fabricated numbers into
+    the SAME filenames with no provenance marker, so one Eurostat outage during a re-run
+    would have silently replaced a published essay's data (round-6 audit §1, D-4)."""
+    data = fetch_eurostat_json(code, params)
+    recs = eurostat_json_to_records(data) if data else []
+    if not recs:
+        raise RuntimeError(f"{code}: fetch returned no records — refusing to write. "
+                           f"Re-run when Eurostat is reachable; never substitute generated data.")
+    df = pd.DataFrame(recs)
+    for col in needs:
+        if col not in df.columns:
+            raise RuntimeError(f"{code}: response is missing the '{col}' dimension — got {list(df.columns)}")
+    return df
 
-def gen_hicp():
-    random.seed(42)
-    base_rates = {'AT':1.5,'BE':1.6,'BG':2.5,'CY':1.2,'CZ':2.8,'DE':1.4,'DK':1.3,'EE':2.2,'EL':0.5,'ES':1.2,'FI':1.4,'FR':1.3,'HR':1.8,'HU':3.2,'IE':1.5,'IT':0.8,'LT':2.0,'LU':1.5,'LV':2.3,'MT':1.6,'NL':1.5,'PL':2.5,'PT':1.1,'RO':3.5,'SE':1.6,'SI':1.7,'SK':2.0}
-    shocks = {2020:0.5, 2021:2.5, 2022:10.0, 2023:6.0, 2024:2.5}
-    mults = {'CP00':1.0,'CP01':1.1,'CP04':1.3,'CP045':1.8,'CP07':1.2,'CP11':0.9,'NRG':2.0,'FOOD':1.15,'SERV':0.7}
-    records = []
-    for geo in EU27+['EA']:
-        base = base_rates.get(geo,1.5)
-        for y in range(2018,2026):
-            for m in range(1,13):
-                if y==2025 and m>3: continue
-                shock = shocks.get(y,0) + random.gauss(0,0.5)
-                for c in COICOP_KEEP:
-                    val = round(base*mults[c] + shock*mults[c] + random.gauss(0,0.3), 1)
-                    records.append({'geo':geo,'coicop':c,'year':y,'month':m,'time':f"{y}M{m:02d}",'value':val})
-    return pd.DataFrame(records)
+def process_wages():
+    """earn_mw_cur → one row per (geo, year, semester), NATIONAL CURRENCY.
 
-def gen_hicp_index():
-    df = gen_hicp().sort_values(['geo','coicop','year','month'])
-    def cum(g):
-        g=g.copy(); idx=100.0; vals=[]
-        for _,r in g.iterrows():
-            idx*=1+r['value']/1200; vals.append(round(idx,2))
-        g['value']=vals; return g
-    return df.groupby(['geo','coicop'],group_keys=False).apply(cum)
+    [D91] The bug this filter fixes: the cube is keyed (currency, geo, time) and publishes
+    an EUR / NAC / PPS triplet for every key. Requesting it unfiltered and selecting only
+    [geo, year, semester, value] stacked all three into one key, and the consumer kept
+    whichever landed last — PPS, a purchasing-power-adjusted series. The essay then
+    deflated that already-price-adjusted number by national HICP a second time, which is
+    what produced the "15 gained / 6 lost" split.
 
-def gen_elec():
-    random.seed(43)
-    base = {'AT':0.22,'BE':0.25,'BG':0.10,'CY':0.21,'CZ':0.17,'DE':0.30,'DK':0.29,'EE':0.15,'EL':0.18,'ES':0.23,'FI':0.18,'FR':0.19,'HR':0.13,'HU':0.11,'IE':0.26,'IT':0.22,'LT':0.14,'LU':0.20,'LV':0.16,'MT':0.14,'NL':0.20,'PL':0.14,'PT':0.21,'RO':0.13,'SE':0.20,'SI':0.16,'SK':0.14}
-    records=[]
-    for g in EU27:
-        b=base.get(g,0.18)
-        for y in range(2018,2025):
-            for s in ['S1','S2']:
-                shock = {2021:0.03,2022:0.12,2023:0.08,2024:0.02}.get(y,0)
-                records.append({'geo':g,'year':y,'semester':s,'value':round(b+shock+random.gauss(0,0.01),3)})
-    return pd.DataFrame(records)
+    NAC is the basis every label and the methodology formula already claim ("nominal wage
+    growth", deflated by that country's own HICP). For euro members NAC == EUR."""
+    print("\n4. Minimum Wages  [currency=NAC]")
+    df = fetch_or_die('earn_mw_cur', {'currency': 'NAC'})
+    df = df[df['geo'].isin(EU27)].copy()
+    if set(df['currency'].unique()) != {'NAC'}:
+        raise RuntimeError(f"earn_mw_cur: expected NAC only, got {sorted(df['currency'].unique())}")
+    df['year'] = df['time'].str[:4].astype(int)
+    df['semester'] = df['time'].str[4:]        # "2024-S1" -> "-S1" (the shape DataManager rebuilds)
+    require_unique(df, ['geo', 'year', 'semester'], 'earn_mw_cur')
+    out = df[['geo', 'year', 'semester', 'currency', 'value']].sort_values(['geo', 'year', 'semester'])
+    out.to_json(f'{OUTPUT_DIR}minimum_wages.json', orient='records')
+    print(f"   Saved: {len(out)} rows, {out['geo'].nunique()} countries — currency column makes the basis self-describing")
+    return out
 
-def gen_wages():
-    random.seed(44)
-    base = {'AT':0,'BE':1650,'BG':340,'CY':0,'CZ':550,'DE':1620,'DK':0,'EE':620,'EL':780,'ES':1130,'FI':0,'FR':1600,'HR':550,'HU':500,'IE':1720,'IT':0,'LT':700,'LU':2200,'LV':500,'MT':800,'NL':1725,'PL':650,'PT':820,'RO':450,'SE':0,'SI':1100,'SK':600}
-    records=[]
-    for g in EU27:
-        b=base.get(g,0)
-        if b==0: continue
-        for y in range(2018,2026):
-            for s in ['S1','S2']:
-                gr=1.03+random.gauss(0,0.01)+(0.02 if y>=2022 else 0)
-                b=round(b*gr)
-                records.append({'geo':g,'year':y,'semester':s,'value':b})
-    return pd.DataFrame(records)
+def process_hpi():
+    """prc_hpi_q → one row per (geo, year, quarter), the 2015=100 total-purchases index.
 
-def gen_hpi():
-    random.seed(45)
-    base={'AT':120,'BE':115,'BG':105,'CY':95,'CZ':125,'DE':130,'DK':118,'EE':140,'EL':90,'ES':110,'FI':110,'FR':108,'HR':100,'HU':135,'IE':145,'IT':98,'LT':110,'LU':135,'LV':108,'MT':105,'NL':125,'PL':130,'PT':125,'RO':115,'SE':145,'SI':108,'SK':120}
-    records=[]
-    for g in EU27:
-        idx=base.get(g,110)
-        for y in range(2018,2025):
-            for q in ['Q1','Q2','Q3','Q4']:
-                gr=1.01+random.gauss(0,0.005)+({2021:0.02,2022:0.015,2023:-0.005}.get(y,0))
-                idx=round(idx*gr,2)
-                records.append({'geo':g,'year':y,'quarter':q,'value':idx})
-    return pd.DataFrame(records)
+    [D92] Same bug class: the cube is keyed (purchase, unit, geo, time) with 3 purchase
+    types x 4 units = 12 rows per key. Unfiltered, index levels (~100) were averaged
+    together with quarterly and annual rates of change (~0) — which inverted Finland's
+    sign, among others.
+
+    NOTE ON GREECE: EL publishes no house price index in prc_hpi_q at all (a geo=EL
+    request returns an empty value set, not a filtered-out one). Its absence is Eurostat's,
+    not this pipeline's, and cannot be fixed here.
+    Aggregates: EU27_2020 IS published for this dataset and is kept, so a chart can use the
+    official aggregate instead of an equal-weighted country mean."""
+    print("\n5. House Price Index  [purchase=TOTAL, unit=I15_Q]")
+    df = fetch_or_die('prc_hpi_q', {'purchase': 'TOTAL', 'unit': 'I15_Q'})
+    df = df[df['geo'].isin(EU27 + ['EU27_2020'])].copy()
+    if set(df['unit'].unique()) != {'I15_Q'} or set(df['purchase'].unique()) != {'TOTAL'}:
+        raise RuntimeError(f"prc_hpi_q: expected TOTAL/I15_Q only, got "
+                           f"{sorted(df['purchase'].unique())} / {sorted(df['unit'].unique())}")
+    df['year'] = df['time'].str[:4].astype(int)
+    df['quarter'] = df['time'].str[4:]         # "2015-Q1" -> "-Q1"
+    require_unique(df, ['geo', 'year', 'quarter'], 'prc_hpi_q')
+    out = df[['geo', 'year', 'quarter', 'value']].sort_values(['geo', 'year', 'quarter'])
+    out.to_json(f'{OUTPUT_DIR}house_price_index.json', orient='records')
+    missing = sorted(set(EU27) - set(out['geo'].unique()))
+    print(f"   Saved: {len(out)} rows, {out['geo'].nunique()} geos (incl. EU27_2020); not published: {missing or 'none'}")
+    return out
 
 def process_all():
     print("=== DATA PROCESSING ===\n")
     
     # 1. HICP Monthly
     print("1. HICP Monthly Rate")
-    df = None
-    data = fetch_eurostat_json('prc_hicp_manr')
-    if data:
-        recs = eurostat_json_to_records(data)
-        if recs:
-            df = pd.DataFrame(recs)
-            df = df[df['geo'].isin(EU27 + ['EA', 'EU27_2020', 'EA20', 'EA19'])]
-            df = df[df['coicop'].isin(COICOP_KEEP)]
-            df['year'] = df['time'].str[:4].astype(int)
-            df['month'] = df['time'].str[5:].str.lstrip('M').str.lstrip('0').astype(int)
-    if df is None or len(df)==0:
-        print("   Using synthetic data")
-        df = gen_hicp()
+    df = fetch_or_die('prc_hicp_manr')
+    df = df[df['geo'].isin(EU27 + ['EA', 'EU27_2020', 'EA20', 'EA19'])]
+    df = df[df['coicop'].isin(COICOP_KEEP)].copy()
+    df['year'] = df['time'].str[:4].astype(int)
+    df['month'] = df['time'].str[5:].str.lstrip('M').str.lstrip('0').astype(int)
+    require_unique(df, ['geo','coicop','year','month'], 'prc_hicp_manr')
     df[['geo','coicop','year','month','time','value']].to_json(f'{OUTPUT_DIR}hicp_monthly.json',orient='records')
     print(f"   Saved: {len(df)} rows")
     hicp_rate = df
-    
+
     # 2. HICP Index
     print("\n2. HICP Index")
-    df = None
-    data = fetch_eurostat_json('prc_hicp_midx')
-    if data:
-        recs = eurostat_json_to_records(data)
-        if recs:
-            df = pd.DataFrame(recs)
-            df = df[df['geo'].isin(EU27 + ['EA', 'EU27_2020', 'EA20', 'EA19'])]
-            df = df[df['coicop'].isin(COICOP_KEEP)]
-            df['year'] = df['time'].str[:4].astype(int)
-            df['month'] = df['time'].str[5:].str.lstrip('M').str.lstrip('0').astype(int)
-    if df is None or len(df)==0:
-        print("   Using synthetic data")
-        df = gen_hicp_index()
+    df = fetch_or_die('prc_hicp_midx')
+    df = df[df['geo'].isin(EU27 + ['EA', 'EU27_2020', 'EA20', 'EA19'])]
+    df = df[df['coicop'].isin(COICOP_KEEP)].copy()
+    df['year'] = df['time'].str[:4].astype(int)
+    df['month'] = df['time'].str[5:].str.lstrip('M').str.lstrip('0').astype(int)
+    require_unique(df, ['geo','coicop','year','month'], 'prc_hicp_midx')
     df[['geo','coicop','year','month','time','value']].to_json(f'{OUTPUT_DIR}hicp_index.json',orient='records')
     print(f"   Saved: {len(df)} rows")
     hicp_index = df
-    
-    # 3. Electricity
-    print("\n3. Electricity Prices")
-    df = None
-    data = fetch_eurostat_json('nrg_pc_204')
-    if data:
-        recs = eurostat_json_to_records(data)
-        if recs:
-            df = pd.DataFrame(recs)
-            df = df[df['geo'].isin(EU27)]
-            if 'time' in df.columns:
-                df['year'] = df['time'].str[:4].astype(int)
-                df['semester'] = df['time'].str[4:]
-    if df is None or len(df)==0 or 'year' not in df.columns:
-        print("   Using synthetic data")
-        df = gen_elec()
-    df[['geo','year','semester','value']].to_json(f'{OUTPUT_DIR}electricity_prices.json',orient='records')
-    print(f"   Saved: {len(df)} rows")
-    elec = df
-    
-    # 4. Wages
-    print("\n4. Minimum Wages")
-    df = None
-    data = fetch_eurostat_json('earn_mw_cur')
-    if data:
-        recs = eurostat_json_to_records(data)
-        if recs:
-            df = pd.DataFrame(recs)
-            df = df[df['geo'].isin(EU27)]
-            if 'time' in df.columns:
-                df['year'] = df['time'].str[:4].astype(int)
-                df['semester'] = df['time'].str[4:]
-    if df is None or len(df)==0 or 'year' not in df.columns:
-        print("   Using synthetic data")
-        df = gen_wages()
-    df[['geo','year','semester','value']].to_json(f'{OUTPUT_DIR}minimum_wages.json',orient='records')
-    print(f"   Saved: {len(df)} rows")
-    wages = df
-    
-    # 5. HPI
-    print("\n5. House Price Index")
-    df = None
-    data = fetch_eurostat_json('prc_hpi_q')
-    if data:
-        recs = eurostat_json_to_records(data)
-        if recs:
-            df = pd.DataFrame(recs)
-            df = df[df['geo'].isin(EU27)]
-            if 'time' in df.columns:
-                df['year'] = df['time'].str[:4].astype(int)
-                df['quarter'] = df['time'].str[4:]
-    if df is None or len(df)==0 or 'year' not in df.columns:
-        print("   Using synthetic data")
-        df = gen_hpi()
-    df[['geo','year','quarter','value']].to_json(f'{OUTPUT_DIR}house_price_index.json',orient='records')
-    print(f"   Saved: {len(df)} rows")
-    hpi = df
-    
+
+    # [round-6 G3] The nrg_pc_204 / electricity_prices.json emit was REMOVED here. It had the
+    # same unfiltered-dimension collapse as D91/D92 (the cube is keyed on product, consom,
+    # unit, tax and currency as well as geo/time), and nothing read its 2.6 MB output — the
+    # slope chart that once did was cut in the respin. Repairing a dataset no chart consumes
+    # would have shipped a third mixed-dimension file. If electricity prices are ever needed
+    # again, add a process_electricity() built on the process_wages() pattern: filter every
+    # dimension in the request, then require_unique() before writing.
+
+    wages = process_wages()
+    hpi = process_hpi()
+
     # 6. HICP Annual
     print("\n6. HICP Annual Average")
     df = hicp_rate.groupby(['geo','coicop','year'])['value'].mean().reset_index()
@@ -230,7 +198,7 @@ def process_all():
     hicp_annual = df
     
     print("\n=== NA AUDIT ===")
-    for name, df in [('hicp_rate',hicp_rate),('hicp_index',hicp_index),('elec',elec),('wages',wages),('hpi',hpi),('hicp_annual',hicp_annual)]:
+    for name, df in [('hicp_rate',hicp_rate),('hicp_index',hicp_index),('wages',wages),('hpi',hpi),('hicp_annual',hicp_annual)]:
         print(f"{name}: {len(df)} rows, {df['value'].isna().mean()*100:.1f}% missing")
     print("\nDone!")
 

@@ -44,8 +44,8 @@ async function boot() {
   //    state (JAN 2019, €100.00) is server-rendered in index.html, so it paints with zero JS;
   //    the instance below is created AFTER the data manager exists (step 3) because the register
   //    reads hicpIndex (deferred — fetched on first interaction, never competing with LCP). The
-  //    coin-medallion hero (CoinHero) is retired; Hero.js stays on disk — buildCoinGlyph still
-  //    drives the BoxPlot finale bookend.
+  //    coin-medallion hero (CoinHero) is retired, and [P6.2] deleted its code; Hero.js is now just
+  //    buildCoinGlyph, which still draws the BoxPlot finale bookend.
 
   // 2b. (The earlier design's header progress-coin + act-divider coin glyphs were removed in the
   //     round-5 debug pass. The page is a flat chapter flow with no acts, and the header deliberately

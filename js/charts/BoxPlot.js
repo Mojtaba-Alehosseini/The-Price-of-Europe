@@ -15,7 +15,7 @@
    ============================================================ */
 
 import { BaseChart } from "./BaseChart.js";
-import { sphereGradient } from "../modules/CraftFX.js";
+import { sphereGradient, getCSS } from "../modules/CraftFX.js";
 import { buildCoinGlyph } from "./Hero.js";
 
 // [R2·12] The narrative protagonist. This whole chapter — the last chart in the
@@ -24,17 +24,11 @@ import { buildCoinGlyph } from "./Hero.js";
 // (step 0 / reduced-motion / idle) the 2022 box carries the lone terracotta
 // accent and the kicker opens ON that thesis, mirroring the protagonist pattern
 // of its distribution-sibling (Ridgeline, the chapter directly above) and the
-// choropleth capital-dot. Accent keeps its editorial function (CLAUDE.md §4).
+// choropleth capital-dot. Accent keeps its editorial function (design system §4).
 const PROTAGONIST = 2022;
 
 // Read a CSS custom-property literal at draw time (D3 cannot use var() in JS).
 // Accepts either "--name" or "var(--name)".
-function getCSS(name) {
-  const m = String(name).match(/var\((--[^)]+)\)/);
-  const n = m ? m[1] : name;
-  return getComputedStyle(document.documentElement).getPropertyValue(n).trim();
-}
-
 const STEP_CONFIG = [
   // At rest the chart already opens on the protagonist year, so step 0 names it.
   { focus: null, caption: "Each box is one year. 2022 is when it blew open." },
@@ -51,6 +45,13 @@ export class BoxPlot extends BaseChart {
     this._stepCaption = null;
     this._hoverYear = null;
     this._stampShown = false;   // shown↔hidden cache for the idempotent closing stamp
+    // [P8.4] The closing stamp used to be gated on `focus === 2024`, a STEP focus. This chapter
+    // has one step, whose config is `{ focus: null }`, so the gate could never open and the
+    // essay's closing image rendered in 0 of 194 real-wheel frames (Session 74 finding). A
+    // one-step finale's natural trigger is the chapter's own settled state, so the stamp is now
+    // the last beat of the reveal cascade: it arrives after the boxes, arc and annotations have
+    // landed, which keeps the "exhale" timing the step gate was reaching for, and then stays.
+    this._settled = false;
   }
 
   size() {
@@ -61,6 +62,22 @@ export class BoxPlot extends BaseChart {
     return { width: w, height: Math.max(420, hAvail || hMin) };
   }
 
+  /** [P5.2 G7(e)] The bookend's number, derived from the SAME series WaffleChart._power reads:
+   *  EU-27 all-items HICP index, Jan 2019 against the latest month, expressed as what EUR 100 of
+   *  2019 still buys. It was the literal "77" written into the tspan below -- next to a coin, at
+   *  the end of the essay, with nothing computing it. Carry-forward lookup matches the waffle's so
+   *  the two screens can never print different numbers for the same claim. Returns null if the
+   *  deferred index has not arrived, and the caller falls back to text without a figure. */
+  _powerNow() {
+    const eu = this.data.euAggregateCode();
+    const s = this.data.hicpIndex?.[eu]?.CP00;
+    if (!s) return null;
+    const at = t => { if (s[t] != null) return s[t]; const ks = Object.keys(s).filter(k => k <= t).sort(); return ks.length ? s[ks.at(-1)] : null; };
+    const ks = Object.keys(s).filter(k => k <= "2025-12").sort();
+    const b = at("2019-01"), e = ks.length ? s[ks.at(-1)] : null;
+    return (b && e) ? 100 * b / e : null;
+  }
+
   render() {
     super.render();
     this.container.innerHTML = "";
@@ -69,12 +86,13 @@ export class BoxPlot extends BaseChart {
     this.isPhone = width < 480;
     const { width: iw, height: ih } = this.innerSize();
 
-    // 2015–2024 only. 2025 exists in the source but is a provisional / partial-year
-    // annual figure; rendering it as a finished box (a) contradicts the "2015 – 2024"
-    // title + rationale, (b) leaves an un-narrated rightmost box that blunts the
-    // "the gap is closing" finale, and (c) spawns a 2nd trailing outlier (RO). The
-    // story's last complete year is 2024 — make the chart's last box 2024 too.
-    const years = this.data.yearsCP00().filter(y => y >= 2015 && y <= 2024);
+    // [P8.4] 2015–2025. The window stopped at 2024 because 2025 was then a provisional
+    // partial-year figure; it is now a closed year — twelve monthly readings for the EU-27
+    // aggregate and an annual rate for all 27 countries — so the essay's own end year gets a box
+    // instead of being the one date the chart does not show. Its outlier is Romania again (6.8%
+    // after 5.9%), which is why the trailing tag below follows the LAST year rather than naming
+    // 2024: two Romania dots side by side with the older one labelled would read as an error.
+    const years = this.data.yearsCP00().filter(y => y >= 2015 && y <= 2025);
     const stats = years.map(y => {
       const vals = [];
       this.data.countriesByCode.forEach((meta, code) => {
@@ -153,7 +171,7 @@ export class BoxPlot extends BaseChart {
     //     the story the gap can't: the floor RISES and never returns to its old
     //     level (2019 ≈ 1.5 % → 2024 ≈ 2.6 %). On reveal it traces left→right.
     // Both use neutral ink washes so they read as context, never competing with the
-    // terracotta protagonist (accent restraint, CLAUDE.md §4).
+    // terracotta protagonist (accent restraint, design system §4).
     const cx = d => x(d.year) + x.bandwidth() / 2;
     this.archG = this.g.append("g").attr("class", "bp-arch").attr("pointer-events", "none");
 
@@ -254,10 +272,10 @@ export class BoxPlot extends BaseChart {
         .attr("text-anchor", "middle").text("widest gap");
     }
 
-    // [R2·12] 2024's lone outlier (Romania, 5.9 %) is the visual proof of "one dot
-    // still pokes out from the top" — name it with a tiny tag so the step copy is
-    // self-evident on the canvas. Only on desktop/tablet; suppressed on phone.
-    const last = stats.find(s => s.year === 2024);
+    // [R2·12] The last year's lone outlier (Romania) is the visual proof of "one dot still
+    // pokes out from the top" — name it with a tiny tag so the step copy is self-evident on the
+    // canvas. Only on desktop/tablet; suppressed on phone.
+    const last = stats[stats.length - 1];
     if (last && !this.isPhone) {
       const ro = last.outliers.find(o => o.code === "RO") || last.outliers[0];
       if (ro) {
@@ -318,6 +336,8 @@ export class BoxPlot extends BaseChart {
       // step/hover can never recede the field.
       this.boxes.style("opacity", null).classed("is-revealing", false);
       if (this.archG) this.archG.style("opacity", null);
+      this._settled = true;          // reduced motion: the settled state IS the first frame
+      this._applyFocus();
       return;
     }
     // Boxes reveal year-by-year (time flowing left→right) — the box for the
@@ -358,8 +378,14 @@ export class BoxPlot extends BaseChart {
       if (this.envPath) this.envPath.interrupt().style("opacity", 1);
       if (this.annoG) this.annoG.interrupt().style("opacity", 1);
       if (this.roTagG) this.roTagG.interrupt().style("opacity", 1);
+      this._settled = true;
       this._applyFocus();
     }, 160 + n * 60 + 520);
+    // The stamp is the cascade's last beat, scheduled just after the annotations resolve rather
+    // than waiting on the safety net above — that timeout exists for a stalled rAF, and the
+    // closing image should not depend on the recovery path to appear.
+    clearTimeout(this._stampTimer);
+    this._stampTimer = setTimeout(() => { this._settled = true; this._applyFocus(); }, 160 + this.boxes.size() * 60 + 300);
   }
 
   _applyFocus() {
@@ -395,8 +421,8 @@ export class BoxPlot extends BaseChart {
       this.kickerSub.text(sub);
     }
 
-    // Closing stamp lands only on the final step (2024) — the essay's exhale.
-    this._renderStamp(focus === 2024);
+    // Closing stamp lands once the chart has settled — the essay's exhale. See `_settled`.
+    this._renderStamp(this._settled);
   }
 
   // ── [R2·12] Closing editorial stamp ─────────────────────────────────────────
@@ -409,6 +435,11 @@ export class BoxPlot extends BaseChart {
     // re-blink (probe: opacity dropped to ~6e-5 then re-eased over ~340ms). Only act
     // on a genuine shown↔hidden change; a repeat call in the same state is a no-op.
     if (show === this._stampShown) return;
+    // [P3.5] `_stampShown` is written AFTER the phone check below, not before it. Written first,
+    // the phone branch set it true and then immediately reset it to false — leaving the flag
+    // disagreeing with itself for the rest of the call and, on the next entry, making the
+    // idempotency guard above compare against a value this method had already disowned.
+    if (show && this.isPhone) { this.stampG.selectAll("*").remove(); this.stampG.style("opacity", 0); this._stampShown = false; return; }
     this._stampShown = show;
     if (!show) {
       if (reduced) this.stampG.style("opacity", 0);
@@ -417,8 +448,6 @@ export class BoxPlot extends BaseChart {
     }
     // (Re)build content once per show so width/positions track the current size.
     this.stampG.selectAll("*").remove();
-    const cmp = this.isPhone;
-    if (cmp) { this.stampG.style("opacity", 0); this._stampShown = false; return; } // phone has no room — step copy carries it
 
     const x = this._x, y = this._y;
     // [scroll-fix §7] The "WHERE IT LANDED / 5 pts / fourteen-point gap…" analysis block has MOVED to
@@ -438,9 +467,14 @@ export class BoxPlot extends BaseChart {
     coin.setAttribute("aria-hidden", "true");
     this.stampG.node().appendChild(coin);
     const bk = this.stampG.append("text").attr("class", "bp-stamp__bookend").attr("x", coinS + 12).attr("y", 14);
-    bk.append("tspan").attr("x", coinS + 12).text("Five years on, your");
-    bk.append("tspan").attr("x", coinS + 12).attr("dy", 18).text("€100 is now ");
-    bk.append("tspan").attr("class", "bp-stamp__bookend-num").text("€77.");
+    // [P5.2 G7(e)] "Five years" was wrong -- 2019 to 2025 is six, which is what the coda says --
+    // and the €77 was a literal. Both fixed; the basis (all-items buying power, EU-27, vs the
+    // receipt's renter's-basket €135.63) is disclosed in the chart's source line, per owner ruling,
+    // so this stays a coin and two lines rather than growing a third in tight upper-left air.
+    const pw = this._powerNow();
+    bk.append("tspan").attr("x", coinS + 12).text("Six years on, your");
+    bk.append("tspan").attr("x", coinS + 12).attr("dy", 18).text(pw == null ? "€100 buys less." : "€100 is now ");
+    if (pw != null) bk.append("tspan").attr("class", "bp-stamp__bookend-num").text(`€${Math.round(pw)}.`);
 
     if (reduced) this.stampG.style("opacity", 1);
     else this.stampG.style("opacity", 0).transition().duration(420).style("opacity", 1);
@@ -454,5 +488,7 @@ export class BoxPlot extends BaseChart {
     this._applyFocus();
   }
 
+  // [P3.5] The reveal safety timeout outlives the chart without this.
+  destroy() { clearTimeout(this._revealSafety); clearTimeout(this._stampTimer); super.destroy(); }
   onThemeChange() { this.render(); }
 }

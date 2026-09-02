@@ -3,7 +3,13 @@
 // d3 is an ambient global (loaded via CDN <script> before the ES modules), like every chart file.
 // Draw-on lives in ChartMotion.js (tracePath continuous + drawOnPlay one-shot) — NOT duplicated here.
 
-/** Read a CSS custom property at draw time (tokens are the source of truth). */
+/** Read a CSS custom property at draw time (tokens are the source of truth).
+ *  [P6.2] The single definition. Five charts carried their own byte-identical-in-effect copies
+ *  (BoxPlot, Choropleth, DivergingBar, Heatmap, ScoreMap) and two already imported this one; a
+ *  token read is the one thing every chart does, so six versions of it was six places for the
+ *  D15 rule to be re-learned. Accepts either a bare `--name` or a `var(--name)` wrapper: no call
+ *  site passes the wrapper today, but the copies all parsed it and dropping that would be a silent
+ *  narrowing of a shared contract. */
 export function getCSS(name) {
   const n = name.startsWith("--") ? name : (name.match(/--[^)]+/)?.[0] || name);
   return getComputedStyle(document.documentElement).getPropertyValue(n).trim();

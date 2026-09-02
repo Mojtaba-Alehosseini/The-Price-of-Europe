@@ -1,26 +1,40 @@
 /* ============================================================
-   DivergingBar — real minimum-wage change 2019 → 2024.
+   DivergingBar — the ledger: how far each minimum wage FELL, and how far it came back.
    Real % = (1+nominal%) / (1+HICP%) - 1
-   Depth:
-     1. computation — composes nominal wage change w/ cumulative HICP
-     2. interaction — hover bar reveals breakdown
-     3. annotation — winners (top 3) + losers (bottom 3) labelled
-     4. encoding   — diverging horizontal bars from zero axis
+
+   [P8.2] Rebuilt from ranked bars to a per-country DUMBBELL. A bar from zero could only ever
+   say where a country ended; the story of these six years is that almost everyone went under
+   and almost everyone climbed back, and a single endpoint hides both halves. Each row now
+   carries a muted claret dot at that country's worst real position during 2022, a connector,
+   and a solid dot at its 2019→2025 endpoint (jade above the line, claret below). One chart
+   then holds the dip (17 of 21 under water), the recovery (20 back above), and the one that
+   never finished the climb.
+
+   Layout condition (owner, S2): country names live in a FIXED LEFT GUTTER — the Housing/D88
+   dot-range pattern — never inside the plot. Trough dots sit left of zero, which is exactly
+   where names used to be, so the two would collide on the deepest fallers. The x-domain runs
+   from below the deepest trough to above the widest gain, and tools/_tmp-p8-overlap.mjs is the
+   commit gate at 1440 and 390.
    ============================================================ */
 
 import { BaseChart } from "./BaseChart.js";
-import { sphereGradient } from "../modules/CraftFX.js";
+import { sphereGradient, getCSS } from "../modules/CraftFX.js";
 
-function getCSS(name) { const m = String(name).match(/var\((--[^)]+)\)/); const n = m ? m[1] : name; return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
-
-// Step focus: null (all), "pos" (winners), "neg" (losers).
 // The headline framing ("N gained / N lost") is rendered as a two-camp header in the
 // kicker zone and recomputed from the data — never hard-coded — so it can't drift.
+//
+// [P7.0] This chapter has ONE step in index.html, so the "pos" (winners) and "neg" (losers)
+// entries could never be reached: `onStep` clamps the index to the config's own length, and with
+// a single `data-step="0"` the only reachable config is the first. Two dead entries kept a whole
+// camp-dimming path looking live — the same shape as the boxplot's unreachable closing stamp
+// (D108), minus the visible symptom, since this one merely never ran. `_focus` therefore stays
+// null for the chart's whole life, and `_applyFocus` is left in place because the scoreboard rows
+// still read it: it is the neutral branch that runs, not dead code.
 const STEP_CONFIG = [
-  { focus: null },
-  { focus: "pos" },
-  { focus: "neg" }
+  { focus: null }
 ];
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 // Signed % for value tags. Guards the "−0.0%" artefact: anything that rounds to 0.0
 // shows a clean "0.0%" (Lithuania is −0.02 → break-even, not a glitchy negative zero).
@@ -53,9 +67,14 @@ export class DivergingBar extends BaseChart {
     // Narrower side gutters + a shorter top band on phone so the dense 21-row stack
     // keeps its height (round-1 pixels showed the bars crushed under the kicker).
     const cmp = this.compact;
+    // The left margin IS the name gutter. Phone shows ISO codes (2 glyphs) so it needs a
+    // fraction of the desktop width, and the space goes to the plot instead.
     this.opts.margin = cmp
-      ? { top: 62, right: 86, bottom: 42, left: 92 }
-      : { top: 92, right: 132, bottom: 46, left: 120 };
+      ? { top: 62, right: 74, bottom: 42, left: 46 }
+      // Desktop's right margin carries the endpoint value AND, on the widest gain, the
+      // "WIDEST GAIN" eyebrow past it — measured at 1440, that pair needs ~150px beyond the
+      // dot, and at 118 the eyebrow ran 8.9px off the panel (caught by _tmp-p8-overlap).
+      : { top: 92, right: 140, bottom: 46, left: 124 };
     const { width, height } = this.ensureSvg();
     this.W = width; this.H = height;
     const { width: iw, height: ih } = this.innerSize();
@@ -63,6 +82,10 @@ export class DivergingBar extends BaseChart {
     // Real-wage rows come from the shared DataManager computation (same one ScoreMap uses in CH9,
     // so the 15/6 split can never diverge between the ledger and the map — brief "do not fork").
     const rows = this.data.realWageRows();
+    // [P8.2] Attach each country's 2022 trough. Countries without one (no 2022 wage or price
+    // reading) keep `trough === null` and draw as a lone endpoint dot rather than dropping out.
+    const troughs = this.data.realWageTrough2022();
+    rows.forEach(r => { const t = troughs.get(r.code); r.trough = t ? t.real : null; r.troughMonth = t ? t.month : null; });
     this._rows = rows;
 
     // Summary stats — the headline framing is derived, never hard-coded.
@@ -75,8 +98,13 @@ export class DivergingBar extends BaseChart {
     this._summary = { nPos, nNeg, best, worst };
 
     const yScale = d3.scaleBand().domain(rows.map(r => r.code)).range([0, ih]).padding(0.18);
-    const xExt = d3.max(rows, r => Math.abs(r.real)) * 1.1;
-    const x = d3.scaleLinear().domain([-xExt, xExt]).range([0, iw]);
+    // [P8.2] Domain spans the whole journey — deepest trough to widest gain — not a symmetric
+    // range around zero. The old ±max domain spent half the plot on empty negative space
+    // because only one country ends below zero; the troughs now fill it with the story.
+    const lo = d3.min(rows, r => Math.min(r.real, r.trough ?? r.real));
+    const hi = d3.max(rows, r => Math.max(r.real, r.trough ?? r.real));
+    const span = hi - lo;
+    const x = d3.scaleLinear().domain([lo - span * 0.06, hi + span * 0.04]).range([0, iw]);
     this._x = x;
 
     // ── Framing header: the win/loss divide IS the story ──────────────────────
@@ -93,7 +121,13 @@ export class DivergingBar extends BaseChart {
       lg.append("text").attr("class", "legend-title")
         .attr("text-anchor", "end").attr("y", 0).text("Real change in the minimum wage");
       lg.append("text").attr("class", "legend-tick db-unit-sub")
-        .attr("text-anchor", "end").attr("y", 14).text("2019–2024 (after inflation)");
+        .attr("text-anchor", "end").attr("y", 14).text("2019–2025 (after inflation)");
+      // Two-dot key — without it the muted dot reads as decoration rather than a second reading.
+      const key = lg.append("g").attr("class", "db-key").attr("transform", "translate(0, 32)");
+      key.append("text").attr("class", "legend-tick").attr("text-anchor", "end").attr("x", -84).attr("y", 4).text("worst of 2022");
+      key.append("circle").attr("class", "db-dot db-dot--trough").attr("cx", -74).attr("cy", 0).attr("r", 4);
+      key.append("text").attr("class", "legend-tick").attr("text-anchor", "end").attr("x", -22).attr("y", 4).text("2025");
+      key.append("circle").attr("class", "db-dot db-dot--now db-dot--pos").attr("cx", -10).attr("cy", 0).attr("r", 4.6);
     }
 
     // axes — fewer ticks on narrow viewports so the %-labels never collide.
@@ -114,31 +148,48 @@ export class DivergingBar extends BaseChart {
       .attr("y", 0).text("BROKE EVEN");
     zAnchor.append("text").attr("class", "db-zero-sub").attr("text-anchor", "middle")
       .attr("y", 11).text("pay = prices");
-    // bars
+    // ── rows: a fixed name gutter, then the dumbbell ──────────────────────────
     const bw = yScale.bandwidth();
+    const midY = bw / 2;
     this.bars = this.g.selectAll("g.barg").data(rows, d => d.code).join("g")
       .attr("class", d => "barg db-bar" + (d._extreme ? " db-bar--extreme" : ""))
       .attr("data-sign", d => d.real >= 0 ? "pos" : "neg")
+      .attr("data-code", d => d.code)
       .attr("transform", d => `translate(0,${yScale(d.code)})`);
 
-    this.bars.append("rect").attr("class", d => (d.real >= 0 ? "bar bar--pos db-rect" : "bar bar--neg db-rect") + (d._extreme ? " db-rect--extreme" : ""))
-      .attr("x", d => d.real >= 0 ? x(0) : x(d.real))
-      .attr("y", 0).attr("height", bw)
-      .attr("width", 0)   // grows on initial reveal
-      .attr("rx", Math.min(2.5, bw / 2));
-
+    // Names sit OUTSIDE the plot, right-aligned against its left edge (owner's condition):
+    // a trough dot at −14% lands where a left-of-zero name used to be.
     this.bars.append("text").attr("class", d => "row-label db-name" + (d._extreme ? " db-name--extreme" : ""))
-      .attr("x", d => d.real >= 0 ? x(0) - 7 : x(0) + 7)
-      .attr("text-anchor", d => d.real >= 0 ? "end" : "start")
-      .attr("y", bw / 2 + 4)
-      .text(d => cmp ? d.code : d.name);   // ISO codes on phone — full names overlap bars at 390px
+      .attr("x", -10).attr("text-anchor", "end").attr("y", midY + 4)
+      .text(d => cmp ? d.code : d.name);
+
+    // Connector — drawn first so both dots sit on top of it. Grows from the trough.
+    this.bars.append("line").attr("class", "db-link")
+      .attr("x1", d => x(d.trough ?? d.real)).attr("x2", d => x(d.trough ?? d.real))
+      .attr("y1", midY).attr("y2", midY);
+
+    // Trough dot — muted claret, hollow-reading. Absent when a country has no 2022 reading.
+    this.bars.filter(d => d.trough != null).append("circle").attr("class", "db-dot db-dot--trough")
+      .attr("cx", d => x(d.trough)).attr("cy", midY).attr("r", 0);
+
+    // Endpoint dot — the 2025 position, jade above the line and claret below.
+    this.bars.append("circle")
+      .attr("class", d => "db-dot db-dot--now " + (d.real >= 0 ? "db-dot--pos" : "db-dot--neg") + (d._extreme ? " db-dot--extreme" : ""))
+      .attr("cx", d => x(d.real)).attr("cy", midY).attr("r", 0);
 
     this.bars.append("text").attr("class", d => (d.real >= 0 ? "value-label db-val db-val--pos" : "value-label db-val db-val--neg") + (d._extreme ? " db-val--extreme" : ""))
-      .attr("x", d => x(d.real) + (d.real >= 0 ? 7 : -7))
-      .attr("text-anchor", d => d.real >= 0 ? "start" : "end")
-      .attr("y", bw / 2 + 4)
+      .attr("x", d => x(d.real) + 10)
+      .attr("text-anchor", "start")
+      .attr("y", midY + 4)
       .attr("opacity", 0)
       .text(d => fmtSigned(d.real));
+
+    // Full-width hit row, so hovering anywhere on a country's line opens its tooltip — the
+    // dots alone are a 10px target on a 21-row stack.
+    this.bars.append("rect").attr("class", "db-hit")
+      .attr("x", -this.opts.margin.left).attr("y", 0)
+      .attr("width", this.opts.margin.left + iw).attr("height", bw)
+      .attr("fill", "transparent");
 
     // Editorial emphasis on the two bookends — an eyebrow set just past the value,
     // so the eye lands on "the widest gain" and "the deepest cut" without a floating
@@ -146,12 +197,9 @@ export class DivergingBar extends BaseChart {
     if (!cmp) {
       this.bars.filter(d => d._extreme).append("text")
         .attr("class", "db-extreme-eyebrow")
-        .attr("x", d => {
-          const pad = 7 + fmtSigned(d.real).length * 7.6 + 9;
-          return d.real >= 0 ? x(d.real) + pad : x(d.real) - pad;
-        })
-        .attr("text-anchor", d => d.real >= 0 ? "start" : "end")
-        .attr("y", bw / 2 + 3.5)
+        .attr("x", d => x(d.real) + 10 + fmtSigned(d.real).length * 7.6 + 9)
+        .attr("text-anchor", "start")
+        .attr("y", midY + 3.5)
         .attr("opacity", 0)
         .text(d => d._extreme === "best" ? "WIDEST GAIN" : "DEEPEST CUT");
     }
@@ -160,10 +208,11 @@ export class DivergingBar extends BaseChart {
       d3.select(e.currentTarget).classed("is-hover", true);
       this.ctx.tooltip.show(
         `<h5>${d.name}</h5>
-         <div class="row"><span class="key">Min wage 2019</span><span class="val">€${Math.round(d.w0)}</span></div>
-         <div class="row"><span class="key">Min wage 2024</span><span class="val">€${Math.round(d.w1)}</span></div>
+         <div class="row"><span class="key">Min wage 2019</span><span class="val">${Math.round(d.w0).toLocaleString("en-GB")}</span></div>
+         <div class="row"><span class="key">Min wage 2025</span><span class="val">${Math.round(d.w1).toLocaleString("en-GB")}</span></div>
          <div class="row"><span class="key">Nominal Δ</span><span class="val">+${d.nominal.toFixed(1)}%</span></div>
          <div class="row"><span class="key">HICP Δ</span><span class="val">+${d.hicp.toFixed(1)}%</span></div>
+         ${d.trough == null ? "" : `<div class="row"><span class="key">Worst month</span><span class="val db-tip-val--${d.trough >= 0 ? "pos" : "neg"}">${MONTHS[+d.troughMonth.slice(5) - 1]} 2022, ${fmtSigned(d.trough)}</span></div>`}
          <div class="row"><span class="key">Real Δ</span><span class="val db-tip-val--${d.real >= 0 ? "pos" : "neg"}">${fmtSigned(d.real)}</span></div>`,
         e.clientX, e.clientY);
     })
@@ -178,15 +227,15 @@ export class DivergingBar extends BaseChart {
     if (!cmp) medG.append("text").attr("class", "db-median-label").attr("x", x(med)).attr("y", -10)
       .attr("text-anchor", "middle").text(`median ${fmtSigned(med)}`);
 
-    // [R5·P11] Sphere dots on the two bookends (widest gain / deepest cut) — Bremer craft.
-    // Grown on reveal (see _initialReveal); placed at each extreme bar's value end.
-    this._extremeDots = [];
+    // [R5·P11 / P8.2] Bremer sphere shading on the two bookend ENDPOINTS. Previously these were
+    // extra circles floating at each extreme bar's tip; now the endpoint dot exists for every
+    // country, so the bookends are simply the two that get a sphere gradient instead of a flat
+    // fill. One mark, two levels of finish — no duplicate dot to keep in sync.
     [this._summary.best, this._summary.worst].forEach(d => {
       if (!d) return;
       const col = d.real >= 0 ? getCSS("--cat-wages") : getCSS("--accent");
-      this._extremeDots.push(this.g.append("circle").attr("class", "db-extreme-sphere")
-        .attr("cx", x(d.real)).attr("cy", yScale(d.code) + bw / 2).attr("r", 0)
-        .attr("fill", sphereGradient(this.svg, `db-${d._extreme}`, col)));
+      this.bars.filter(r => r.code === d.code).select(".db-dot--now")
+        .attr("fill", sphereGradient(this.svg, `db-${d._extreme}`, col));
     });
 
     this._initialReveal();
@@ -256,23 +305,27 @@ export class DivergingBar extends BaseChart {
     if (!this.bars) return;
     const reduced = this.ctx.motion.reduced;
     const x = this._x;
+    // [P8.2] The reveal now tells the row's story in its own order: the trough dot lands first
+    // (where the country fell to), the connector grows from it, and the endpoint dot arrives at
+    // the far end. Reversing that — endpoint first — would read as "here is the result, and here
+    // is some history", which is the reading the bar chart already gave.
     if (reduced) {
-      this.bars.select("rect").attr("width", d => Math.abs(x(d.real) - x(0)));
+      this.bars.select(".db-dot--trough").attr("r", 4);
+      this.bars.select(".db-link").attr("x2", d => x(d.real));
+      this.bars.select(".db-dot--now").attr("r", 5.4);
       this.bars.select(".db-val").attr("opacity", 1);
       this.bars.select(".db-extreme-eyebrow").attr("opacity", 1);
-      if (this._extremeDots) this._extremeDots.forEach(dt => dt.attr("r", 5));
       return;
     }
     this.bars.each(function (d, i) {
       const sel = d3.select(this);
-      const targetW = Math.abs(x(d.real) - x(0));
-      sel.select("rect").transition().delay(i * 22).duration(660).ease(d3.easeCubicOut)
-        .attr("width", targetW);
-      sel.select(".db-val").transition().delay(i * 22 + 460).duration(260).attr("opacity", 1);
-      sel.select(".db-extreme-eyebrow").transition().delay(i * 22 + 640).duration(300).attr("opacity", 1);
+      const t0 = i * 22;
+      sel.select(".db-dot--trough").transition().delay(t0).duration(280).ease(d3.easeBackOut).attr("r", 4);
+      sel.select(".db-link").transition().delay(t0 + 180).duration(520).ease(d3.easeCubicOut).attr("x2", x(d.real));
+      sel.select(".db-dot--now").transition().delay(t0 + 620).duration(300).ease(d3.easeBackOut).attr("r", 5.4);
+      sel.select(".db-val").transition().delay(t0 + 760).duration(260).attr("opacity", 1);
+      sel.select(".db-extreme-eyebrow").transition().delay(t0 + 900).duration(300).attr("opacity", 1);
     });
-    // sphere dots pop after their bar has grown; scoreboard counts up on enter
-    if (this._extremeDots) this._extremeDots.forEach((dt, k) => dt.transition().delay(360 + k * 70).duration(320).ease(d3.easeBackOut).attr("r", 5));
     this._countUpHeader();
     if (this._revealSafety) clearTimeout(this._revealSafety);
     const n = this.bars.size();
@@ -280,15 +333,24 @@ export class DivergingBar extends BaseChart {
       const x2 = this._x;
       this.bars.each(function (d) {
         const sel = d3.select(this);
-        const targetW = Math.abs(x2(d.real) - x2(0));
-        const live = +sel.select("rect").attr("width");
-        if (!Number.isFinite(live) || live < targetW - 1) {
-          sel.select("rect").interrupt().attr("width", targetW);
+        const live = +sel.select(".db-link").attr("x2");
+        if (!Number.isFinite(live) || Math.abs(live - x2(d.real)) > 1) {
+          sel.select(".db-dot--trough").interrupt().attr("r", 4);
+          sel.select(".db-link").interrupt().attr("x2", x2(d.real));
+          sel.select(".db-dot--now").interrupt().attr("r", 5.4);
           sel.select(".db-val").interrupt().attr("opacity", 1);
           sel.select(".db-extreme-eyebrow").interrupt().attr("opacity", 1);
         }
       });
-    }, n * 22 + 700);
+      // [P3.5] The scoreboard count-up rides the same rAF clock as the bars, so it needs the same
+      // safety net: an 820ms interpolateRound that never ticks (background tab / rAF stall) would
+      // leave the two headline numbers frozen at 0 while every bar behind them is fully drawn.
+      const { nPos, nNeg } = this._summary;
+      if (this.headerG) {
+        this.headerG.selectAll(".db-head-c--pos,.db-head-num--pos").interrupt().text(String(nPos));
+        this.headerG.selectAll(".db-head-c--neg,.db-head-num--neg").interrupt().text(String(nNeg));
+      }
+    }, n * 22 + 1250);
   }
 
   _applyFocus() {
@@ -313,5 +375,7 @@ export class DivergingBar extends BaseChart {
     this._applyFocus();
   }
 
+  // [P3.5] The reveal safety timeout outlives the chart without this.
+  destroy() { clearTimeout(this._revealSafety); super.destroy(); }
   onThemeChange() { this.render(); }
 }

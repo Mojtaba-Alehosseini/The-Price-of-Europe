@@ -2,16 +2,16 @@
    ScoreMap — CH9 "The scoreboard" (NEW, brief §6 CH9).
    The EU map, two-tone by the SAME real-wage computation the DivergingBar ledger
    uses (DataManager.realWageRows — never forked): jade where the minimum wage buys
-   MORE than in 2019 (real change ≥ 0), claret where it buys LESS, neutral for the
-   six countries that bargain instead of legislating a floor. 15 jade, 6 claret.
+   MORE than in 2019 (real change ≥ 0), claret where it buys LESS, neutral for the six
+   countries with no 2019 statutory floor. Counts are DERIVED everywhere — kicker, aria
+   label, legend — so they follow the data (D91: on corrected NAC wages, 20 jade / 1 claret).
      motion: countries fill in a west→east stagger sweep on scroll (latched)
-     step 1: the six claret countries pulse once
+     step 1: the claret countries pulse once
    ============================================================ */
 
 import { BaseChart } from "./BaseChart.js";
 import { watchChapterProgress, smooth } from "../modules/ChartMotion.js";
-
-function getCSS(name) { const m = name.match(/var\((--[^)]+)\)/); const n = m ? m[1] : name; return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+import { getCSS } from "../modules/CraftFX.js";
 
 export class ScoreMap extends BaseChart {
   constructor(sel, data, ctx) {
@@ -32,8 +32,6 @@ export class ScoreMap extends BaseChart {
     this.container.innerHTML = "";
     const { width, height } = this.ensureSvg();
     this.W = width; this.H = height;
-    this.svg.attr("aria-label", "A map of the EU: green where the minimum wage buys more than in 2019 (fifteen countries), claret where it buys less (six), grey for the six countries with no statutory minimum wage.");
-
     // geo plumbing (reuse Choropleth's projection recipe)
     this.featCol = topojson.feature(this.data.topology, this.data.topology.objects.countries || this.data.topology.objects.europe);
     const euFeats = { type: "FeatureCollection", features: this.featCol.features.filter(d => this.data.countriesByCode.has(this.data.topoToIso(d.id))) };
@@ -46,10 +44,16 @@ export class ScoreMap extends BaseChart {
     this._byCode = byCode;
     const jade = getCSS("--cat-wages"), claret = getCSS("--accent"), other = getCSS("--cat-other"), grey = getCSS("--rule-soft");
     const target = (code) => { const r = byCode.get(code); return r == null ? other : (r.real >= 0 ? jade : claret); };
-    this._target = target; this._grey = grey; this._other = other; this._claretHex = claret;
+    this._target = target; this._grey = grey; this._other = other;   /* [D93] _claretHex retired — the kicker's colour is a CSS class now */
     const nPos = rows.filter(r => r.real >= 0).length, nNeg = rows.length - nPos;
     this._nPos = nPos; this._nNeg = nNeg;
     this._losers = rows.filter(r => r.real < 0).map(r => r.code);
+    // [D91] Derived, not written out. This label hard-coded "fifteen"/"six" nine lines above
+    // the code that computes them, so it kept asserting the pre-D91 split after the data was
+    // corrected — the exact failure the shared realWageRows() exists to prevent.
+    const noFloor = this.data.countriesByCode.size - rows.length;
+    const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+    this.svg.attr("aria-label", `A map of the EU: green where the minimum wage buys more than in 2019 (${plural(nPos, "country", "countries")}), claret where it buys less (${plural(nNeg, "country", "countries")}), grey for the ${plural(noFloor, "country", "countries")} with no statutory minimum wage in 2019.`);
 
     // longitude stagger (west→east)
     const cents = new Map();
@@ -69,7 +73,7 @@ export class ScoreMap extends BaseChart {
     this._pulseLayer = this.svg.append("g").attr("class", "sc-pulse-layer").attr("pointer-events", "none");
 
     // kicker + legend
-    this._kickNum = this.svg.append("text").attr("class", "kick-num").attr("x", 22).attr("y", 50).style("font-size", "44px").attr("fill", jade).text(String(nPos));
+    this._kickNum = this.svg.append("text").attr("class", "kick-num sc-kick sc-kick--pos").attr("x", 22).attr("y", 50).text(String(nPos));   /* [D93] colour + 44px in CSS — a fill attr on a <text> is inert here */
     this._kickLabel = this.svg.append("text").attr("class", "kick-label").attr("x", 24).attr("y", 82).text("BUY MORE THAN IN 2019");
     // legend (bottom-left)
     const lg = this.svg.append("g").attr("class", "sc-legend").attr("transform", `translate(22, ${height - 42})`);
@@ -107,13 +111,18 @@ export class ScoreMap extends BaseChart {
   }
 
   _setView(view) {
+    // [P3.2] A re-fire of the step we are already on used to re-run _pulseLosers, which clears its
+    // own layer and starts the rings again — so scrollama jitter or a resize resync restarted the
+    // pulse mid-flight. Leaving the step and coming back still pulses, because _view has changed
+    // in between.
+    if (view === this._view) return;
     this._view = view;
     if (view === "losers") {
-      this._kickNum.text(String(this._nNeg)).attr("fill", this._claretHex);
+      this._kickNum.text(String(this._nNeg)).classed("sc-kick--pos", false).classed("sc-kick--neg", true);
       this._kickLabel.text("STILL BUY LESS THAN IN 2019");
       this._pulseLosers();
     } else {
-      this._kickNum.text(String(this._nPos)).attr("fill", getCSS("--cat-wages"));
+      this._kickNum.text(String(this._nPos)).classed("sc-kick--neg", false).classed("sc-kick--pos", true);
       this._kickLabel.text("BUY MORE THAN IN 2019");
     }
   }

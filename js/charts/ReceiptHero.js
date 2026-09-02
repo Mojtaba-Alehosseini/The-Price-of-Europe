@@ -112,6 +112,14 @@ export class ReceiptHero {
    *  on the focused play button step the register one YEAR per press (keyboard seek). */
   _wireSeek() {
     if (!this.lineEl || !this.hero) return;
+    // [P4.2 · owner gate G5] The track was a plain <div>: no role, no tab stop, no values, so a
+    // keyboard or screen-reader user had no way to operate it at all (the arrow keys below existed
+    // but only fired while the PLAY BUTTON held focus, which nothing announced). valuemin/max are
+    // derived from MONTHS here rather than written into index.html so the two cannot drift; the
+    // label and the tab stop are static facts and live in the markup. valuenow/valuetext are
+    // updated in setProgress, which already computes the month index and its display string.
+    this.lineEl.setAttribute("aria-valuemin", "0");
+    this.lineEl.setAttribute("aria-valuemax", String(MONTHS - 1));
     const fracOf = e => {
       const r = this.lineEl.getBoundingClientRect();
       return (e.clientX - r.left) / Math.max(1, r.width);
@@ -127,7 +135,14 @@ export class ReceiptHero {
     const end = () => { dragging = false; };
     this.lineEl.addEventListener("pointerup", end);
     this.lineEl.addEventListener("pointercancel", end);
-    if (this.playEl) this.playEl.addEventListener("keydown", e => {
+    // [P4.2] ONE handler owns the arrow keys, bound to the timeline that CONTAINS both the play
+    // button and the track. The button and the track are siblings, so two separate listeners could
+    // not actually double-fire — but one of them would silently own the keys depending on which
+    // element happened to have focus, and adding a second listener to the newly-focusable track is
+    // exactly how that turns into a double-step later. A single listener on the common parent
+    // cannot: one keypress, one step, whichever child is focused. Step stays one year per press.
+    const tl = this.lineEl.parentElement;
+    if (tl) tl.addEventListener("keydown", e => {
       if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
       e.preventDefault();
       const t = clamp((this._q - P0) / (P1 - P0), 0, 1);
@@ -177,7 +192,13 @@ export class ReceiptHero {
     const t  = clamp((q - P0) / (P1 - P0), 0, 1);
     const mi = Math.round(easeTime(t) * (MONTHS - 1));
     const k  = this.keys[mi];
-    if (this.dateEl) this.dateEl.textContent = MON[+k.slice(5) - 1] + " " + k.slice(0, 4);
+    const dateTxt = MON[+k.slice(5) - 1] + " " + k.slice(0, 4);
+    if (this.dateEl) this.dateEl.textContent = dateTxt;
+    // [P4.2] the slider's live value, in the same month-space its min/max are expressed in
+    if (this.lineEl) {
+      this.lineEl.setAttribute("aria-valuenow", String(mi));
+      this.lineEl.setAttribute("aria-valuetext", dateTxt);
+    }
     if (this.series) {
       let total = 0;
       for (const r of this.rows) {

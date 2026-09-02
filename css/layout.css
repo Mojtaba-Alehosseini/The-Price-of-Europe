@@ -5,9 +5,6 @@
 /* ---------- Containers ---------- */
 .container        { width: 100%; padding-inline: var(--space-5); margin-inline: auto; }
 .container-prose  { max-width: var(--w-prose); }
-.container-content{ max-width: var(--w-content); }
-.container-wide   { max-width: var(--w-wide); }
-.container-full   { max-width: var(--w-full); }
 
 /* ---------- Brand mark — NOT a bar ----------
    No fixed bar, no background/blur/border. The site name simply sits on the paper at the top of the
@@ -240,7 +237,14 @@
   border: 1.5px solid var(--rule-bold); border-radius: 999px; cursor: pointer;
   transition: color var(--dur-2) var(--ease-out), border-color var(--dur-2) var(--ease-out);
 }
-.rc-tl-play:hover { color: var(--accent); border-color: var(--accent); }
+/* [P4.4] State-changing hovers are gated to devices that actually have a hover. On a touch
+   screen a tap synthesises :hover and it STICKS until the next tap elsewhere, so these read as
+   a control left switched on. Only the ones that swap colours are gated; opacity-only hovers
+   are left alone, since a lingering fade is not misleading. */
+@media (hover: hover) and (pointer: fine) {
+  .rc-tl-play:hover { color: var(--accent); border-color: var(--accent); }
+}
+
 .rc-tl-play svg { inline-size: 11px; block-size: 11px; fill: currentColor; }
 .rc-tl-play .rc-tl-ic-stop { display: none; }
 .rc-tl-play[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
@@ -380,7 +384,6 @@
   .hero__pin { gap: var(--space-4); }
 }
 
-
 /* ---------- Generic prose section ---------- */
 .section-prose {
   padding-block: var(--space-10);
@@ -392,7 +395,7 @@
   font-family: var(--font-display);
   font-style: italic;
   font-size: var(--fs-500);
-  font-weight: 380;
+  font-weight: 400;
 }
 
 /* ---------- Footer ---------- */

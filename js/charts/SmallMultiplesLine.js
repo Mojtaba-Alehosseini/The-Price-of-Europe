@@ -87,6 +87,16 @@ export class SmallMultiplesLine extends BaseChart {
   render() {
     super.render();
     this.container.innerHTML = "";
+    // [P2.6] The enlarge overlay lives in the svg we just wiped, but `_enlarged` (and the
+    // container attribute, and the compare controls, which live in a SEPARATE element that
+    // innerHTML does not touch) used to survive a re-render. Both `_continuousReveal` and
+    // `onStep` return early while it is set, so a resize or theme toggle taken while a panel was
+    // enlarged left the grid's reveal permanently dead and the compare controls acting on a hero
+    // that no longer exists. A re-render destroys the overlay, so it must clear the state too.
+    this._enlarged = null;
+    this.container.removeAttribute("data-enlarged");
+    this._hideCmpControls();
+    if (this._escBound) { document.removeEventListener("keydown", this._escHandler); this._escBound = false; }
     const isPhone = this.size().width < 560;
     this._isPhone = isPhone;
     this.opts.margin = isPhone
@@ -196,8 +206,13 @@ export class SmallMultiplesLine extends BaseChart {
     const last = s.at(-1);
     if (last) {
       cell.append("circle").attr("class", "sm-end-dot").attr("cx", x(last.t)).attr("cy", y(last.v)).attr("r", 2.6).attr("fill", color);
+      // [D93] The tag deliberately stays neutral ink — the end DOT beside it carries the hue. The
+      // fill attr here had been inert since the chart shipped, and MEASURING the alternative is why
+      // it stays that way: as 11px text the category tokens read 1.45:1 (transport) / 1.89 (food) /
+      // 2.15 (energy) / 3.22 (housing) on paper, far under the 4.5:1 small-text bar. The dot is a
+      // shape and may carry the colour; the number may not.
       cell.append("text").attr("class", "sm-end-tag").attr("x", w - 2).attr("y", Math.max(12, y(last.v) - 7)).attr("text-anchor", "end")
-        .attr("fill", color).text(`${last.v >= 0 ? "+" : ""}${last.v.toFixed(0)}%`);
+        .text(`${last.v >= 0 ? "+" : ""}${last.v.toFixed(0)}%`);
     }
     // per-panel hover
     const hit = cell.append("rect").attr("class", "sm-hit").attr("x", 0).attr("y", 0).attr("width", w).attr("height", h).attr("fill", "transparent");
@@ -213,7 +228,12 @@ export class SmallMultiplesLine extends BaseChart {
       cur.style("opacity", 1).attr("transform", `translate(${x(rec.t)},0)`);
       cdot.attr("cx", 0).attr("cy", y(rec.v));
       this.ctx.tooltip.show(`<h5>${c.label}</h5><div class="row"><span class="key">${d3.timeFormat("%b %Y")(rec.t)}</span><span class="val">${rec.v >= 0 ? "+" : ""}${rec.v.toFixed(1)}%</span></div>`, event.clientX, event.clientY);
-    }).on("mouseleave", () => { cur.style("opacity", 0); this.ctx.tooltip.hide(); });
+    }).on("mouseleave", () => { cur.style("opacity", 0); this.ctx.tooltip.hide(); })
+      // [P4.3] Touch parity, the house pattern (Heatmap.js / WaffleChart.js): a tap has no
+      // hover, so re-run this rect's OWN mousemove listener on a non-mouse pointerdown.
+      // `.on("mousemove")` with one argument is d3's getter -- it returns the listener just
+      // registered above, so there is exactly one handler body and no risk of the two drifting.
+      .on("pointerdown", function (e) { if (e.pointerType !== "mouse") d3.select(this).on("mousemove").call(this, e); });
 
     // [debug 2026-07-06] Title INSIDE top-left (halo keeps it legible over the line); appended AFTER
     // `.sm-hit` (not before, as originally) so it wins hit-testing for its own click-to-info popover
@@ -334,6 +354,12 @@ export class SmallMultiplesLine extends BaseChart {
   }
 
   _wireScroll() {
+    // [P2.6] render() calls this on EVERY render, so without this the pair accumulated on every
+    // resize and every theme toggle — one more rAF-coalesced recompute per event, forever.
+    // The cached trigger positions are invalidated too: the chapter's geometry just changed.
+    if (this._onScroll) removeEventListener("scroll", this._onScroll);
+    if (this._onResize) removeEventListener("resize", this._onResize);
+    this._triggerYs = null;
     const chapter = this.container.closest(".chapter");
     this._watchUnpin(chapter, () => this._neutralView());   // [A2 §B.4]
     // Continuous line-reveal driven straight off scrollY (see _continuousReveal above) — rAF-coalesced
@@ -366,6 +392,12 @@ export class SmallMultiplesLine extends BaseChart {
 
   _applyFocus(focus) {
     const cfg = STEPS[focus] || STEPS.freeze;
+    // [P2.6] ScrollController's resize resync re-fires the in-range step, and scrollama can
+    // re-enter one on jitter — each of which used to stack another three pulse rings on the same
+    // dot. Keyed to the focus, and the key is written on EVERY focus change (not only the ones
+    // that pulse), so leaving the step and coming back still re-pulses.
+    const focusChanged = this._pulsedFocus !== focus;
+    this._pulsedFocus = focus;
     const dur = this.ctx.motion.reduced ? 0 : 420;
     const hi = cfg.highlight;
     CATS.forEach(c => {
@@ -373,7 +405,7 @@ export class SmallMultiplesLine extends BaseChart {
       const dim = hi.length && !hi.includes(c.code);
       g.interrupt().transition().duration(dur).style("opacity", dim ? getCSS("--dim-nonfocus") || 0.25 : 1);
     });
-    if (cfg.pulse && !this.ctx.motion.reduced) this._pulse(cfg.pulse);
+    if (cfg.pulse && !this.ctx.motion.reduced && focusChanged) this._pulse(cfg.pulse);
   }
 
   // one-shot pulse rings on a panel's end dot (the "flat overall" at the freeze step)
@@ -393,15 +425,36 @@ export class SmallMultiplesLine extends BaseChart {
     if (this._enlarged === code) return this._collapse();
     this._enlarged = code;
     if (this.container) this.container.setAttribute("data-enlarged", code);
-    // dim grid to a faint ghost, lift the big panel
-    this._panelG.forEach(g => g.interrupt().style("opacity", 0));
+    // [P3.6] The grid used to CUT to 0 on enter while the collapse eased back — an asymmetry in the
+    // wrong direction: the entrance is the moment that deserves the ease. Both directions now use
+    // --dur-3/ease-out. The panels also stop being reachable while they are invisible under the
+    // hero: they carry role=button + tabindex=0, so keyboard focus used to walk six panels the
+    // reader could not see, and a screen reader still announced them.
+    const dur = this.ctx.motion.reduced ? 0 : 280;   // --dur-3
+    this._panelG.forEach(g => {
+      g.interrupt().transition().duration(dur).ease(d3.easeCubicOut).style("opacity", 0);
+      g.attr("aria-hidden", "true").attr("tabindex", -1);
+    });
     this._drawBig(code);
+    // move focus into the hero so the reader's place follows what is on screen
+    const hero = this._heroG?.node();
+    if (hero) {
+      hero.setAttribute("tabindex", "-1");
+      hero.setAttribute("role", "group");
+      hero.setAttribute("aria-label", `${(CATS.find(c => c.code === code) || {}).label || code} — enlarged. Press Escape to go back.`);
+      if (document.activeElement && this.container?.contains(document.activeElement)) hero.focus?.({ preventScroll: true });
+    }
     if (!this._escBound) { this._escHandler = (e) => { if (e.key === "Escape") this._collapse(); }; document.addEventListener("keydown", this._escHandler); this._escBound = true; }
   }
 
   _collapse() {
+    const wasCode = this._enlarged;
     this._enlarged = null;
     if (this.container) this.container.removeAttribute("data-enlarged");
+    // [P3.6] hand the panels back to the keyboard, and return focus to the one just closed
+    this._panelG.forEach(g => g.attr("aria-hidden", null).attr("tabindex", 0));
+    const back = wasCode && this._panelG.get(wasCode)?.node();
+    if (back && document.activeElement && this.container?.contains(document.activeElement)) back.focus?.({ preventScroll: true });
     this.ctx.tooltip.hide();
     this._heroG.selectAll("*").remove();
     this._hideCmpControls();
@@ -559,12 +612,12 @@ export class SmallMultiplesLine extends BaseChart {
       ...cmp.codes.map(sc => ({ kind: "code", code: sc })),
       ...cmp.groups.map(key => ({ kind: "group", key })),
     ].map((slot, i) => {
-      const col = CMP[i % CMP.length];
-      if (slot.kind === "code") return { ...slot, col, series: this._cmpSeries(slot.code, code) };
+      const col = CMP[i % CMP.length], ci = i % CMP.length;   /* [D93] ci = the slot's palette index, for the label's CSS class */
+      if (slot.kind === "code") return { ...slot, col, ci, series: this._cmpSeries(slot.code, code) };
       const g = GROUPS[slot.key];
-      if (!g) return { ...slot, col, series: [], members: [] };
+      if (!g) return { ...slot, col, ci, series: [], members: [] };
       const members = g.showMembers ? g.members.map(mc => ({ code: mc, series: this._cmpSeries(mc, code) })) : [];
-      return { ...slot, col, series: this._cmpGroupAvg(g.members, code), members };
+      return { ...slot, col, ci, series: this._cmpGroupAvg(g.members, code), members };
     });
     const x0Data = s[0].t, x1Data = s.at(-1).t;
     const xs = d3.scaleTime().domain([x0Data, x1Data]).range([0, w]);
@@ -618,7 +671,7 @@ export class SmallMultiplesLine extends BaseChart {
         g.append("path").datum(slot.series).attr("class", "sm-cmp-line").attr("fill", "none")
           .attr("stroke", slot.col).attr("stroke-width", 1.5).attr("stroke-opacity", 0.9).attr("stroke-linejoin", "round").attr("d", cmpLine);
         const end = slot.series.at(-1);
-        cmpLabels.push({ text: slot.code, col: slot.col, x: xs(end.t), y: ys(end.v) });
+        cmpLabels.push({ text: slot.code, ci: slot.ci, x: xs(end.t), y: ys(end.v) });
         return;
       }
       (slot.members || []).forEach(mem => {
@@ -630,7 +683,7 @@ export class SmallMultiplesLine extends BaseChart {
       g.append("path").datum(slot.series).attr("class", "sm-cmp-line sm-cmp-line--avg").attr("fill", "none")
         .attr("stroke", slot.col).attr("stroke-width", 2.2).attr("stroke-opacity", 0.95).attr("stroke-linejoin", "round").attr("d", cmpLine);
       const end = slot.series.at(-1);
-      cmpLabels.push({ text: GROUPS[slot.key]?.label || slot.key, col: slot.col, x: xs(end.t), y: ys(end.v) });
+      cmpLabels.push({ text: GROUPS[slot.key]?.label || slot.key, ci: slot.ci, x: xs(end.t), y: ys(end.v) });
     });
     cmpLabels.sort((a, b) => a.y - b.y);
     for (let i = 1; i < cmpLabels.length; i++) if (cmpLabels[i].y - cmpLabels[i - 1].y < 13) cmpLabels[i].y = cmpLabels[i - 1].y + 13;
@@ -641,8 +694,8 @@ export class SmallMultiplesLine extends BaseChart {
     const maxLabelX = w + heroRight - 2;
     cmpLabels.forEach(l => {
       const startX = Math.min(l.x + 4, w - 2);
-      const t = g.append("text").attr("class", "sm-cmp-label").attr("x", startX).attr("y", l.y + 3)
-        .attr("text-anchor", "start").attr("paint-order", "stroke").attr("stroke", "var(--bg)").attr("stroke-width", 3).attr("fill", l.col).text(l.text);
+      const t = g.append("text").attr("class", `sm-cmp-label sm-cmp-label--c${l.ci}`).attr("x", startX).attr("y", l.y + 3)   /* [D93] slot colour via the class — the fill attr was inert */
+        .attr("text-anchor", "start").attr("paint-order", "stroke").attr("stroke", "var(--bg)").attr("stroke-width", 3).text(l.text);
       if (startX + t.node().getComputedTextLength() > maxLabelX) t.remove();
     });
     // [debug 2026-07-07 — owner bug report] Hover tooltip used to read ONLY the category's own base
@@ -688,10 +741,47 @@ export class SmallMultiplesLine extends BaseChart {
           ).join("")
         : `<h5>${c.label}</h5><div class="row"><span class="key">${d3.timeFormat("%b %Y")(anchorT)}</span><span class="val">${rows[0].rec.v >= 0 ? "+" : ""}${rows[0].rec.v.toFixed(1)}%</span></div>`;
       this.ctx.tooltip.show(html, event.clientX, event.clientY);
-    }).on("mouseleave", () => { cur.style("opacity", 0); this.ctx.tooltip.hide(); });
+    }).on("mouseleave", () => { cur.style("opacity", 0); this.ctx.tooltip.hide(); })
+      // [P4.3] Touch parity, the house pattern (Heatmap.js / WaffleChart.js): a tap has no
+      // hover, so re-run this rect's OWN mousemove listener on a non-mouse pointerdown.
+      // `.on("mousemove")` with one argument is d3's getter -- it returns the listener just
+      // registered above, so there is exactly one handler body and no risk of the two drifting.
+      .on("pointerdown", function (e) { if (e.pointerType !== "mouse") d3.select(this).on("mousemove").call(this, e); });
     // category title ABOVE the scrim (the global kicker sits hidden behind it during the enlarge)
     this._heroG.append("text").attr("class", "kick-num").attr("x", M.left - 2).attr("y", this._isPhone ? 36 : 46)
       .style("font-size", this._isPhone ? "26px" : "34px").text(c.label.toUpperCase());
+
+    // [owner request] A real close control. The enlarge already exits three ways — Escape, clicking
+    // the scrim, clicking the panel again — but all three are things the reader has to be TOLD, and
+    // the only telling was a 9px hint parked at the bottom-right of the plot. A visible affordance
+    // at the top-right is where anyone looks to close an overlay, so the exits stop depending on the
+    // reader having read the hint. It reuses the same handler the scrim uses, so there is one way
+    // out in the code and four in the interface.
+    //
+    // Built as a <g> with its own hit rect rather than an HTML button because it lives inside the
+    // SVG hero layer, which is rebuilt wholesale on every _drawBig — an HTML control would have to
+    // be created, positioned and torn down alongside it. role/aria-label/tabindex keep it a real
+    // button for a screen reader and for the keyboard, and Enter/Space act like the click.
+    // Radii are USER units; at 390 the SVG's viewBox scales them down, so 15 rendered as only
+    // 27.3 CSS px against the desktop control's 32.5. 18 brings the phone target back to ~32.8
+    // CSS px — equal to desktop, and comfortably past WCAG 2.5.8's 24px minimum.
+    const btnR = this._isPhone ? 18 : 17;
+    const btnX = this.W - heroRight + (this._isPhone ? 2 : 6) - btnR;
+    const btnY = (this._isPhone ? 36 : 46) - btnR / 2 - (this._isPhone ? 4 : 6);
+    const close = this._heroG.append("g").attr("class", "sm-close")
+      .attr("transform", `translate(${btnX},${btnY})`)
+      .attr("role", "button").attr("tabindex", 0)
+      .attr("aria-label", `Close the enlarged ${c.label} chart`)
+      .style("cursor", "pointer")
+      .on("click", (e) => { e.stopPropagation(); this._collapse(); })
+      .on("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " " || e.key === "Spacebar") { e.preventDefault(); this._collapse(); }
+      });
+    close.append("circle").attr("class", "sm-close__bg").attr("r", btnR);
+    const arm = btnR * 0.36;
+    close.append("path").attr("class", "sm-close__x")
+      .attr("d", `M ${-arm} ${-arm} L ${arm} ${arm} M ${arm} ${-arm} L ${-arm} ${arm}`);
+
     this._buildCmpControls(code);
   }
 

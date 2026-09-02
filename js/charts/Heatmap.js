@@ -12,6 +12,7 @@
 
 import { BaseChart } from "./BaseChart.js";
 import { watchChapterProgress, smooth } from "../modules/ChartMotion.js";
+import { getCSS } from "../modules/CraftFX.js";
 
 const ROWS = [
   { code: "NRG",  label: "Energy" },
@@ -25,7 +26,10 @@ const ROWS = [
 const FRAMES = {
   "2022":   { from: "2022-01", to: "2022-12", kicker: "2022" },
   "2023H1": { from: "2023-01", to: "2023-06", kicker: "2023" },
-  "2024":   { from: "2024-01", to: "2024-12", kicker: "2024" },
+  // [P8.5] `row` sends the eye to the claim's subject. Step 3's sentence is about services, and
+  // the grid had five rows all shouting equally while the copy talked about one of them. Declared
+  // HERE rather than in onStep so the frame and the focused row can never drift apart.
+  "2024":   { from: "2024-01", to: "2024-12", kicker: "2024", row: "SERV" },
 };
 const FRAME_ORDER = ["2022", "2023H1", "2024"];
 
@@ -47,6 +51,16 @@ const EVENT_PICKS = [
 // block-size increase in charts.css so ih/cell/row geometry never shifts. Dropped to 0 at
 // <=768px (dot-only mode shares the existing year-row margin, no separate label row needed).
 const EVENT_TIER_H = 14;
+// [P4.1 · owner gate G4] At the narrowest widths the event tier's own strip is moved ABOVE the
+// grid, because the fixed mobile step dock sits over the bottom of the chart there. MEASURED, not
+// assumed: stepping through the whole chapter and counting frames where a dot is on screen, at
+// <=480 only 3-4 of ~14 such frames had ANY tappable dot (elementFromPoint returned a <p> inside
+// .mobile-step-dock for the rest), while at 500 and above 13-14 of 14 were tappable. 480 is
+// already one of this project's own breakpoints. The dock exists all the way to 1024px, so the
+// obvious guess -- "fix it wherever the dock exists" -- would have moved the tier at four times
+// more widths than actually need it. Desktop and tablet stay exactly as D85 shipped them.
+const EVENT_TIER_ABOVE_MAX_W = 480;
+const EVENT_TIER_TOP_H = 16;   // reclaimed strip above the grid; dot sits at its middle
 
 export class Heatmap extends BaseChart {
   constructor(sel, data, ctx) {
@@ -92,9 +106,16 @@ export class Heatmap extends BaseChart {
     // project's own tablet-portrait breakpoint (responsive.css), independent of container width.
     const narrowViewport = window.innerWidth <= 768;
     this._narrowViewport = narrowViewport;
+    // [P4.1] see EVENT_TIER_ABOVE_MAX_W. Implies narrowViewport (480 <= 768), so the tier is
+    // already in its dot-only form up here -- which is exactly why the top placement D85 rejected
+    // at 1440 (the "ECB CUTS" label collided with the legend's own tick labels) is safe now: at
+    // these widths there are no labels to collide with.
+    const tierAbove = window.innerWidth <= EVENT_TIER_ABOVE_MAX_W;
+    this._tierAbove = tierAbove;
     const tierH = narrowViewport ? 0 : EVENT_TIER_H;
+    const topTierH = tierAbove ? EVENT_TIER_TOP_H : 0;
     this.opts.margin = isPhone
-      ? { top: 50, right: 12, bottom: 28 + tierH, left: 62 }
+      ? { top: 50 + topTierH, right: 12, bottom: 28 + tierH, left: 62 }
       : { top: 60, right: 20, bottom: 30 + tierH, left: 96 };
     const { width, height } = this.ensureSvg();
     this.W = width; this.H = height;
@@ -160,8 +181,8 @@ export class Heatmap extends BaseChart {
       .attr("x", -10).attr("y", d => y(d.code) + y.bandwidth() / 2 + 4)
       .style("cursor", "pointer")
       .text(d => isPhone ? d.label.slice(0, 4) : d.label)
-      .on("mouseenter", (e, d) => this._dimRows(d.code))
-      .on("mouseleave", () => this._dimRows(null));
+      .on("mouseenter", (e, d) => { this._hoverRow = d.code; this._applyRowFocus(); })
+      .on("mouseleave", () => { this._hoverRow = null; this._applyRowFocus(); });
 
     // column labels at year starts only
     ["2021", "2022", "2023", "2024"].forEach(yr => {
@@ -186,7 +207,7 @@ export class Heatmap extends BaseChart {
       })
       .filter(Boolean);
     this._eventsFired = false;
-    this._drawEvents(isPhone, narrowViewport);
+    this._drawEvents(isPhone, narrowViewport, tierAbove);
 
     // kicker + legend
     this._kickNum = this.svg.append("text").attr("class", "kick-num")
@@ -202,6 +223,12 @@ export class Heatmap extends BaseChart {
       this._kickNum.text(FRAMES["2024"].kicker);
     } else {
       this._moveFrame(this._frame, true);
+      // [P8.5] Re-assert the row focus on the SAME path that re-asserts the frame. render() rebuilds
+      // every cell, so a theme toggle on step 3 would otherwise hand back a grid with the frame on
+      // services and nothing dimmed — the state half-restored, which is worse than either end.
+      this._stepRow = FRAMES[this._frame]?.row || null;
+      this._hoverRow = null;
+      this._applyRowFocus(false);
       this._wireScroll();
     }
   }
@@ -210,7 +237,19 @@ export class Heatmap extends BaseChart {
     if (this._unwatch) this._unwatch();
     const chapter = this.container.closest(".chapter");
     this._unwatch = watchChapterProgress(chapter, p => this._onProgress(p));
-    this._watchUnpin(chapter, () => { this._revealTo(1); this._moveFrame("2024", true); this._kickNum.text(FRAMES["2024"].kicker); });   // [A2 §B.4]
+    // [A2 §B.4] neutral end state on unpin. [P3.3] `_frame` is set here too: _moveFrame only moves
+    // the rect, so the reset used to leave the field on the old frame — and the next render()
+    // (`_moveFrame(this._frame)` + a kicker read from `FRAMES[this._frame]`) would jump the rect
+    // back to it, with the kicker and the frame disagreeing in between.
+    this._watchUnpin(chapter, () => {
+      this._revealTo(1); this._frame = "2024"; this._moveFrame("2024", true);
+      this._kickNum.text(FRAMES["2024"].kicker);
+      this.container?.setAttribute("data-active-frame", "2024");
+      // [P8.5] The neutral state is the whole grid readable. The chapter is off screen, so there is
+      // no step asking for a subject, and a chart left dimmed behind the reader is a chart that
+      // looks broken when they scroll back to it.
+      this._stepRow = null; this._hoverRow = null; this._applyRowFocus(false);
+    });
   }
 
   _revealTo(np) {
@@ -236,6 +275,10 @@ export class Heatmap extends BaseChart {
     if (this.container) { this.container.setAttribute("data-active-frame", frame); this.container.setAttribute("data-onstep", index); }
     if (this._kickNum) this._kickNum.text(FRAMES[frame]?.kicker || "");
     this._moveFrame(frame, false);
+    // [P8.5] Pure function of the active step: leaving step 3 in either direction lands on a frame
+    // whose config has no `row`, so the focus lifts without a single line of reverse logic.
+    this._stepRow = FRAMES[frame]?.row || null;
+    this._applyRowFocus();
     this._pulseStepEvent(index);
   }
 
@@ -256,11 +299,15 @@ export class Heatmap extends BaseChart {
   // choropleth's peak markers. Dot sits just under the grid; at narrowViewport (<=768px) it's the
   // only mark (shares the existing margin, no growth, per the owner's dot-only spec) — the label
   // moves into the hover/tap tooltip instead (wired in _hoverEvent).
-  _drawEvents(isPhone, narrowViewport) {
+  _drawEvents(isPhone, narrowViewport, tierAbove) {
     if (!this._eventMarks || !this._eventMarks.length) return;
     const ih = this._ih;
     const g = this._eventG = this.g.append("g").attr("class", "hm-event-layer");
-    const dotY = this._eventDotY = narrowViewport ? ih + 4 : ih + 24;
+    // [P4.1] tierAbove puts the dot in the 16px strip render() reclaimed above the grid: local
+    // y = -8 is its middle, so the r=9 hit circle spans -17..+1 and stops just short of the first
+    // row instead of reaching into it. The kicker's baseline sits 17px higher and the legend is
+    // top-RIGHT at y=20 while the dots follow their own dates from x=M.left, so neither is crossed.
+    const dotY = this._eventDotY = tierAbove ? -(EVENT_TIER_TOP_H / 2) : (narrowViewport ? ih + 4 : ih + 24);
     const labelY = ih + 35;
     const reduced = this.ctx.motion.reduced;
     const marks = g.selectAll("g.hm-event").data(this._eventMarks, d => d.date).join("g")
@@ -326,9 +373,14 @@ export class Heatmap extends BaseChart {
   // fired-guard) — only the immediate double-fire is guarded, per the D84 idempotency lesson.
   _pulseStepEvent(index) {
     if (this.ctx.motion.reduced || !this._eventMarks || !this._eventG) return;
-    const mark = this._eventMarks.find(m => m.pulseStep === index);
-    if (!mark || this._lastPulsedStep === index) return;
+    // [P3.2] The guard is written BEFORE the mark lookup, and that ordering is the fix. It used to
+    // sit after, so a step carrying no mark returned without updating _lastPulsedStep — leaving it
+    // stuck on the last MARKED step, and 1 -> 2 -> 1 then skipped the pulse entirely on the return
+    // (measured: 3 rings on first entry, 0 on the second). Same shape as the smallMultiples guard.
+    if (this._lastPulsedStep === index) return;
     this._lastPulsedStep = index;
+    const mark = this._eventMarks.find(m => m.pulseStep === index);
+    if (!mark) return;
     for (let k = 0; k < 3; k++) {
       this._eventG.append("circle")
         .attr("cx", mark.cx).attr("cy", this._eventDotY).attr("r", 3)
@@ -346,11 +398,23 @@ export class Heatmap extends BaseChart {
   }
   _blurEvent(node) { d3.select(node).classed("hm-event--focus", false); this.ctx.tooltip.hide(); }
 
-  _dimRows(code) {
+  /** [P8.5] The ONE place row focus is painted. Two things ask for it — the reader hovering a row
+   *  label, and the active step — and before this they would have been two code paths fighting over
+   *  the same opacities: a mouseleave would have cleared the step's focus, and a step change under a
+   *  resting pointer would have been overwritten by a stale hover.
+   *
+   *  Precedence: a hover WINS while it lasts, because it is the reader acting now; on mouseleave
+   *  `_hoverRow` goes null and the step's own focus comes back by construction rather than by a
+   *  restore path that could be forgotten. The dim is therefore a pure function of (hover, step),
+   *  which is what makes back-scrolling correct without any reverse logic. */
+  _applyRowFocus(animate = true) {
     if (!this.cells) return;
-    this.cells.interrupt("dim").transition("dim").duration(200)
+    const code = this._hoverRow ?? this._stepRow ?? null;
+    const dur = (animate && !this.ctx.motion.reduced) ? 200 : 0;
+    this.cells.interrupt("dim").transition("dim").duration(dur)
       .attr("opacity", d => !code || d.code === code ? 1 : 0.18);
-    this.g.selectAll("text.hm-row-label").classed("hm-row-label--peak", d => code && d.code === code);
+    this.g.selectAll("text.hm-row-label").classed("hm-row-label--peak", d => !!code && d.code === code);
+    this.container?.setAttribute("data-row-focus", code || "");
   }
 
   _hoverCell(node, d, ev) {
@@ -385,5 +449,3 @@ export class Heatmap extends BaseChart {
   destroy() { if (this._unwatch) this._unwatch(); super.destroy(); }
   onThemeChange() { this.render(); }
 }
-
-function getCSS(name) { const m = name.match(/var\((--[^)]+)\)/); const n = m ? m[1] : name; return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }

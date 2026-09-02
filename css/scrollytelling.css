@@ -107,13 +107,7 @@
   margin: 0;
 }
 /* [owner review A2] subtitles: short + small, one line of method/unit. */
-.scroller__chart .chart-subtitle {
-  font-family: var(--font-ui);
-  font-size: var(--fs-200);
-  color: var(--ink-soft);
-  line-height: var(--lh-snug);
-  margin: 0;
-}
+
 .scroller__chart .chart-body {
   min-block-size: 0;
   position: relative;
@@ -237,7 +231,7 @@
   font-size: var(--fs-100);
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--ink-faint);
+  color: var(--ink-soft);
 }
 .scroller__chart .chart-controls input[type="range"] { accent-color: var(--accent); inline-size: 180px; }
 .scroller__chart .chart-source {
@@ -259,20 +253,6 @@
    chapter-by-chapter (F1 = CH1 reference; F2 = the rest). Centered full-width
    title, persistent left-column subtitle, step rail, breathing air.
    ============================================================ */
-
-/* §A.1 · Title — centered, full chapter width, at the top (above the scroller). */
-.chapter--v2 > .chapter-title {
-  font-family: var(--font-display);
-  font-size: var(--fs-500);
-  font-weight: 600;
-  line-height: var(--lh-snug);
-  letter-spacing: -0.01em;
-  color: var(--ink-strong);
-  text-align: center;
-  max-inline-size: var(--w-content);
-  margin: 0 auto var(--space-6);
-  padding-inline: var(--space-5);
-}
 
 /* Left column becomes a grid: [rail] [flow(subtitle + steps)]. */
 .chapter--v2 .scroller__text {
@@ -361,7 +341,7 @@
   opacity: 0;
   pointer-events: none;
   transition: opacity var(--dur-2) var(--ease-out);
-  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--shadow-rail);
 }
 .rail-dot:hover .rail-microlabel,
 .rail-dot:focus-visible .rail-microlabel { opacity: 1; }
@@ -398,7 +378,7 @@
   max-inline-size: 200px; display: flex; flex-direction: column; line-height: 1.2;
 }
 .chapter--a2 .chart-legend .legend-title { font-family: var(--font-ui); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-soft); }
-.chapter--a2 .chart-legend .legend-sub { font-family: var(--font-ui); font-size: 9.5px; color: var(--ink-faint); }
+.chapter--a2 .chart-legend .legend-sub { font-family: var(--font-ui); font-size: 9.5px; color: var(--ink-soft); }
 
 /* §A.4 · breathing — 24px above the plot, 20px below (before the footer strip) */
 .chapter--a2 .scroller__chart .chart-body { margin-block: 24px 0; }
@@ -471,12 +451,3 @@
 .chapter--v2 .scroller__chart[data-chart-mount="choropleth"] { grid-template-rows: auto 1fr auto; }
 .chapter--v2 .scroller__chart[data-chart-mount="choropleth"] .chart-body { margin-block: 16px 22px; }
 
-/* Step-less compare chapter: no left column to pin to → title + subtitle centered above the map. */
-.chapter--compare .chapter-subtitle--center {
-  position: static;
-  text-align: center;
-  max-inline-size: 52ch;
-  margin: 0 auto var(--space-6);
-  padding-inline: var(--space-5);
-  background: none;
-}

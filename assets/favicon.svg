@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="The Price of Europe">
+  <!-- [D90-I4] Hexes are LITERAL, not CSS custom properties: a favicon document cannot read
+       the page's variables. #FFF1E5 is the bg token (FT paper), #990F3D the accent (claret).
+       NB. no double hyphen may appear inside this comment; it is invalid XML and the browser
+       renders a parser error page instead of the icon. Deliberately static: no animation. -->
+  <rect width="32" height="32" rx="6" fill="#FFF1E5"/>
+  <text x="16" y="16" fill="#990F3D"
+        font-family="Georgia, 'Times New Roman', serif" font-size="22" font-weight="600"
+        text-anchor="middle" dominant-baseline="central">€</text>
+</svg>
